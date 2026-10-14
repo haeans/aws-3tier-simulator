@@ -1,3 +1,4 @@
+// @ts-check
 // js/rules/validation.js — 검증 규칙 7개 (정상/경고/오류) + 검증 실행
 
 /* =========================================================
@@ -33,6 +34,11 @@ function buildContext(includeAll = false) {
       return c || null;
     },
     nameOf: n => SVC_MAP[n.type].name,
+    // Auto Scaling 그룹 영역과 그 안의 EC2 (EC2 박스 중심이 영역 안에 있으면 그룹에 속함)
+    asgGroups: () => state.containers.filter(c => c.type === 'asg').map(area => ({
+      area,
+      members: nodes.filter(n => n.type === 'ec2' && inRect(rectOf(area), centerOf(n))),
+    })),
   };
 }
 

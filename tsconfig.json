@@ -1,0 +1,15 @@
+{
+  // 타입 검사 설정 (npm run lint 에서 실행, 파일을 만들지 않고 검사만 함)
+  // - 검사 대상: 각 js 파일 첫 줄에 // @ts-check 가 있는 파일
+  // - 기본 강도(strict 끔): VS Code에서 @ts-check 를 켰을 때와 같은 수준
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "skipLibCheck": true
+  },
+  "include": ["js/**/*.js"]
+}

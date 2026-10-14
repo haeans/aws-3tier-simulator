@@ -14,6 +14,7 @@
   - 버전: 기능 추가는 가운데 숫자(1.8 → 1.9), 버그 수정만 있으면 끝 숫자(1.8 → 1.8.1)
   - 기능이나 구조가 바뀌면 2장(주요 기능), 3장(파일 구조), 6장(설계 결정), 7장(남은 작업)도 함께 맞춘다.
 - docs/ 폴더의 txt는 사용자의 개인 메모다. 사용자가 내용을 주며 요청할 때만 다룬다.
+  - docs/는 커밋하지 않는다. 커밋할 때 넣을지 묻지 않는다.
 
 ### 중단·승인 규칙
 
@@ -28,9 +29,10 @@
 - **사용자 실행 환경: 외부 라이브러리 없음, 서버 없음.** index.html을 더블클릭해서 바로 실행된다.
 - **예외: 개발 도구는 허용한다** (사용자 승인 2026-10-14). 사용자 실행 파일(index.html, css, js)에는 넣지 않는다.
   - Node.js, Playwright(자동 테스트), ESLint(코드 검사)는 package.json의 devDependencies로 관리한다.
-  - `// @ts-check`(VS Code 내장 타입 검사)도 허용한다. (아직 적용 전, README 7장 참고)
+  - `// @ts-check`(타입 검사)를 js 파일마다 첫 줄에 둔다. 새 js 파일에도 넣는다. 설정은 tsconfig.json(기본 강도)이다.
   - VS Code 확장은 설치하지 않는다. 필요한 도구는 npm으로 받아 명령줄에서 쓴다.
   - 새 npm 패키지를 추가하는 것은 "새 도구"에 해당하므로 승인을 받는다.
+    - 승인됨: `typescript` (@ts-check 검사용, 2026-10-14)
 - **ES 모듈(import/export)은 쓰지 않는다.** 서버 없이 파일로 열면(file://) 브라우저가 막는다.
   - 일반 `<script>` 태그를 index.html에 순서대로 둔다. 순서: data → rules → ui → main.js(항상 마지막)
   - 파일 사이에서는 전역 변수·함수를 공유한다.
@@ -39,6 +41,7 @@
 - 규칙 추가: `js/rules/` 안의 배열(PLACEMENT_RULES / VALIDATION_RULES / SUGGESTION_RULES)
 - 배치·이동·크기 조절은 반드시 `commit(before, actedId, movedIds)`(js/ui/core.js)를 거친다.
   - commit은 소속을 다시 계산하고, 규칙 위반이나 겹침이 있으면 동작 전 상태로 되돌린다.
+- 되돌리기 기록은 `render()` 끝에서 자동으로 한다(`recordHistory`, js/ui/render.js). 상태를 바꾸는 동작은 마지막에 render()를 불러야 기록된다.
 - 드래그 중에는 `render()`(DOM 전체 재생성)를 부르지 않고 `updatePositions()`를 쓴다.
   - render()를 부르면 포인터를 잡고 있던 요소가 사라져 드래그가 끊긴다.
 
@@ -47,7 +50,7 @@
 코드를 바꾼 뒤에는 **항상 두 명령을 실행**하고 모두 통과한 다음 보고한다.
 
 ```
-npm run lint     # ESLint 코드 검사 (오류 0개여야 함)
+npm run lint     # ESLint 코드 검사 + 타입 검사(tsc) (오류 0개여야 함)
 npm test         # Playwright 자동 테스트 (tests/*.spec.js, 이 PC의 Edge로 실행)
 ```
 

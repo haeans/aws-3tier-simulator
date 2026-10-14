@@ -1,3 +1,4 @@
+// @ts-check
 // js/rules/suggestions.js — 개선·제거 제안 규칙 (판정에는 영향 없음)
 
 /* ----- 개선·제거 제안 -----
@@ -60,12 +61,25 @@ const SUGGESTION_RULES = [
     id: 4, kind: 'improve', title: '자동 확장',
     check(ctx) {
       const ec2s = ctx.ofType('ec2');
-      if (ec2s.length < 2 || ctx.ofType('autoscaling').length) return [];
-      return [{
-        nodeIds: ec2s.map(e => e.id),
-        reason: 'EC2 수가 고정되어 있어요. 사용자가 몰리면 느려지고, 한가할 땐 남는 서버 비용이 들어요.',
-        action: 'Auto Scaling을 프라이빗 서브넷에 두고 EC2를 그룹으로 묶어 자동으로 늘리고 줄이세요.',
-      }];
+      const groups = ctx.asgGroups();
+      const used = groups.filter(g => g.members.length);
+      // EC2가 2대 이상인데 어느 그룹에도 들어 있지 않은 경우
+      if (!used.length) {
+        if (ec2s.length < 2) return [];
+        return [{
+          nodeIds: ec2s.map(e => e.id),
+          reason: 'EC2 수가 고정되어 있어요. 사용자가 몰리면 느려지고, 한가할 땐 남는 서버 비용이 들어요.',
+          action: groups.length
+            ? 'Auto Scaling 그룹 안에 EC2가 없어요. 그룹 영역을 옮기거나 넓혀서 EC2를 감싸세요.'
+            : '[영역]의 Auto Scaling 그룹을 두 AZ의 프라이빗 서브넷에 걸쳐 놓고, 그 안에 EC2를 두세요.',
+        }];
+      }
+      // 그룹 안의 EC2가 한 AZ에만 있는 경우 (그 AZ에 장애가 나면 그룹 전체가 멈춤)
+      return used.filter(g => new Set(g.members.map(ctx.azOf)).size < 2).map(g => ({
+        nodeIds: g.members.map(e => e.id),
+        reason: 'Auto Scaling 그룹의 EC2가 한 AZ에만 있어요. 그 AZ에 장애가 나면 서버가 모두 멈춰요.',
+        action: '그룹 영역을 다른 AZ의 프라이빗 서브넷까지 넓히고, 그 AZ에도 EC2를 두세요.',
+      }));
     },
   },
   {
@@ -106,9 +120,6 @@ const SUGGESTION_RULES = [
         ['elasticache', RDS_TYPES,
           'ElastiCache는 RDS 앞에서 요청을 대신 전달하지 않아요. 앱(EC2)이 캐시와 DB에 각각 접속해요.',
           '이 연결을 지우고 EC2 — ElastiCache, EC2 — RDS로 각각 연결하세요.'],
-        ['autoscaling', [...RDS_TYPES, 'elasticache'],
-          'Auto Scaling은 EC2를 묶어 늘리고 줄이는 관리 그룹이라 DB와 직접 통신하지 않아요.',
-          '이 연결을 지우고 Auto Scaling은 EC2와만 연결하세요. DB에는 EC2가 접속해요.'],
       ];
       const issues = [];
       PAIRS.forEach(([type, others, reason, action]) => {

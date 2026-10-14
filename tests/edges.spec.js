@@ -106,3 +106,65 @@ test('연결선에 마우스를 올리면 그 선만 강조된다', async ({ pag
   await page.mouse.move(m.x, m.y + 150);
   await expect(page.locator('#edge-layer')).not.toHaveClass(/dimmed/);
 });
+
+test('같은 줄에서 겹치는 연결선은 옆으로 벌려 그리고, 사용자가 옮긴 선은 그대로 둔다', async ({ page }) => {
+  await openApp(page);
+  await place(page, [['pc', 150, 150], ['s3', 650, 450], ['pc', 150, 250], ['s3', 650, 550]]);
+  // 두 선의 자동 경로는 가운데 세로 구간이 같은 x(400)에서 겹친다
+  const midXs = () => page.evaluate(() => state.edges.map(ed => {
+    const pts = edgePoints.get(ed.id);
+    const seg = pts.slice(1).find((p, i) => p.x === pts[i].x && p.y !== pts[i].y);
+    return seg.x;
+  }));
+  await page.evaluate(() => {
+    const [a1, b1, a2, b2] = state.nodes;
+    state.edges.push({ id: newId('e'), from: a1.id, to: b1.id, fromSide: null, toSide: null, mid: null });
+    state.edges.push({ id: newId('e'), from: a2.id, to: b2.id, fromSide: null, toSide: null, mid: null });
+    render();
+  });
+  const [x1, x2] = await midXs();
+  expect(x1).toBe(400);
+  expect(Math.abs(x2 - x1)).toBe(8);
+
+  // 두 번째 선을 사용자가 x=400에 고정하면, 그 선은 그대로 있고 자동 선이 비켜난다
+  await page.evaluate(() => {
+    const ed = state.edges[1];
+    Object.assign(ed, { fromSide: 'right', toSide: 'left', mid: { axis: 'x', value: 400 } });
+    render();
+  });
+  const [y1, y2] = await midXs();
+  expect(y2).toBe(400);
+  expect(Math.abs(y1 - y2)).toBe(8);
+  expect((await page.evaluate(() => state.edges[1].mid)).value).toBe(400);   // 저장 데이터는 그대로
+});
+
+// 그려진 연결선끼리 같은 줄에서 겹치는 곳이 몇 군데인지
+const overlapCount = page => page.evaluate(() => {
+  const segs = [...edgePoints].map(([id, pts]) => pts.slice(1).map((q, i) => ({ id, p: pts[i], q })));
+  let n = 0;
+  segs.forEach((A, i) => segs.slice(i + 1).forEach(B =>
+    A.forEach(a => B.forEach(b => { if (segsOverlap(a.p, a.q, b.p, b.q)) n++; }))));
+  return n;
+});
+const link = (page, pairs) => page.evaluate(pairs => {
+  pairs.forEach(([i, j]) => state.edges.push({ id: newId('e'), from: state.nodes[i].id, to: state.nodes[j].id, fromSide: null, toSide: null, mid: null }));
+  render();
+}, pairs);
+
+test('한 변에서 여러 선이 나가면 연결점을 나눠 놓는다', async ({ page }) => {
+  await openApp(page);
+  await place(page, [['pc', 150, 300], ['s3', 650, 160], ['s3', 650, 440]]);
+  await link(page, [[0, 1], [0, 2]]);
+  const starts = await page.evaluate(() => state.edges.map(ed => edgePoints.get(ed.id)[0]));
+  expect(starts[0].x).toBe(starts[1].x);                     // 같은 변(오른쪽)
+  expect(starts[1].y - starts[0].y).toBe(12);                // 위쪽 상대는 위 연결점, 아래쪽 상대는 아래 연결점
+  expect(await overlapCount(page)).toBe(0);
+});
+
+test('줄 맞춰 놓인 박스 사이에서 다른 선끼리 겹치지 않게 비켜 그린다', async ({ page }) => {
+  await openApp(page);
+  // 1→2 선과 3→4 선이 그대로 그리면 y=270 줄에서 겹친다 (연결하지 않은 1과 4가 이어진 것처럼 보임)
+  await place(page, [['pc', 400, 270], ['s3', 880, 430], ['pc', 400, 430], ['s3', 650, 270]]);
+  await link(page, [[0, 1], [2, 3]]);
+  expect(await overlapCount(page)).toBe(0);
+});

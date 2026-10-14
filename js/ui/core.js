@@ -1,3 +1,4 @@
+// @ts-check
 // js/ui/core.js — UI-1 상태·공통 유틸, UI-2 소속 판정·동작 검사
 /* =========================================================
    UI·드래그 로직 (js/ui/, js/main.js)
@@ -5,7 +6,7 @@
    UI-3   palette.js   팔레트·설명 툴팁
    UI-4   edit.js      추가·삭제·선택·이동·크기 조절
    UI-5   edges.js     연결선
-   UI-6·7 render.js    그리기, 줌·저장
+   UI-6·7 render.js    그리기, 줌·저장·실행 취소
    UI-8   result.js    검증 결과 표시·동적 흐름
    UI-9   main.js      기본 틀·이벤트·시작
    ========================================================= */
@@ -129,12 +130,15 @@ function showToast(msg, kind = '') {
 // ----- 소속 판정 -----
 // 점 p를 품는 가장 안쪽 영역. self(영역)를 판정할 때는 자신보다 큰 영역만 후보로 본다.
 // 서비스 박스의 중심이 VPC 경계선 위에 있으면 그 VPC 소속(서브넷 밖)으로 본다.
+// 덧씌우는 영역(Auto Scaling 그룹)은 다른 항목의 소속 후보가 아니고, 자신은 VPC에만 소속된다.
 function innermostContainer(p, self) {
   const selfArea = self ? self.width * self.height : Infinity;
   const selfRank = self ? AREA_MAP[self.type].rank : Infinity;
+  const selfOverlay = !!(self && AREA_MAP[self.type].overlay);
   let best = null, bestArea = Infinity;
   for (const k of state.containers) {
-    if (k === self) continue;
+    if (k === self || AREA_MAP[k.type].overlay) continue;
+    if (selfOverlay && k.type !== 'vpc') continue;
     const hit = (!self && k.type === 'vpc') ? inRectInclusive(rectOf(k), p) : inRect(rectOf(k), p);
     if (!hit) continue;
     const area = k.width * k.height;
@@ -212,7 +216,7 @@ function findOverlap(before, actedId, movedIds) {
 
 // 같은 단계 영역(VPC끼리, AZ끼리, 서브넷끼리)이 일부라도 겹치는지 검사.
 // 이번 동작으로 새로 생기거나 위치·크기가 바뀐 영역만 대상으로 한다.
-const RANK_NAME = ['VPC', 'AZ(가용 영역)', '서브넷'];
+const RANK_NAME = ['VPC', 'AZ(가용 영역)', '서브넷', 'Auto Scaling 그룹'];
 function findAreaOverlap(before) {
   const prev = new Map(before.containers.map(c => [c.id, c]));
   const changed = new Set(state.containers.filter(c => {

@@ -1,3 +1,4 @@
+// @ts-check
 // js/ui/edges.js — UI-5 연결선 (연결 모드·직각 경로·손잡이·그리기)
 
 /* ---------------------------------------------------------
@@ -50,10 +51,12 @@ const STUB = 20;      // 박스 변에서 수직으로 먼저 나가는 길이
 const EDGE_GAP = 3;   // 화살표 끝과 박스 사이 여백
 const isHorizSide = s => s === 'left' || s === 'right';
 
-// 박스 변 중앙의 연결점 (gap만큼 바깥)
-function anchorPoint(node, side, gap = 0) {
+// 박스 변 중앙의 연결점 (gap만큼 바깥). off: 변을 따라 옮기는 거리 (한 변에 선이 여러 개일 때)
+function anchorPoint(node, side, gap = 0, off = 0) {
   const c = centerOf(node), d = SIDE_DIR[side];
-  return { x: c.x + d.x * (NODE_W / 2 + gap), y: c.y + d.y * (NODE_H / 2 + gap) };
+  const p = { x: c.x + d.x * (NODE_W / 2 + gap), y: c.y + d.y * (NODE_H / 2 + gap) };
+  if (isHorizSide(side)) p.y += off; else p.x += off;
+  return p;
 }
 
 // 두 박스의 위치로 자연스러운 연결 변을 고른다
@@ -112,9 +115,10 @@ function edgeRoute(ed) {
 }
 
 // 정해진 연결 변(sa, sb)으로 경로 계산. mid가 없으면 가운데 구간을 옮겨 가며 박스를 피한다.
-function routeFor(a, b, sa, sb, mid) {
+// offA/offB: 연결점을 변을 따라 옮기는 거리 (spreadPorts가 정함)
+function routeFor(a, b, sa, sb, mid, offA = 0, offB = 0) {
   const da = SIDE_DIR[sa], db = SIDE_DIR[sb];
-  const S = anchorPoint(a, sa, EDGE_GAP), E = anchorPoint(b, sb, EDGE_GAP);
+  const S = anchorPoint(a, sa, EDGE_GAP, offA), E = anchorPoint(b, sb, EDGE_GAP, offB);
   const P = { x: S.x + da.x * STUB, y: S.y + da.y * STUB };
   const Q = { x: E.x + db.x * STUB, y: E.y + db.y * STUB };
   const ha = isHorizSide(sa), hb = isHorizSide(sb);
@@ -143,7 +147,8 @@ function routeFor(a, b, sa, sb, mid) {
     return { pts: [S, P, ...mids, Q, E], mids };
   };
   const skip = [a.id, b.id];
-  if (mid && mid.axis === axis) {
+  const fixed = !!(mid && mid.axis === axis);
+  if (fixed) {
     m = mid.value;   // 사용자가 옮긴 경로는 그대로
   } else {
     m = avoidBoxes(m, build, skip);   // 자동 경로는 다른 박스를 피해서
@@ -151,7 +156,15 @@ function routeFor(a, b, sa, sb, mid) {
 
   const { pts, mids } = build(m);
   const handle = { x: (mids[0].x + mids[1].x) / 2, y: (mids[0].y + mids[1].y) / 2 };
-  return { points: simplifyPoints(pts), axis, m, handle, sa, sb, crossings: crossingCount(pts, skip) };
+  // 가운데 구간 범위 (겹침 간격 벌리기용). 구간이 시작·끝 짧은 선과 이어져 있으면(ㄱ자 등) 옮기지 않는다.
+  const other = axis === 'x' ? 'y' : 'x';
+  const same = (p, q) => p.x === q.x && p.y === q.y;
+  const seg = {
+    lo: Math.min(mids[0][other], mids[1][other]),
+    hi: Math.max(mids[0][other], mids[1][other]),
+    free: !fixed && !same(mids[0], P) && !same(mids[1], Q),
+  };
+  return { points: simplifyPoints(pts), axis, m, handle, sa, sb, offA, offB, seg, crossings: crossingCount(pts, skip) };
 }
 
 // 경로가 다른 서비스 박스를 몇 번 가로지르는지 (박스 둘레 여백 포함)
@@ -187,7 +200,105 @@ function avoidBoxes(m0, build, skipIds) {
   return best;
 }
 
-const pathD = pts => pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
+// 한 박스의 같은 변에 연결선이 여러 개면 연결점을 변을 따라 PORT_GAP씩 나눠 놓는다.
+// 선끼리 엇갈리지 않도록 상대 박스가 있는 쪽 순서대로 놓는다. (그리기용, 저장 데이터는 바꾸지 않음)
+const PORT_GAP = 12;
+function spreadPorts(routes) {
+  const ports = new Map();   // "박스 id:변" → 그 변을 쓰는 선 끝 목록
+  routes.forEach((r, ed) => {
+    [[ed.from, r.sa, ed.to, 'offA'], [ed.to, r.sb, ed.from, 'offB']].forEach(([id, side, otherId, key]) => {
+      const k = `${id}:${side}`;
+      if (!ports.has(k)) ports.set(k, []);
+      ports.get(k).push({ ed, side, other: centerOf(findNode(otherId)), key });
+    });
+  });
+  const offs = new Map();   // 연결선 → { offA, offB }
+  ports.forEach(list => {
+    if (list.length < 2) return;
+    const along = isHorizSide(list[0].side) ? 'y' : 'x';
+    const len = along === 'y' ? NODE_H : NODE_W;
+    const gap = Math.min(PORT_GAP, (len - 16) / (list.length - 1));   // 변 끝 8px 안쪽까지만
+    list.sort((p, q) => p.other[along] - q.other[along]);
+    list.forEach((p, i) => {
+      if (!offs.has(p.ed)) offs.set(p.ed, { offA: 0, offB: 0 });
+      offs.get(p.ed)[p.key] = (i - (list.length - 1) / 2) * gap;
+    });
+  });
+  offs.forEach((o, ed) => {
+    const r = routes.get(ed);
+    routes.set(ed, routeFor(findNode(ed.from), findNode(ed.to), r.sa, r.sb, ed.mid, o.offA, o.offB));
+  });
+}
+
+// 두 선분이 같은 줄에서 일부라도 겹치는지 (닿기만 하는 것은 제외)
+function segsOverlap(p1, q1, p2, q2) {
+  const span = (a, b, c, d) => Math.min(Math.max(a, b), Math.max(c, d)) - Math.max(Math.min(a, b), Math.min(c, d));
+  if (p1.y === q1.y && p2.y === q2.y && Math.abs(p1.y - p2.y) < 0.5) return span(p1.x, q1.x, p2.x, q2.x) > 1;
+  if (p1.x === q1.x && p2.x === q2.x && Math.abs(p1.x - p2.x) < 0.5) return span(p1.y, q1.y, p2.y, q2.y) > 1;
+  return false;
+}
+
+// 선의 시작·끝 구간이 다른 선과 같은 줄에서 겹치면 (줄 맞춰 놓인 박스끼리 흔함),
+// 그 끝의 연결점을 변을 따라 옮겨 비켜 간다. 겹친 채로 두면 연결하지 않은 박스가 이어진 것처럼 보인다.
+function spreadLegs(routes) {
+  const hitsOther = (p, q, self) => [...routes].some(([ed, r]) => ed !== self &&
+    r.points.slice(1).some((b, i) => segsOverlap(p, q, r.points[i], b)));
+  const legOf = (pts, key) => key === 'offA' ? [pts[0], pts[1]] : [pts[pts.length - 2], pts[pts.length - 1]];
+  [...routes.keys()].forEach(ed => {
+    ['offA', 'offB'].forEach(key => {
+      const r = routes.get(ed);
+      const [p, q] = legOf(r.points, key);
+      if (!hitsOther(p, q, ed)) return;
+      const limit = (isHorizSide(key === 'offA' ? r.sa : r.sb) ? NODE_H : NODE_W) / 2 - 8;
+      for (const d of [PORT_GAP, -PORT_GAP, 2 * PORT_GAP, -2 * PORT_GAP]) {
+        const o = { offA: r.offA, offB: r.offB };
+        o[key] += d;
+        if (Math.abs(o[key]) > limit) continue;
+        const moved = routeFor(findNode(ed.from), findNode(ed.to), r.sa, r.sb, ed.mid, o.offA, o.offB);
+        if (moved.crossings > r.crossings) continue;
+        const [mp, mq] = legOf(moved.points, key);
+        if (hitsOther(mp, mq, ed)) continue;
+        routes.set(ed, moved);
+        return;
+      }
+    });
+  });
+}
+
+// 여러 연결선의 가운데 구간이 같은 줄에서 겹치면, 뒤의 선을 EDGE_SPREAD씩 옆으로 벌린다 (+1칸, -1칸, +2칸 …)
+// 사용자가 옮긴 선은 움직이지 않고 먼저 자리를 차지한다. 벌려서 박스를 더 가로지르게 되면 그 칸은 쓰지 않는다.
+// routes: 연결선 → 경로 (벌린 선은 새 경로로 바뀜). 그리기용이며 저장 데이터(mid)는 바꾸지 않는다.
+const EDGE_SPREAD = 8;
+function spreadOverlaps(routes) {
+  const groups = new Map();   // 같은 줄(방향 + 위치)에 있는 가운데 구간끼리 모음
+  routes.forEach((r, ed) => {
+    if (r.seg.hi - r.seg.lo < 1) return;
+    const key = `${r.axis}:${Math.round(r.m)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ ed, r });
+  });
+  groups.forEach(list => {
+    if (list.length < 2) return;
+    list.sort((p, q) => (Number(p.r.seg.free) - Number(q.r.seg.free)) || (p.r.seg.lo - q.r.seg.lo));
+    const lanes = [];   // 칸별로 차지한 구간 목록
+    const fits = (k, seg) => !(lanes[k] || []).some(s => s.lo < seg.hi - 1 && seg.lo < s.hi - 1);
+    const take = (k, seg) => (lanes[k] = lanes[k] || []).push(seg);
+    list.forEach(({ ed, r }) => {
+      if (!r.seg.free || fits(0, r.seg)) { take(0, r.seg); return; }
+      for (let k = 1; k <= 6; k++) {
+        if (!fits(k, r.seg)) continue;
+        const off = Math.ceil(k / 2) * EDGE_SPREAD * (k % 2 ? 1 : -1);
+        const moved = routeFor(findNode(ed.from), findNode(ed.to), r.sa, r.sb, { axis: r.axis, value: r.m + off }, r.offA, r.offB);
+        if (moved.crossings > r.crossings) continue;
+        routes.set(ed, moved);
+        take(k, r.seg);
+        return;
+      }
+    });
+  });
+}
+
+const pathD = pts =>pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
 
 // 연결선 끝 손잡이를 끌어 같은 박스의 다른 변으로 옮기기
 function startEndpointDrag(e, ed, end) {
@@ -263,7 +374,7 @@ function setHoverEdge(id) {
   hoverEdgeId = id;
   $edgeLayer.classList.toggle('dimmed', !!id);
   const ed = id && state.edges.find(e => e.id === id);
-  $edgeG.querySelectorAll('.edge').forEach(p => p.classList.toggle('hl', p.dataset.id === id));
+  $edgeG.querySelectorAll('.edge').forEach(p => p.classList.toggle('hl', p.getAttribute('data-id') === id));
   elMap.forEach((el, key) => el.classList.toggle('edge-end', !!ed && (key === ed.from || key === ed.to)));
 }
 
@@ -277,10 +388,14 @@ function renderEdges() {
   $edgeG.innerHTML = '';
   $handleG.innerHTML = '';
   edgePoints.clear();
+  const routes = new Map();
+  state.edges.forEach(ed => { if (findNode(ed.from) && findNode(ed.to)) routes.set(ed, edgeRoute(ed)); });
+  spreadPorts(routes);
+  spreadLegs(routes);
+  spreadOverlaps(routes);
   state.edges.forEach(ed => {
-    const a = findNode(ed.from), b = findNode(ed.to);
-    if (!a || !b) return;
-    const route = edgeRoute(ed);
+    const route = routes.get(ed);
+    if (!route) return;
     const d = pathD(route.points);
     const sel = ed.id === selectedId;
     const marker = `url(#${sel ? 'arrow-sel' : 'arrow'})`;

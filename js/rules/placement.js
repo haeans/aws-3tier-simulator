@@ -1,3 +1,4 @@
+// @ts-check
 // js/rules/placement.js — 배치 제한 규칙 (서비스 위치, 영역 중첩)
 
 /* =========================================================
@@ -7,7 +8,7 @@
 // 받침 있는 영문 이름 (조사 은/는 선택용)
 const BATCHIM_NAMES = new Set([
   'IAM', 'ECR', 'NAT', 'Client VPN', 'CodeCommit', 'CodePipeline',
-  'CloudTrail', 'CloudFormation', 'Auto Scaling',
+  'CloudTrail', 'CloudFormation',
 ]);
 // 이름 뒤에 '은/는'을 붙여 돌려준다
 function eunNeun(word) {
@@ -40,11 +41,6 @@ const PLACEMENT_RULES = {
     test: zone => zone === 'private',
     message: name => `${eunNeun(name)} 프라이빗 서브넷 안에만 놓을 수 있어요.`,
   },
-  // 여러 AZ에 걸치는 그룹(Auto Scaling 등): 프라이빗 서브넷 또는 VPC 안 서브넷 밖
-  vpcInner: {
-    test: zone => zone === 'private' || zone === 'vpc',
-    message: name => `${eunNeun(name)} 프라이빗 서브넷이나, VPC 안의 서브넷 밖(AZ 사이 빈 곳 등)에만 놓을 수 있어요.`,
-  },
   db: {
     test: zone => zone === 'db',
     message: name => `${eunNeun(name)} DB 서브넷 안에만 놓을 수 있어요.`,
@@ -73,7 +69,17 @@ const NESTING_RULES = {
       ? '서브넷 안에 다른 서브넷을 넣을 수 없어요. AZ 안의 빈 곳에 놓아주세요.'
       : `${eunNeun(name)} AZ(가용 영역) 안에 놓아야 해요.`,
   },
+  // Auto Scaling 그룹: 영역 전체가 VPC 안에 있어야 한다 (AZ·서브넷 경계는 넘어도 됨)
+  asg: {
+    test: (parentType, c) => parentType === 'vpc' && insideParent(c),
+    message: () => 'Auto Scaling 그룹은 VPC 안에 놓아야 해요. 그룹 전체가 VPC 테두리 안에 들어오게 해주세요.',
+  },
 };
+// 영역이 소속 영역 안에 완전히 들어가 있는지
+function insideParent(c) {
+  const p = findContainer(c.parentContainer);
+  return !!p && c.x >= p.x && c.y >= p.y && c.x + c.width <= p.x + p.width && c.y + c.height <= p.y + p.height;
+}
 const nestingRuleOf = type => NESTING_RULES[SUBNET_TYPES.includes(type) ? 'subnet' : type];
 
 // 전체 상태에서 규칙 위반을 찾는다. 방금 조작한 항목(actedId)의 위반을 우선 안내.
@@ -83,7 +89,7 @@ function findViolation(actedId) {
     const parent = findContainer(c.parentContainer);
     const parentType = parent ? parent.type : null;
     const rule = nestingRuleOf(c.type);
-    if (!rule.test(parentType)) {
+    if (!rule.test(parentType, c)) {
       list.push({ id: c.id, msg: rule.message(parentType, AREA_MAP[c.type].name) });
     }
   });

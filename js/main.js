@@ -1,3 +1,4 @@
+// @ts-check
 // js/main.js — UI-9 기본 틀·이벤트 바인딩·시작 (가장 마지막에 불러와야 함)
 
 /* ---------------------------------------------------------
@@ -20,7 +21,7 @@ function loadTemplate() {
     label: label || AREA_MAP[type].name,
   });
   make('vpc', 280, 80, 1000, 660);
-  [['A', 320], ['B', 800]].forEach(([letter, x]) => {
+  [{ letter: 'A', x: 320 }, { letter: 'B', x: 800 }].forEach(({ letter, x }) => {
     make('az', x, 140, 440, 560, '가용 영역 ' + letter);
     make('public',  x + 20, 200, 400, 140);
     make('private', x + 20, 360, 400, 140);
@@ -41,7 +42,7 @@ $world.addEventListener('pointerdown', () => {
 
 // 연결선 위가 아니면 강조 해제 (선이 다시 그려져 pointerleave를 놓친 경우 대비)
 $world.addEventListener('pointermove', e => {
-  if (hoverEdgeId && !e.target.closest('.edge-hit, .edge-handle')) setHoverEdge(null);
+  if (hoverEdgeId && !/** @type {Element} */ (e.target).closest('.edge-hit, .edge-handle')) setHoverEdge(null);
 });
 
 // 연결 대기 중이면 포인터까지 점선 표시
@@ -51,16 +52,22 @@ $world.addEventListener('pointermove', e => {
   if (!from) return;
   const c = connectFromSide ? anchorPoint(from, connectFromSide) : centerOf(from);
   const p = clientToWorld(e.clientX, e.clientY);
-  $tempEdge.setAttribute('x1', c.x);
-  $tempEdge.setAttribute('y1', c.y);
-  $tempEdge.setAttribute('x2', p.x);
-  $tempEdge.setAttribute('y2', p.y);
+  $tempEdge.setAttribute('x1', String(c.x));
+  $tempEdge.setAttribute('y1', String(c.y));
+  $tempEdge.setAttribute('x2', String(p.x));
+  $tempEdge.setAttribute('y2', String(p.y));
   $tempEdge.setAttribute('visibility', 'visible');
 });
 
 // Delete / Backspace → 선택 항목 삭제, Esc → 연결 대기 취소 → 연결 모드 끄기 → 선택 해제
 document.addEventListener('keydown', e => {
-  if (e.target.closest('input, textarea')) return;
+  if (/** @type {Element} */ (e.target).closest('input, textarea')) return;
+  // Ctrl+Z → 되돌리기, Ctrl+Y / Ctrl+Shift+Z → 다시 실행 (한글 입력 상태에서도 되도록 키 위치로 판단)
+  if (e.ctrlKey && (e.code === 'KeyZ' || e.code === 'KeyY')) {
+    e.preventDefault();
+    if (e.code === 'KeyY' || e.shiftKey) redo(); else undo();
+    return;
+  }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
     e.preventDefault();
     deleteSelected();
@@ -74,6 +81,11 @@ document.addEventListener('keydown', e => {
 $btnConnect.addEventListener('click', () => setConnectMode(!connectMode));
 document.getElementById('btn-template').addEventListener('click', loadTemplate);
 document.getElementById('btn-validate').addEventListener('click', runValidation);
+document.getElementById('btn-undo').addEventListener('click', undo);
+document.getElementById('btn-redo').addEventListener('click', redo);
+// 마우스를 누르고 있는 동안(드래그 중)에는 되돌리기를 막기 위해 누름 상태를 기록
+window.addEventListener('pointerdown', () => { pointerHeld = true; }, true);
+['pointerup', 'pointercancel'].forEach(t => window.addEventListener(t, () => { pointerHeld = false; }, true));
 
 // 초기화
 document.getElementById('btn-reset').addEventListener('click', () => {
@@ -128,4 +140,7 @@ $wrap.addEventListener('scroll', () => {
   clearTimeout(scrollSaveTimer);
   scrollSaveTimer = setTimeout(saveState, 300);
 });
-if (restored) showToast('이전에 작업하던 배치를 불러왔어요.');
+if (removedAsgBoxes) {
+  showToast(`Auto Scaling이 박스에서 그룹 영역으로 바뀌어, 예전 Auto Scaling 박스 ${removedAsgBoxes}개를 지웠어요. ` +
+    '왼쪽 [영역]에서 Auto Scaling 그룹을 끌어다 EC2를 감싸 주세요.', 'warn');
+} else if (restored) showToast('이전에 작업하던 배치를 불러왔어요.');

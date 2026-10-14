@@ -77,3 +77,25 @@ test('결과 목록의 항목을 클릭하면 해당 박스가 선택된다', as
   const selectedType = await page.evaluate(() => state.nodes.find(n => n.id === selectedId)?.type);
   expect(selectedType).toBe('lb');
 });
+
+test('Auto Scaling 그룹: 없으면 만들라고, 한 AZ의 EC2만 감싸면 넓히라고 제안한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);                               // EC2: AZ A(400,430), AZ B(880,430)
+  const has4 = async () => {
+    await page.click('#btn-validate');
+    return page.evaluate(() => validation.suggestions.filter(s => s.rule.id === 4).map(s => s.action));
+  };
+  expect((await has4())[0]).toContain('Auto Scaling 그룹을 두 AZ의 프라이빗 서브넷에 걸쳐');
+
+  // 그룹이 AZ B의 EC2만 감쌈 → 넓히라는 제안
+  await page.evaluate(() => { addContainer('asg', 1020, 430); });
+  expect((await has4())[0]).toContain('다른 AZ의 프라이빗 서브넷까지');
+
+  // 두 AZ의 EC2를 모두 감쌈 → 제안 없음
+  await page.evaluate(() => {
+    const before = takeSnapshot();
+    Object.assign(state.containers.find(c => c.type === 'asg'), { x: 320, width: 900 });
+    commit(before, null);
+  });
+  expect(await has4()).toEqual([]);
+});

@@ -1,3 +1,4 @@
+// @ts-check
 // js/data/services.js — 서비스·영역 데이터 (카테고리, 서비스 목록, 영역 목록, 설명 문구)
 
 /* =========================================================
@@ -20,7 +21,7 @@ const CATEGORIES = [
 const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
 // 서비스 목록 (여기에 항목을 추가하면 팔레트에 자동 반영)
-// allowedZone: 'outside' | 'vpcEdge' | 'private' | 'vpcInner'(프라이빗 서브넷 또는 VPC 안 서브넷 밖) | 'db' | 'any'
+// allowedZone: 'outside' | 'vpcEdge' | 'private' | 'db' | 'any'
 // validated: true = 검증 대상 / false = 배치·연결만 가능
 const SERVICES = [
   // 사용자
@@ -37,7 +38,6 @@ const SERVICES = [
   { type: 'clientvpn',      name: 'Client VPN',       category: 'network',   allowedZone: 'vpcEdge', validated: true  },
   // 컴퓨팅
   { type: 'ec2',            name: 'EC2',              category: 'compute',   allowedZone: 'any',     validated: true  },
-  { type: 'autoscaling',    name: 'Auto Scaling',     category: 'compute',   allowedZone: 'vpcInner', validated: false },
   // 컨테이너/도커
   { type: 'ecr',            name: 'ECR',              category: 'container', allowedZone: 'outside', validated: false },
   { type: 'ecs',            name: 'ECS',              category: 'container', allowedZone: 'private', validated: false },
@@ -78,7 +78,6 @@ const SERVICE_DESC = {
   vpce:           '인터넷을 거치지 않고 VPC 안에서 S3 같은 AWS 서비스에 바로 접속하게 해줘요.',
   clientvpn:      '관리자가 암호화된 통로로 VPC 안에 안전하게 접속하게 해줘요.',
   ec2:            '앱을 실행하는 가상 서버예요. 3-Tier에서 앱(로직) 계층을 맡아요.',
-  autoscaling:    '여러 AZ의 EC2를 그룹으로 묶어 사용량에 따라 자동으로 늘리고 줄여요. EC2와만 연결하세요.',
   ecr:            '도커 컨테이너 이미지를 보관하는 저장소예요.',
   ecs:            '도커 컨테이너를 실행하고 관리하는 AWS 서비스예요.',
   eks:            '쿠버네티스로 컨테이너를 실행하고 관리하는 서비스예요.',
@@ -111,19 +110,20 @@ const ZONE_TEXT = {
   outside: 'VPC 밖',
   vpcEdge: 'VPC 안팎 모두 가능 (서브넷 안은 불가)',
   private: '프라이빗 서브넷만',
-  vpcInner: '프라이빗 서브넷 또는 VPC 안(서브넷 밖)',
   db:      'DB 서브넷만',
   any:     '위치 제한 없음',
 };
 const SVC_MAP = Object.fromEntries(SERVICES.map(s => [s.type, s]));
 
-// 영역 목록: 기본 크기(w,h) / 최소 크기(minW,minH) / 중첩 깊이(rank: 0=VPC, 1=AZ, 2=서브넷)
+// 영역 목록: 기본 크기(w,h) / 최소 크기(minW,minH) / 중첩 깊이(rank: 0=VPC, 1=AZ, 2=서브넷, 3=그룹)
+// overlay: 덧씌우는 영역. AZ 경계를 가로질러 놓을 수 있고, 다른 항목의 소속(parentContainer)에는 끼지 않는다.
 const AREAS = [
   { type: 'vpc',     name: 'VPC',             w: 560, h: 400, minW: 200, minH: 140, rank: 0 },
   { type: 'az',      name: 'AZ (가용 영역)',  w: 260, h: 340, minW: 160, minH: 120, rank: 1 },
   { type: 'public',  name: '퍼블릭 서브넷',   w: 220, h: 120, minW: 120, minH: 80,  rank: 2 },
   { type: 'private', name: '프라이빗 서브넷', w: 220, h: 120, minW: 120, minH: 80,  rank: 2 },
   { type: 'db',      name: 'DB 서브넷',       w: 220, h: 120, minW: 120, minH: 80,  rank: 2 },
+  { type: 'asg',     name: 'Auto Scaling 그룹', w: 480, h: 160, minW: 160, minH: 100, rank: 3, overlay: true },
 ];
 const AREA_MAP = Object.fromEntries(AREAS.map(a => [a.type, a]));
 
@@ -134,6 +134,8 @@ const AREA_DESC = {
   public:  { desc: '인터넷과 직접 통신할 수 있는 서브넷이에요. Load Balancer와 NAT를 둬요.', zone: 'AZ 안' },
   private: { desc: '인터넷에서 직접 들어올 수 없는 서브넷이에요. 앱 서버(EC2)를 둬요.', zone: 'AZ 안' },
   db:      { desc: '데이터베이스를 두는 가장 안쪽 서브넷이에요.', zone: 'AZ 안' },
+  asg:     { desc: '여러 AZ의 EC2를 한 그룹으로 묶어, 사용량에 따라 EC2 수를 자동으로 늘리고 줄여요. 두 AZ의 프라이빗 서브넷에 걸쳐 놓고 그 안에 EC2를 두세요.',
+             zone: 'VPC 안 (AZ 경계를 넘어 걸쳐 놓을 수 있어요)' },
 };
 const SUBNET_TYPES = ['public', 'private', 'db'];
 

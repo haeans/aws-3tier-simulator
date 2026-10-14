@@ -1,4 +1,5 @@
-// js/ui/render.js — UI-6 그리기, UI-7 줌·저장
+// @ts-check
+// js/ui/render.js — UI-6 그리기, UI-7 줌·저장·실행 취소
 
 /* ---------------------------------------------------------
    UI-6. 그리기 (영역·박스 DOM 생성, 전체 다시 그리기)
@@ -12,7 +13,7 @@ function buildAreaEl(c) {
   const label = document.createElement('div');
   label.className = 'area-label';
   if (c.type === 'vpc') label.innerHTML = '<span class="vpc-tag">VPC</span>';
-  else if (c.type === 'az') label.textContent = c.label;
+  else if (c.type === 'az' || c.type === 'asg') label.textContent = c.label;
   else label.innerHTML = LOCK_SVG + `<span>${c.label}</span>`;
   attachTooltip(label, () => areaTooltip(c.type));   // 영역은 이름표에서만 설명 표시
   el.appendChild(label);
@@ -24,6 +25,15 @@ function buildAreaEl(c) {
   del.addEventListener('pointerdown', ev => ev.stopPropagation());
   del.addEventListener('click', ev => { ev.stopPropagation(); deleteContainer(c.id); });
   el.appendChild(del);
+
+  // Auto Scaling 그룹: 안쪽은 클릭이 아래로 지나가므로, 점선 테두리 둘레를 잡아 옮길 수 있게 띠를 둔다
+  if (c.type === 'asg') {
+    ['top', 'right', 'bottom', 'left'].forEach(side => {
+      const strip = document.createElement('div');
+      strip.className = `asg-edge ${side}`;
+      el.appendChild(strip);
+    });
+  }
 
   // 크기 조절 손잡이: 좌상단(tl) / 우하단(br)
   ['tl', 'br'].forEach(corner => {
@@ -37,8 +47,8 @@ function buildAreaEl(c) {
   el.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     if (connectMode) { ev.stopPropagation(); cancelPendingConnect(); return; }
-    const handle = ev.target.closest('.resize');
-    if (handle) startResize(ev, c, handle, handle.dataset.corner);
+    const handle = /** @type {Element} */ (ev.target).closest('.resize');
+    if (handle) startResize(ev, c, handle, handle.getAttribute('data-corner'));
     else startMoveDrag(ev, c, el);
   });
   return el;
@@ -77,8 +87,8 @@ function buildNodeEl(node) {
     if (connectMode) {
       ev.preventDefault();
       ev.stopPropagation();
-      const anchor = ev.target.closest('.anchor');
-      handleConnectClick(node.id, anchor ? anchor.dataset.side : null);
+      const anchor = /** @type {Element} */ (ev.target).closest('.anchor');
+      handleConnectClick(node.id, anchor ? anchor.getAttribute('data-side') : null);
       return;
     }
     startMoveDrag(ev, node, el);
@@ -138,10 +148,11 @@ function render() {
   renderResult();
   syncFlow();
   saveState();
+  recordHistory();
 }
 
 /* ---------------------------------------------------------
-   UI-7. 줌·저장
+   UI-7. 줌·저장·실행 취소
    --------------------------------------------------------- */
 
 // ----- 줌 -----
@@ -182,6 +193,7 @@ function stepZoom(dir, anchor) {
 const STORAGE_KEY = 'aws-t3-sim:v1';
 let lastSaved = null;
 let savedScroll = null;   // 불러온 스크롤 위치 (시작 시 한 번 적용)
+let removedAsgBoxes = 0;  // 불러올 때 지운 예전 Auto Scaling 박스 수 (시작 시 안내)
 
 function saveState() {
   const scroll = { x: $wrap.scrollLeft, y: $wrap.scrollTop };   // 보고 있던 캔버스 시점
@@ -199,6 +211,8 @@ function loadSaved() {
   try { data = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (e) { return 0; }
   if (!data || !data.state) return 0;
   const s = data.state;
+  // v1.12부터 Auto Scaling은 박스가 아니라 그룹 영역이다. 예전 박스는 지우고 시작할 때 안내한다.
+  removedAsgBoxes = (Array.isArray(s.nodes) ? s.nodes : []).filter(n => n && n.type === 'autoscaling').length;
   const nodes = (Array.isArray(s.nodes) ? s.nodes : []).filter(n => n && SVC_MAP[n.type]);
   const containers = (Array.isArray(s.containers) ? s.containers : []).filter(c => c && AREA_MAP[c.type]);
   const nodeIds = new Set(nodes.map(n => n.id));
@@ -220,3 +234,49 @@ function loadSaved() {
   return nodes.length + containers.length;
 }
 
+
+// ----- 실행 취소 / 다시 실행 -----
+// render()가 끝날 때마다 캔버스 상태를 기록한다. 바뀌었으면 바뀌기 전 상태를 되돌리기 목록에 쌓는다.
+// (규칙 위반으로 되돌려진 동작은 상태가 같으므로 쌓이지 않는다)
+// 기록은 이 창을 열어 둔 동안만 유지된다. 새로고침하면 처음부터 다시 기록한다.
+const HISTORY_LIMIT = 50;
+const undoStack = [];
+const redoStack = [];
+let historyLast = null;   // 마지막으로 기록한 상태 (JSON 문자열)
+let pointerHeld = false;  // 마우스를 누르고 있는 동안(드래그 중)은 되돌리지 않음
+
+const stateJSON = () => JSON.stringify({ nodes: state.nodes, containers: state.containers, edges: state.edges });
+
+function recordHistory() {
+  const cur = stateJSON();
+  if (historyLast !== null && cur !== historyLast) {
+    undoStack.push(historyLast);
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    redoStack.length = 0;   // 새 동작을 하면 "다시 실행" 목록은 비운다
+  }
+  historyLast = cur;
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  /** @type {HTMLButtonElement} */ (document.getElementById('btn-undo')).disabled = !undoStack.length;
+  /** @type {HTMLButtonElement} */ (document.getElementById('btn-redo')).disabled = !redoStack.length;
+}
+
+// from 목록에서 상태 하나를 꺼내 적용하고, 지금 상태는 to 목록에 넣는다
+function stepHistory(from, to, emptyMsg) {
+  if (pointerHeld) return;
+  if (!from.length) { showToast(emptyMsg); return; }
+  to.push(historyLast);
+  historyLast = from.pop();
+  const s = JSON.parse(historyLast);
+  state.nodes = s.nodes;
+  state.containers = s.containers;
+  state.edges = s.edges;
+  selectedId = null;
+  cancelPendingConnect();
+  render();   // historyLast와 같으므로 새로 쌓이지 않음
+}
+
+const undo = () => stepHistory(undoStack, redoStack, '더 되돌릴 작업이 없어요.');
+const redo = () => stepHistory(redoStack, undoStack, '다시 실행할 작업이 없어요.');

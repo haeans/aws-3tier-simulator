@@ -22,6 +22,7 @@
   --pri-line: #4a90c2;
   --pri-bg: #e8f2fa;
   --pri-text: #1f5e8a;
+  --asg: #ed7100;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -148,6 +149,7 @@ body {
 .area-chip.area-public  { border: 1.5px dashed var(--pub-line); background: var(--pub-bg); color: var(--pub-text); }
 .area-chip.area-private,
 .area-chip.area-db      { border: 1.5px dashed var(--pri-line); background: var(--pri-bg); color: var(--pri-text); }
+.area-chip.area-asg     { border: 2px dashed var(--asg); color: var(--asg); }
 
 /* ----- 중앙 캔버스 ----- */
 .stage { flex: 1; position: relative; min-width: 0; }
@@ -279,6 +281,28 @@ body {
 .area-public  { border: 1.5px dashed var(--pub-line); background: var(--pub-bg); }
 .area-private,
 .area-db      { border: 1.5px dashed var(--pri-line); background: var(--pri-bg); }
+/* Auto Scaling 그룹: 서브넷 위에 덧씌우는 점선 영역.
+   안쪽은 클릭이 아래 서브넷으로 지나가고, 이름표를 잡아 옮긴다. (선택하면 손잡이·삭제 표시) */
+.area.area-asg { border: 2px dashed var(--asg); pointer-events: none; }
+.area.area-asg > .area-label, .area.area-asg > .del, .area.area-asg > .resize,
+.area.area-asg > .asg-edge { pointer-events: auto; }
+/* 테두리 둘레 잡는 띠 (테두리 안팎 6px). 마우스를 올리면 테두리가 굵어 보인다 */
+.asg-edge { position: absolute; z-index: 1; cursor: move; }
+.asg-edge.top    { top: -8px;    left: -8px; right: -8px; height: 12px; }
+.asg-edge.bottom { bottom: -8px; left: -8px; right: -8px; height: 12px; }
+.asg-edge.left   { left: -8px;   top: -8px; bottom: -8px; width: 12px; }
+.asg-edge.right  { right: -8px;  top: -8px; bottom: -8px; width: 12px; }
+.area.area-asg:hover { box-shadow: 0 0 0 2px rgba(237, 113, 0, .35), inset 0 0 0 2px rgba(237, 113, 0, .35); }
+.area.area-asg > .area-label {
+  top: -11px; left: 10px;
+  padding: 1px 8px;
+  border-radius: 3px;
+  background: #fff;
+  border: 1.5px solid var(--asg);
+  color: var(--asg);
+  font-size: 12px;
+  cursor: move;
+}
 .area.selected { box-shadow: 0 0 0 2px var(--select); }
 .area-label {
   position: absolute;
