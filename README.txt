@@ -7,14 +7,15 @@
 실제 AWS 리소스는 만들지 않는다.
 
 - 대상: 개발자 본인(학습/재미), AWS를 처음 접하는 사람
-- 형태: 단일 HTML 파일 (HTML + CSS + JavaScript, 외부 라이브러리 없음)
+- 형태: HTML + CSS + JavaScript 파일 (외부 라이브러리 없음, 서버 없이 실행)
 - 환경: 데스크톱 브라우저 (Edge / Chrome 권장)
 
 
 --------------------------------------------------------------
  1. 실행 방법
 --------------------------------------------------------------
-aws-arch-simulator.html 파일을 브라우저로 열면 된다. (서버 불필요)
+index.html 파일을 브라우저로 열면 된다. (서버 불필요, 더블클릭으로 실행)
+css/, js/ 폴더가 index.html과 같은 위치에 있어야 한다. 공유할 때는 폴더째 전달한다.
 
 작업 내용은 브라우저 저장소(localStorage)에 자동 저장되므로,
 같은 브라우저로 다시 열면 이어서 작업할 수 있다.
@@ -51,27 +52,38 @@ aws-arch-simulator.html 파일을 브라우저로 열면 된다. (서버 불필�
 --------------------------------------------------------------
  3. 파일 구조
 --------------------------------------------------------------
-aws-arch-simulator.html   프로그램 전체 (아래 구역으로 나뉨)
-README.txt                이 문서 (개요 + 변경 이력)
-memo.txt                  개인 리뷰 메모
+AWS_T3_Arch_Sim/
+├─ index.html                 실행 파일 (HTML 골격 + css/js 불러오기)
+├─ README.txt                 이 문서 (개요 + 변경 이력)
+├─ css/
+│   └─ style.css              전체 스타일
+├─ js/
+│   ├─ data/
+│   │   └─ services.js        카테고리, 서비스 목록(SERVICES), 영역 목록(AREAS), 설명 문구
+│   ├─ rules/
+│   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
+│   │   ├─ validation.js      VALIDATION_RULES(판정 7개), 검증 실행 validateArchitecture
+│   │   └─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 7개)
+│   ├─ ui/
+│   │   ├─ core.js            UI-1 상태·공통 유틸, UI-2 소속 판정·동작 검사
+│   │   ├─ palette.js         UI-3 팔레트·설명 툴팁
+│   │   ├─ edit.js            UI-4 추가·삭제·선택·이동·크기 조절
+│   │   ├─ edges.js           UI-5 연결선
+│   │   ├─ render.js          UI-6 그리기, UI-7 줌·저장
+│   │   └─ result.js          UI-8 검증 결과 표시·동적 흐름
+│   └─ main.js                UI-9 기본 틀·이벤트·시작
+└─ docs/                      문서·메모
 
-[aws-arch-simulator.html 안의 구역]  (주석 제목으로 검색)
-- CSS
-- 서비스 데이터 정의 ... 카테고리, 서비스 목록(SERVICES), 영역 목록(AREAS), 설명 문구
-- 배치 제한 규칙 ....... PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
-- 검증 규칙 ............ VALIDATION_RULES(판정 7개), SUGGESTION_RULES(제안 7개)
-- UI·드래그 로직 ....... UI-1 ~ UI-9 하위 구역
-    UI-1 상태·공통 유틸        UI-2 소속 판정·동작 검사
-    UI-3 팔레트·설명 툴팁      UI-4 추가·삭제·선택·이동·크기 조절
-    UI-5 연결선                UI-6 그리기
-    UI-7 줌·저장               UI-8 검증 결과 표시·동적 흐름
-    UI-9 기본 틀·이벤트·시작
+[스크립트 불러오는 순서]
+index.html 아래쪽의 <script> 순서대로 읽는다. (data → rules → ui → main)
+일반 script 태그라 파일끼리 전역 변수·함수를 공유한다.
+새 파일을 추가하면 index.html에 script 태그를 넣고, main.js는 항상 마지막에 둔다.
 
 [자주 고치는 곳]
-- 서비스 추가 ......... SERVICES 배열에 한 줄 + SERVICE_DESC에 설명 한 줄
-- 배치 위치 규칙 ...... PLACEMENT_RULES / 서비스의 allowedZone 값
-- 검증 규칙 ........... VALIDATION_RULES 배열에 항목 추가
-- 개선·제거 제안 ...... SUGGESTION_RULES 배열에 항목 추가
+- 서비스 추가 ......... js/data/services.js: SERVICES 배열에 한 줄 + SERVICE_DESC에 설명 한 줄
+- 배치 위치 규칙 ...... js/rules/placement.js: PLACEMENT_RULES / 서비스의 allowedZone 값
+- 검증 규칙 ........... js/rules/validation.js: VALIDATION_RULES 배열에 항목 추가
+- 개선·제거 제안 ...... js/rules/suggestions.js: SUGGESTION_RULES 배열에 항목 추가
 
 
 --------------------------------------------------------------
@@ -86,6 +98,14 @@ memo.txt                  개인 리뷰 메모
       수정: 고친 버그
       비고: 결정 사항, 주의할 점
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
+
+[1.8] 2026-10-14  파일 분리, Git 시작
+  변경: 단일 HTML(aws-arch-simulator.html)을 index.html + css/ + js/(data, rules, ui) 로 분리
+        - 코드 내용은 그대로, 구역 경계대로 자르기만 함 (원본과 줄 단위 대조 완료)
+        - 실행 파일 이름: index.html
+  추가: Git 저장소 시작 (첫 기록 = 분리 전 단일 파일 v1.7)
+  추가: docs/ 폴더
+  비고: 처음 명세의 "단일 HTML 파일" 조건은 사용자 승인으로 변경
 
 [1.7] 2026-10-14  연결선 가시성 개선, 동적 흐름
   추가: 연결선에 마우스를 올리면 그 선과 양 끝 박스 강조, 나머지 선은 흐리게
