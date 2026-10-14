@@ -35,8 +35,9 @@ function loadTemplate() {
 
 // ----- 이벤트 바인딩 -----
 // 빈 캔버스 클릭 → 선택 해제 / 연결 대기 취소
-$world.addEventListener('pointerdown', () => {
+$world.addEventListener('pointerdown', e => {
   cancelPendingConnect();
+  if (e.shiftKey && e.button === 0 && !connectMode) { startMarquee(e); return; }   // Shift+드래그: 범위 선택
   select(null);
 });
 

@@ -50,22 +50,34 @@ test('검증 후 흐름 점이 사용자 쪽에서 DB 쪽으로 움직이고, �
   await buildValidArch(page);
   await page.click('#btn-validate');
   await expect(page.locator('.flow-dot').first()).toBeAttached();
-  // RDS→EC2로 저장된 연결도 EC2→RDS 방향으로 흐른다 (EC2가 위, RDS가 아래 → y 증가)
-  const sample = () => page.evaluate(() => {
-    const ed = state.edges.find(e => [e.from, e.to].includes(state.nodes.find(n => n.type === 'rds').id));
-    return { reverse: validation.flow.find(f => f.id === ed.id).reverse,
-             y: +flowDots.find(d => d.f.id === ed.id).dot.getAttribute('cy') };
+  // 요청이 지나가는 순서대로 시작한다: PC→IGW → IGW→LB → LB→EC2 → EC2→RDS
+  const starts = await page.evaluate(() => {
+    const typeOf = id => findNode(id).type;
+    const at = (a, b) => validation.flow.find(f => typeOf(f.src) === a && typeOf(f.dst) === b).start;
+    return [at('pc', 'igw'), at('igw', 'lb'), at('lb', 'ec2'), at('ec2', 'rds')];
   });
-  const a = await sample();
-  await page.waitForTimeout(250);
-  const b = await sample();
-  expect(a.reverse).toBe(true);
-  expect(b.y).toBeGreaterThan(a.y);
-  // 박스를 옮기면 검증 결과와 흐름 점이 사라진다
+  expect(starts).toEqual([...starts].sort((x, y) => x - y));
+  expect(new Set(starts).size).toBe(4);
+  // RDS→EC2로 저장된 연결도 EC2→RDS 방향: 화살표는 RDS 쪽(시작점 쪽)에만
+  const rdsEdge = await page.evaluate(() => {
+    const ed = state.edges.find(e => [e.from, e.to].includes(state.nodes.find(n => n.type === 'rds').id));
+    const el = document.querySelector(`.edge[data-id="${ed.id}"]`);
+    return { id: ed.id, reverse: validation.flow.find(f => f.id === ed.id).reverse,
+             start: el.hasAttribute('marker-start'), end: el.hasAttribute('marker-end') };
+  });
+  expect(rdsEdge).toMatchObject({ reverse: true, start: true, end: false });
+  // 그 구간의 점이 보이는 동안 아래(RDS 쪽)로 움직인다
+  const dotY = () => page.evaluate(id => +flowDots.find(d => d.f.id === id).dot.getAttribute('cy'), rdsEdge.id);
+  await page.waitForFunction(id => flowDots.find(d => d.f.id === id).dot.getAttribute('visibility') === 'visible', rdsEdge.id);
+  const y1 = await dotY();
+  await page.waitForTimeout(100);
+  expect(await dotY()).toBeGreaterThan(y1);
+  // 박스를 옮기면 검증 결과와 흐름 점이 사라지고, 화살표는 다시 양쪽으로
   const ec2 = await page.evaluate(() => state.nodes.find(n => n.type === 'ec2' && n.x > 700));
   await dragWorld(page, { x: ec2.x + 50, y: ec2.y + 30 }, { x: ec2.x + 90, y: ec2.y + 30 });
   await expect(page.locator('.flow-dot')).toHaveCount(0);
   await expect(page.locator('#result')).toContainText('구성이 바뀌었어요');
+  await expect(page.locator(`.edge[data-id="${rdsEdge.id}"]`)).toHaveAttribute('marker-end', /arrow/);
 });
 
 test('결과 목록의 항목을 클릭하면 해당 박스가 선택된다', async ({ page }) => {

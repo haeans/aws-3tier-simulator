@@ -47,6 +47,7 @@ function buildAreaEl(c) {
   el.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     if (connectMode) { ev.stopPropagation(); cancelPendingConnect(); return; }
+    if (ev.shiftKey) { startMarquee(ev); return; }   // Shift+드래그: 영역 위에서도 범위 선택
     const handle = /** @type {Element} */ (ev.target).closest('.resize');
     if (handle) startResize(ev, c, handle, handle.getAttribute('data-corner'));
     else startMoveDrag(ev, c, el);
@@ -91,6 +92,7 @@ function buildNodeEl(node) {
       handleConnectClick(node.id, anchor ? anchor.getAttribute('data-side') : null);
       return;
     }
+    if (ev.shiftKey) { ev.stopPropagation(); toggleMulti(node.id); return; }   // Shift+클릭: 여러 개 선택에 넣고 빼기
     startMoveDrag(ev, node, el);
   });
   return el;
@@ -133,17 +135,17 @@ function render() {
     elMap.set(n.id, el);
     $nodeLayer.appendChild(el);
   });
-  elMap.forEach((el, id) => el.classList.toggle('selected', id === selectedId));
-  updatePositions();
-
-  if (!connectFrom) $tempEdge.setAttribute('visibility', 'hidden');
-  $emptyHint.classList.toggle('hidden', state.nodes.length + state.containers.length > 0);
-
-  // 검증 후 캔버스가 바뀌었으면 이전 결과는 지운다
+  [...multiSel].forEach(id => { if (!findNode(id)) multiSel.delete(id); });   // 지워진 박스는 선택에서 뺌
+  elMap.forEach((el, id) => el.classList.toggle('selected', isSelected(id)));
+  // 검증 후 캔버스가 바뀌었으면 이전 결과는 지운다 (연결선을 그리기 전에: 화살표 방향이 지난 결과를 따르지 않게)
   if (validation && validation.sig !== stateSig()) {
     validation = null;
     resultNote = '구성이 바뀌었어요. [검증하기]를 다시 눌러 확인해보세요.';
   }
+  updatePositions();
+
+  if (!connectFrom) $tempEdge.setAttribute('visibility', 'hidden');
+  $emptyHint.classList.toggle('hidden', state.nodes.length + state.containers.length > 0);
   applyValidationMarks();
   renderResult();
   syncFlow();

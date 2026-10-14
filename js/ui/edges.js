@@ -393,14 +393,18 @@ function renderEdges() {
   spreadPorts(routes);
   spreadLegs(routes);
   spreadOverlaps(routes);
+  // 검증 후: 사용자와 이어진 선은 요청이 흘러가는 쪽에만 화살표 (reverse면 from 쪽이 도착점)
+  const flowDir = validation && validation.flow ? new Map(validation.flow.map(f => [f.id, f.reverse])) : null;
   state.edges.forEach(ed => {
     const route = routes.get(ed);
     if (!route) return;
     const d = pathD(route.points);
     const sel = ed.id === selectedId;
     const marker = `url(#${sel ? 'arrow-sel' : 'arrow'})`;
-    const line = svgEl('path', { d, class: 'edge' + (sel ? ' selected' : ''),
-      'marker-start': marker, 'marker-end': marker, 'data-id': ed.id });
+    const dir = flowDir && flowDir.has(ed.id) ? flowDir.get(ed.id) : null;   // null = 양쪽 화살표
+    const line = svgEl('path', { d, class: 'edge' + (sel ? ' selected' : ''), 'data-id': ed.id });
+    if (dir !== false) line.setAttribute('marker-start', marker);
+    if (dir !== true) line.setAttribute('marker-end', marker);
     const hit = svgEl('path', { d, class: 'edge-hit' });   // 클릭하기 쉽게 넓은 투명 선
     const pts = route.points;
     edgePoints.set(ed.id, pts);   // 동적 흐름 점이 따라갈 경로

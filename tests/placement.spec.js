@@ -211,3 +211,51 @@ test('Auto Scaling 그룹은 점선 테두리를 잡아 옮길 수 있다 (안�
   expect(await page.evaluate(() => selectedId)).toBe(pv.id);
   expect((await areasOf(page, 'asg'))[0].x).toBe(asg.x + 40);
 });
+
+test('Shift+클릭으로 여러 박스를 골라 함께 옮기고, 연결선을 다시 정리한다', async ({ page }) => {
+  await openApp(page);
+  await page.click('#btn-template');
+  await page.evaluate(() => {
+    addNode('ec2', 540, 430); addNode('ec2', 1020, 430); addNode('rds', 540, 590);
+    const [a, b, r] = state.nodes;
+    state.edges.push({ id: 'e-ab', from: a.id, to: b.id, fromSide: 'right', toSide: 'left', mid: { axis: 'x', value: 780 } });
+    state.edges.push({ id: 'e-ar', from: a.id, to: r.id, fromSide: 'bottom', toSide: 'top', mid: { axis: 'y', value: 520 } });
+    select(null);
+    render();
+  });
+  const [a0, b0] = await nodesOf(page, 'ec2');
+  const pa = await toScreen(page, a0.x + 50, a0.y + 30), pb = await toScreen(page, b0.x + 50, b0.y + 30);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(pa.x, pa.y);
+  await page.mouse.click(pb.x, pb.y);
+  await page.keyboard.up('Shift');
+  expect(await page.evaluate(() => multiSel.size)).toBe(2);
+  await expect(page.locator('#info-panel')).toBeHidden();   // 여러 개일 땐 설명 패널 숨김
+
+  await dragWorld(page, { x: a0.x + 50, y: a0.y + 30 }, { x: a0.x + 50, y: a0.y + 10 });   // 위로 20
+  const [a1, b1] = await nodesOf(page, 'ec2');
+  expect([a1.y, b1.y]).toEqual([a0.y - 20, b0.y - 20]);
+  const edges = await page.evaluate(() => state.edges);
+  expect(edges.find(e => e.id === 'e-ab').mid).toEqual({ axis: 'x', value: 780 });   // 양 끝 모두 이동: 모양 유지
+  expect(edges.find(e => e.id === 'e-ar')).toMatchObject({ fromSide: null, toSide: null, mid: null });   // 한쪽만: 자동으로
+});
+
+test('Shift+드래그로 범위 안의 박스를 고르고 Delete로 함께 지운 뒤 되돌린다', async ({ page }) => {
+  await openApp(page);
+  await page.click('#btn-template');
+  await page.evaluate(() => { addNode('ec2', 540, 430); addNode('ec2', 1020, 430); addNode('rds', 540, 590); select(null); });
+  const s = await toScreen(page, 330, 380), e = await toScreen(page, 1250, 500);   // 프라이빗 서브넷 줄만 감쌈
+  await page.keyboard.down('Shift');
+  await page.mouse.move(s.x, s.y);
+  await page.mouse.down();
+  await page.mouse.move(e.x, e.y, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  expect(await page.evaluate(() => multiSel.size)).toBe(2);
+  expect(await areasOf(page, 'private')).toHaveLength(2);   // 영역은 움직이지 않음
+  await page.keyboard.press('Delete');
+  expect(await nodesOf(page, 'ec2')).toHaveLength(0);
+  expect(await nodesOf(page, 'rds')).toHaveLength(1);
+  await page.keyboard.press('Control+z');
+  expect(await nodesOf(page, 'ec2')).toHaveLength(2);
+});

@@ -88,6 +88,15 @@ function deleteEdge(id) {
 }
 
 function deleteSelected() {
+  if (multiSel.size > 1) {   // 여러 개 선택: 박스와 연결선을 한 번에 삭제
+    const ids = new Set(multiSel);
+    state.nodes = state.nodes.filter(n => !ids.has(n.id));
+    state.edges = state.edges.filter(ed => !ids.has(ed.from) && !ids.has(ed.to));
+    if (ids.has(connectFrom)) cancelPendingConnect();
+    select(null);
+    render();
+    return;
+  }
   if (!selectedId) return;
   const kind = selectedId[0];
   if (kind === 'n') deleteNode(selectedId);
@@ -96,21 +105,70 @@ function deleteSelected() {
 }
 
 // 선택 표시만 바꿈 (DOM을 다시 만들지 않아 드래그 중에도 안전)
+// 여러 개 선택(multiSel)은 서비스 박스만 담는다. selectedId는 그중 마지막으로 고른 박스.
+const multiSel = new Set();
+const isSelected = id => id === selectedId || multiSel.has(id);
 function select(id) {
   selectedId = id;
-  elMap.forEach((el, key) => el.classList.toggle('selected', key === id));
+  multiSel.clear();
+  if (id && findNode(id)) multiSel.add(id);
+  refreshSelection();
+}
+function refreshSelection() {
+  elMap.forEach((el, key) => el.classList.toggle('selected', isSelected(key)));
   renderEdges();
   renderInfo();
+}
+// Shift+클릭: 박스를 여러 개 선택에 넣거나 뺀다
+function toggleMulti(id) {
+  if (selectedId && !multiSel.has(selectedId)) { selectedId = null; }   // 영역·연결선 선택은 풀고 시작
+  if (multiSel.has(id)) multiSel.delete(id); else multiSel.add(id);
+  selectedId = multiSel.has(id) ? id : ([...multiSel].pop() || null);
+  refreshSelection();
+}
+
+// ----- 범위 선택 (Shift+드래그) -----
+// 끈 사각형 안에 중심이 들어온 박스를 여러 개 선택에 더한다.
+function startMarquee(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const p0 = clientToWorld(e.clientX, e.clientY);
+  const box = document.createElement('div');
+  box.className = 'marquee';
+  $world.appendChild(box);
+  let r = { x: p0.x, y: p0.y, w: 0, h: 0 };
+  const move = ev => {
+    const p = clientToWorld(ev.clientX, ev.clientY);
+    r = { x: Math.min(p0.x, p.x), y: Math.min(p0.y, p.y), w: Math.abs(p.x - p0.x), h: Math.abs(p.y - p0.y) };
+    Object.assign(box.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    box.remove();
+    const hits = state.nodes.filter(n => inRect(r, centerOf(n)));
+    if (selectedId && !multiSel.has(selectedId)) selectedId = null;
+    hits.forEach(n => multiSel.add(n.id));
+    if (hits.length) selectedId = hits[hits.length - 1].id;
+    refreshSelection();
+    if (multiSel.size > 1) showToast(`박스 ${multiSel.size}개를 골랐어요. 하나를 끌면 함께 움직이고, Delete로 함께 지울 수 있어요.`);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 }
 
 // ----- 이동 (서비스 박스 / 영역 + 안의 항목) -----
 function startMoveDrag(e, item, el) {
   e.preventDefault();
   e.stopPropagation();
-  select(item.id);
+  // 여러 개 선택된 박스 중 하나를 잡으면 선택된 박스를 모두 함께 옮긴다
+  const multi = !isContainer(item) && multiSel.has(item.id) && multiSel.size > 1;
+  if (!multi) select(item.id);
 
   const before = takeSnapshot();
-  const group = [item];
+  const group = multi ? [...multiSel].map(findNode).filter(Boolean) : [item];
   if (isContainer(item)) {
     const d = getDescendants(item.id);
     group.push(...d.containers, ...d.nodes);
@@ -139,7 +197,7 @@ function startMoveDrag(e, item, el) {
   };
   const apply = ({ dx, dy }) => {
     starts.forEach(s => { s.g.x = s.x + dx; s.g.y = s.y + dy; });
-    if (!isContainer(item)) snapToVpcEdge(item);   // 경계선 근처면 바로 붙어 보이게
+    if (!isContainer(item) && !multi) snapToVpcEdge(item);   // 경계선 근처면 바로 붙어 보이게 (여러 개일 땐 간격 유지)
   };
   const movedIds = group.filter(g => !isContainer(g)).map(g => g.id);
 
@@ -157,7 +215,9 @@ function startMoveDrag(e, item, el) {
     el.removeEventListener('pointercancel', end);
     el.classList.remove('dragging');
     if (ev.type === 'pointerup' && moved) {
-      apply(delta(ev, true));
+      const d = delta(ev, true);
+      apply(d);
+      if (multi) realignEdges(new Set(movedIds), d);
       commit(before, item.id, movedIds);
     } else if (moved) {
       restoreSnapshot(before);
@@ -249,3 +309,19 @@ function startResize(e, c, handle, corner) {
   handle.addEventListener('pointercancel', end);
 }
 
+
+// 여러 개를 함께 옮긴 뒤 연결선 정리 ("화살표 자동 정렬")
+// - 양 끝이 모두 옮겨진 선: 사용자가 옮긴 경로(mid)도 같은 만큼 옮겨 모양 유지
+// - 한쪽 끝만 옮겨진 선: 연결 변과 경로를 자동으로 되돌려 새 위치에 맞게 다시 그림
+function realignEdges(movedSet, { dx, dy }) {
+  state.edges.forEach(ed => {
+    const a = movedSet.has(ed.from), b = movedSet.has(ed.to);
+    if (a && b) {
+      if (ed.mid) ed.mid = { axis: ed.mid.axis, value: ed.mid.value + (ed.mid.axis === 'x' ? dx : dy) };
+    } else if (a || b) {
+      ed.fromSide = null;
+      ed.toSide = null;
+      ed.mid = null;
+    }
+  });
+}

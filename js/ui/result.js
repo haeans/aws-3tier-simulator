@@ -30,9 +30,12 @@ function runValidation() {
   render();
 }
 
-// ----- 동적 흐름: 검증 후 사용자 쪽에서 안쪽으로 연결선 위를 점이 흐른다 -----
-// 정상=초록(보통 속도), 경고(병목)=노랑(느림), 오류=빨강(아주 느림). 성능 계산이 아니라 검증 결과를 보여주는 표시.
-const FLOW_SPEED = { ok: 90, warn: 38, error: 14 };   // px/초
+// ----- 동적 흐름: 검증 후 사용자에서 안쪽으로, 요청이 지나가는 순서대로 한 구간씩 점이 흐른다 -----
+// 사용자 → IGW 구간이 끝나면 IGW → LB 구간이 시작되는 식. 갈림길은 동시에, 마지막 구간 뒤 잠깐 쉬고 반복.
+// 정상=초록, 경고(병목)=노랑(느림), 오류=빨강(아주 느림). 성능 계산이 아니라 검증 결과를 보여주는 표시.
+// 요청 방향만 보여준다 (응답까지 그리면 점이 왕복해 헷갈림).
+const FLOW_HOP = { ok: 0.8, warn: 1.6, error: 3.2 };   // 한 구간을 지나는 시간(초)
+const FLOW_PAUSE = 0.6;                                 // 한 바퀴 끝나고 쉬는 시간(초)
 const FLOW_COLOR = { ok: '#2e9e47', warn: '#e0a800', error: '#d13212' };
 const FLOW_SOURCES = [...USER_TYPES, 'dbadmin'];
 const $flowG = document.getElementById('flow-g');
@@ -51,16 +54,22 @@ function computeFlow(nodeLevels) {
       if (!dist.has(nb)) { dist.set(nb, dist.get(queue[i]) + 1); queue.push(nb); }
     });
   }
-  return state.edges
+  const flow = state.edges
     .filter(e => dist.has(e.from) && dist.has(e.to))
     .map(e => {
       const lv = [nodeLevels.get(e.from), nodeLevels.get(e.to)];
-      return {
-        id: e.id,
-        reverse: dist.get(e.to) < dist.get(e.from),
-        level: lv.includes('error') ? 'error' : lv.includes('warn') ? 'warn' : 'ok',
-      };
+      const reverse = dist.get(e.to) < dist.get(e.from);
+      const level = lv.includes('error') ? 'error' : lv.includes('warn') ? 'warn' : 'ok';
+      return { id: e.id, reverse, level, src: reverse ? e.to : e.from, dst: reverse ? e.from : e.to, start: 0, dur: FLOW_HOP[level] };
     });
+  // 시작 시각: 출발 박스에 요청이 처음 도착한 시각 (사용자 쪽에 가까운 구간부터 차례로 계산)
+  const arrival = new Map(queue.filter(id => dist.get(id) === 0).map(id => [id, 0]));
+  [...flow].sort((a, b) => dist.get(a.src) - dist.get(b.src)).forEach(f => {
+    f.start = arrival.get(f.src) || 0;
+    const end = f.start + f.dur;
+    if (!arrival.has(f.dst) || end < arrival.get(f.dst)) arrival.set(f.dst, end);
+  });
+  return flow;
 }
 
 const polyLength = pts => pts.slice(1).reduce((s, p, i) => s + Math.abs(p.x - pts[i].x) + Math.abs(p.y - pts[i].y), 0);
@@ -91,22 +100,20 @@ function syncFlow() {
   stopFlow();
   flowFor = validation;
   validation.flow.forEach(f => {
-    const pts = edgePoints.get(f.id);
-    if (!pts) return;
-    const count = Math.max(1, Math.min(4, Math.round(polyLength(pts) / 140)));
-    for (let i = 0; i < count; i++) {
-      const dot = svgEl('circle', { r: 4, class: 'flow-dot', fill: FLOW_COLOR[f.level] });
-      $flowG.appendChild(dot);
-      flowDots.push({ f, dot, phase: i / count });
-    }
+    const dot = svgEl('circle', { r: 4.5, class: 'flow-dot', fill: FLOW_COLOR[f.level], visibility: 'hidden' });
+    $flowG.appendChild(dot);
+    flowDots.push({ f, dot });
   });
+  const cycle = Math.max(...validation.flow.map(f => f.start + f.dur)) + FLOW_PAUSE;
+  const t0 = performance.now();
   const tick = now => {
-    flowDots.forEach(({ f, dot, phase }) => {
+    const t = ((now - t0) / 1000) % cycle;
+    flowDots.forEach(({ f, dot }) => {
       const pts = edgePoints.get(f.id);   // 경로를 조절하면 바뀐 경로를 따라감
-      if (!pts) { dot.setAttribute('visibility', 'hidden'); return; }
+      const k = (t - f.start) / f.dur;    // 이 구간에서 지나간 비율 (0~1일 때만 보임)
+      if (!pts || k < 0 || k >= 1) { dot.setAttribute('visibility', 'hidden'); return; }
       const path = f.reverse ? [...pts].reverse() : pts;
-      const len = polyLength(path);
-      const p = pointAlong(path, ((now / 1000) * FLOW_SPEED[f.level] + phase * len) % len);
+      const p = pointAlong(path, polyLength(path) * k);
       dot.setAttribute('cx', p.x);
       dot.setAttribute('cy', p.y);
       dot.setAttribute('visibility', 'visible');
@@ -155,7 +162,7 @@ function renderResult() {
     `<span class="status ${validation.status}">${st.label}</span>` +
     `<span class="msg">${st.desc}${counts.length ? ` (${counts.join(' · ')})` : ''}</span>`);
   if (validation.flow && validation.flow.length) {
-    $result.insertAdjacentHTML('beforeend', '<div class="flow-legend">연결선 위 흐름 ·' +
+    $result.insertAdjacentHTML('beforeend', '<div class="flow-legend">요청 흐름(사용자부터 차례로) ·' +
       `<span><i style="background:${FLOW_COLOR.ok}"></i>정상</span>` +
       `<span><i style="background:${FLOW_COLOR.warn}"></i>병목(느림)</span>` +
       `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span></div>`);

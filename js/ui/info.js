@@ -22,7 +22,7 @@ const typeNames = types => [...new Set(types.map(t => SVC_MAP[t].name))].join(',
 
 function renderInfo() {
   const n = selectedId ? findNode(selectedId) : null;
-  if (!n) { $info.hidden = true; return; }
+  if (!n || multiSel.size > 1) { $info.hidden = true; return; }   // 여러 개를 고르면 숨김
   const svc = SVC_MAP[n.type], cat = CAT_MAP[svc.category];
   const g = SERVICE_GUIDE[n.type] || { links: [], avoid: [] };
   const near = neighborTypes(n.id);

@@ -288,6 +288,8 @@ body {
   touch-action: none;
 }
 .node.selected { outline: 2px solid var(--select); outline-offset: 2px; }
+/* 범위 선택 (Shift+드래그) */
+.marquee { position: absolute; border: 1.5px dashed var(--select); background: rgba(0, 115, 187, .08); pointer-events: none; z-index: 20; }
 .node.dragging { opacity: .85; box-shadow: 0 6px 16px rgba(0,0,0,.18); z-index: 10; }
 .node .del { top: -9px; right: -9px; }
 /* 검증 결과 강조 (오류=빨강, 경고=노랑) */
