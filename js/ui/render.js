@@ -148,6 +148,7 @@ function render() {
   renderResult();
   syncFlow();
   saveState();
+  renderInfo();
   recordHistory();
 }
 

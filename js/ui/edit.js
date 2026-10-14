@@ -100,6 +100,7 @@ function select(id) {
   selectedId = id;
   elMap.forEach((el, key) => el.classList.toggle('selected', key === id));
   renderEdges();
+  renderInfo();
 }
 
 // ----- 이동 (서비스 박스 / 영역 + 안의 항목) -----

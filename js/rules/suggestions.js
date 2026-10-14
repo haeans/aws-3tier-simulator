@@ -5,10 +5,14 @@
    정상/경고/오류 판정에는 영향을 주지 않고, 더 나은 설계 방향만 알려준다.
    - kind: 'improve'(개선) | 'remove'(제거)
    - 검증 대상이 아닌 서비스(validated: false)도 함께 본다.
-   - check(ctx)는 [{ reason, action, nodeIds }]를 돌려준다 (빈 배열 = 제안 없음) */
+   - check(ctx)는 [{ reason, action, nodeIds }]를 돌려준다 (빈 배열 = 제안 없음)
+   - pillars / basis: Well-Architected 기준 태그와 근거 (js/data/guide.js의 PILLARS) */
 const SUGGESTION_RULES = [
   {
     id: 1, kind: 'improve', title: 'DB 캐싱',
+    pillars: ['performance'],
+    basis: '자주 읽는 데이터를 메모리 캐시에 두면 읽기가 빨라지고 DB 부담이 줄어요. 읽기가 쓰기보다 훨씬 많은 DB가 캐싱 대상이에요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/framework/perf_data_access_patterns_caching.html',
     check(ctx) {
       const caches = ctx.ofType('elasticache');
       const pairs = ctx.ofType('ec2').flatMap(e => ctx.neighborsOf(e, 'rds').map(r => [e, r]));
@@ -25,6 +29,9 @@ const SUGGESTION_RULES = [
   },
   {
     id: 2, kind: 'improve', title: 'CDN 사용',
+    pillars: ['performance', 'cost'],
+    basis: '사용자와 가까운 엣지 로케이션에서 캐시로 응답하면 지연이 줄고, 원본 서버가 처리할 요청과 데이터 이동도 줄어요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/framework/perf_networking_choose_workload_location_network_requirements.html',
     check(ctx) {
       const users = ctx.ofType(...USER_TYPES);
       if (!users.length) return [];
@@ -46,19 +53,25 @@ const SUGGESTION_RULES = [
   },
   {
     id: 3, kind: 'improve', title: 'S3 전용 통로',
+    pillars: ['security', 'cost'],
+    basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html',
     check(ctx) {
       if (ctx.ofType('vpce').length) return [];
       const ec2s = ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private' && ctx.neighborsOf(e, 's3').length);
       if (!ec2s.length) return [];
       return [{
         nodeIds: ec2s.flatMap(e => [e.id, ...ctx.neighborsOf(e, 's3').map(n => n.id)]),
-        reason: '프라이빗 서브넷의 EC2가 S3에 갈 때 NAT를 거치면 인터넷 쪽으로 나가고, 데이터 처리 비용도 들어요.',
+        reason: '프라이빗 서브넷의 EC2가 S3에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.',
         action: 'VPC Endpoints를 VPC 안(서브넷 밖)에 두고 EC2와 S3 사이를 연결하세요.',
       }];
     },
   },
   {
     id: 4, kind: 'improve', title: '자동 확장',
+    pillars: ['reliability', 'cost'],
+    basis: 'Auto Scaling으로 사용량에 맞춰 서버를 자동으로 늘리고 줄이면, 몰릴 때 버티고 한가할 때 비용을 아껴요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_adapt_to_changes_autoscale_adapt.html',
     check(ctx) {
       const ec2s = ctx.ofType('ec2');
       const groups = ctx.asgGroups();
@@ -84,6 +97,9 @@ const SUGGESTION_RULES = [
   },
   {
     id: 5, kind: 'improve', title: '모니터링·감사',
+    pillars: ['operations', 'security'],
+    basis: '작업 기록(CloudTrail)과 상태 지표·로그(CloudWatch)를 남겨야 문제를 빨리 알아채고 원인을 찾을 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_detect_investigate_events_app_service_logging.html',
     check(ctx) {
       if (!ctx.ofType('ec2').length) return [];
       const missing = [];
@@ -99,6 +115,9 @@ const SUGGESTION_RULES = [
   },
   {
     id: 6, kind: 'remove', title: 'Bastion 서버',
+    pillars: ['security', 'cost'],
+    basis: 'SSH 같은 직접 접속을 줄이고 Session Manager를 쓰면, 열린 접속 포트와 관리용 서버가 필요 없어 공격받을 곳과 관리 부담이 줄어요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_protect_compute_reduce_manual_management.html',
     check(ctx) {
       // 관리 접속용으로 보이는 EC2: DB 관리자와 바로 연결됐거나, 퍼블릭 서브넷에서 Load Balancer 없이 쓰이는 EC2
       const bastions = ctx.ofType('ec2').filter(e =>
@@ -114,6 +133,9 @@ const SUGGESTION_RULES = [
   },
   {
     id: 7, kind: 'remove', title: '불필요한 연결',
+    pillars: [],
+    basis: '실제로 통신하지 않는 연결은 구성을 잘못 이해하게 만들어요. 캐시는 앱이 먼저 확인하고, 없으면 앱이 DB에서 읽어 캐시에 넣어요.',
+    ref: 'https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html',
     check(ctx) {
       // 실제로는 서로 통신하지 않는 조합: [서비스, 상대 종류들, 이유, 방안]
       const PAIRS = [

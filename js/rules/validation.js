@@ -6,6 +6,7 @@
    - validated: true 인 서비스만 검증에 사용
    - "연결" = 두 박스 사이의 직접 연결선, 방향 구분 없음
    - check(ctx)는 문제 목록 [{ message, nodeIds }]을 돌려준다 (빈 배열 = 통과)
+   - pillars / basis: Well-Architected 기준 태그와 근거 (js/data/guide.js의 PILLARS)
    ========================================================= */
 const USER_TYPES = ['smartphone', 'tablet', 'pc'];
 const RDS_TYPES  = ['rds', 'rds-replica', 'rds-standby'];
@@ -45,6 +46,9 @@ function buildContext(includeAll = false) {
 const VALIDATION_RULES = [
   {
     id: 1, level: 'error', message: '진입 경로',
+    pillars: ['security', 'reliability'],
+    basis: '인터넷 요청은 Load Balancer 같은 공개 입구로만 받고 서버는 숨겨요. Load Balancer는 정상인 서버에만 요청을 보내서 한 서버가 멈춰도 버텨요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_create_layers.html',
     check(ctx) {
       const users = ctx.ofType(...USER_TYPES), igws = ctx.ofType('igw'), lbs = ctx.ofType('lb');
       const missing = [];
@@ -71,6 +75,9 @@ const VALIDATION_RULES = [
   },
   {
     id: 2, level: 'error', message: '계층 배치',
+    pillars: ['security'],
+    basis: '계층마다 네트워크를 나눠 보호해요. 인터넷 요청을 받는 Load Balancer는 퍼블릭 서브넷에, 앱 서버(EC2)는 프라이빗 서브넷에 둬요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_create_layers.html',
     check(ctx) {
       const issues = [];
       ctx.ofType('igw').forEach(n => {
@@ -90,6 +97,9 @@ const VALIDATION_RULES = [
   },
   {
     id: 3, level: 'error', message: '흐름 연결',
+    pillars: ['reliability'],
+    basis: 'Load Balancer가 여러 EC2에 요청을 나누고 상태 확인으로 정상인 EC2에만 보내야, 한 서버가 멈춰도 서비스가 이어져요.',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html',
     check(ctx) {
       const lbs = ctx.ofType('lb'), ec2s = ctx.ofType('ec2');
       if (!lbs.length && !ec2s.length) return [{ message: 'Load Balancer와 EC2가 없어요.' }];
@@ -103,6 +113,9 @@ const VALIDATION_RULES = [
   },
   {
     id: 4, level: 'error', message: 'DB 보호',
+    pillars: ['security'],
+    basis: 'DB는 앱 계층과 다른 프라이빗 서브넷에 두고, 꼭 필요한 곳(앱 서버·VPN)에서 오는 연결만 허용해요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_layered.html',
     check(ctx) {
       const issues = [];
       ctx.ofType(...RDS_TYPES).forEach(db => {
@@ -119,6 +132,9 @@ const VALIDATION_RULES = [
   },
   {
     id: 5, level: 'error', message: '앱-DB 연결',
+    pillars: [],
+    basis: '앱 계층(EC2)이 데이터 계층(RDS)에 접속해야 세 계층이 이어져요. 같은 VPC의 EC2 앱 서버가 RDS를 쓰는 것이 기본 구성이에요.',
+    ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.Scenarios.html',
     check(ctx) {
       const ec2s = ctx.ofType('ec2'), rdss = ctx.ofType('rds');
       if (!ec2s.length && !rdss.length) return [{ message: 'EC2와 RDS가 없어요.' }];
@@ -132,6 +148,9 @@ const VALIDATION_RULES = [
   },
   {
     id: 6, level: 'warn', message: '외부 통신',
+    pillars: ['security', 'operations'],
+    basis: '퍼블릭 서브넷의 NAT 게이트웨이를 쓰면 프라이빗 서버는 밖으로 연결할 수 있고, 밖에서 먼저 들어오는 연결은 받지 않아요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html',
     check(ctx) {
       const privateEc2 = ctx.ofType('ec2').filter(n => ctx.zoneOf(n) === 'private');
       if (!privateEc2.length) return [];
@@ -147,6 +166,9 @@ const VALIDATION_RULES = [
   },
   {
     id: 7, level: 'warn', message: '고가용성',
+    pillars: ['reliability'],
+    basis: '운영 중인 서비스는 최소 두 AZ에 나눠 둬요. RDS는 Multi-AZ를 켜야 다른 AZ에 예비본이 생겨, 한 AZ에 장애가 나도 이어갈 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_fault_isolation_multiaz_region_system.html',
     check(ctx) {
       const issues = [];
       // EC2: 서로 다른 AZ에 2개 이상

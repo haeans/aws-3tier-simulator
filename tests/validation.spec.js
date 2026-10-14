@@ -76,6 +76,12 @@ test('결과 목록의 항목을 클릭하면 해당 박스가 선택된다', as
   await page.locator('.issue.error', { hasText: 'Load Balancer는 퍼블릭 서브넷에' }).click();
   const selectedType = await page.evaluate(() => state.nodes.find(n => n.id === selectedId)?.type);
   expect(selectedType).toBe('lb');
+  // 오류 강조 바깥에 선택 테두리가 한 겹 더 보이고, 찾아간 박스가 깜빡인다
+  const lb = page.locator('#node-layer .node.selected');
+  await expect(lb).toHaveClass(/v-error/);
+  await expect(lb).toHaveClass(/locate/);
+  expect(await lb.evaluate(el => getComputedStyle(el).outlineOffset)).toBe('5px');
+  await expect(lb).not.toHaveClass(/locate/, { timeout: 3000 });   // 깜빡임이 끝나면 정리
 });
 
 test('Auto Scaling 그룹: 없으면 만들라고, 한 AZ의 EC2만 감싸면 넓히라고 제안한다', async ({ page }) => {
@@ -98,4 +104,68 @@ test('Auto Scaling 그룹: 없으면 만들라고, 한 AZ의 EC2만 감싸면 �
     commit(before, null);
   });
   expect(await has4()).toEqual([]);
+});
+
+test('박스를 클릭하면 설명 패널이 뜨고, 실제 연결 상태(연결됨/연결하면 안 됨)를 표시한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => select(null));                  // 방금 놓은 박스가 선택된 상태라 먼저 해제
+  await expect(page.locator('#info-panel')).toBeHidden();
+  const ec2 = await page.evaluate(() => { const n = state.nodes.find(n => n.type === 'ec2'); return worldToClient(n.x + 50, n.y + 30); });
+  await page.mouse.click(ec2.x, ec2.y);
+  const panel = page.locator('#info-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('.ip-name')).toHaveText('EC2');
+  await expect(panel.locator('li.on')).toContainText(['Load Balancer']);   // LB와 연결되어 있음
+
+  // RDS를 PC와 직접 연결하면 "연결하지 마세요" 항목에 경고 표시
+  await page.evaluate(() => {
+    const T = t => state.nodes.find(n => n.type === t);
+    state.edges.push({ id: newId('e'), from: T('pc').id, to: T('rds').id, fromSide: null, toSide: null, mid: null });
+    render();
+    select(T('rds').id);
+  });
+  await expect(panel.locator('li.bad')).toContainText('지금 연결되어 있어요');
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+});
+
+test('모든 서비스에 설명 패널 내용이 있고, 연결 상대 종류가 올바르다', async ({ page }) => {
+  await openApp(page);
+  const problems = await page.evaluate(() => SERVICES.flatMap(s => {
+    const g = SERVICE_GUIDE[s.type];
+    if (!g) return [`${s.type}: 내용 없음`];
+    return [...g.links, ...g.avoid].flatMap(l => l.to.filter(t => !SVC_MAP[t]).map(t => `${s.type}: 없는 종류 ${t}`));
+  }));
+  expect(problems).toEqual([]);
+});
+
+test('판정·제안 결과마다 Well-Architected 기준 태그와 근거가 붙는다', async ({ page }) => {
+  await openApp(page);
+  // 모든 규칙에 근거가 있고, 태그 종류가 올바르다
+  const bad = await page.evaluate(() => [...VALIDATION_RULES, ...SUGGESTION_RULES]
+    .filter(r => !r.basis || !Array.isArray(r.pillars) || r.pillars.some(k => !PILLARS[k]))
+    .map(r => r.id));
+  expect(bad).toEqual([]);
+
+  await buildValidArch(page);
+  await page.click('#btn-validate');
+  const cache = page.locator('.issue.improve').filter({ hasText: 'DB 캐싱' });
+  const tag = cache.locator('a.pillar');
+  await expect(tag).toHaveText('성능');
+  await expect(tag).toHaveAttribute('href', /performance-efficiency-pillar/);
+  await expect(cache.locator('.basis')).toContainText('메모리 캐시');
+});
+
+test('모든 서비스와 규칙에 AWS 공식 문서 출처가 있다', async ({ page }) => {
+  await openApp(page);
+  const missing = await page.evaluate(() => {
+    const official = u => /^https:\/\/(docs\.aws\.amazon\.com|aws\.amazon\.com)\//.test(u || '');
+    return [
+      ...SERVICES.filter(s => !official(SERVICE_DOCS[s.type])).map(s => `서비스 ${s.type}`),
+      ...VALIDATION_RULES.filter(r => !official(r.ref)).map(r => `규칙 ${r.id}`),
+      ...SUGGESTION_RULES.filter(r => !official(r.ref)).map(r => `제안 ${r.id}`),
+    ];
+  });
+  expect(missing).toEqual([]);
 });

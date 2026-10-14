@@ -162,7 +162,7 @@ function renderResult() {
   }
 
   // 목록 한 줄: 클릭하면 관련 박스로 이동·선택
-  const makeItem = (cls, lv, title, text, action, nodeIds) => {
+  const makeItem = (cls, lv, title, text, action, nodeIds, rule) => {
     const li = document.createElement('li');
     li.className = `issue ${cls}`;
     li.innerHTML = `<span class="lv">${lv}</span><span class="rt">${title}</span><span class="im"></span>`;
@@ -174,13 +174,40 @@ function renderResult() {
       act.textContent = '→ ' + action;
       im.appendChild(act);
     }
+    // 근거: Well-Architected 기준 태그(누르면 AWS 문서) + 왜 그런지 한 줄
+    const basis = document.createElement('span');
+    basis.className = 'basis';
+    const tags = rule.pillars.length ? rule.pillars.map(k => {
+      const a = document.createElement('a');
+      a.className = 'pillar';
+      a.textContent = PILLARS[k].label;
+      a.href = PILLARS[k].url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.title = `AWS Well-Architected ${PILLARS[k].label} 기준 문서 열기`;
+      a.addEventListener('click', ev => ev.stopPropagation());   // 박스 이동 대신 문서만 열기
+      return a;
+    }) : [Object.assign(document.createElement('span'), { className: 'pillar basic', textContent: '3-Tier 기본' })];
+    basis.append(...tags, document.createTextNode(rule.basis));
+    if (rule.ref) {   // 근거가 된 AWS 문서 (구체적인 모범 사례 페이지)
+      const more = Object.assign(document.createElement('a'), { className: 'ref', textContent: '자세히 ↗', href: rule.ref, target: '_blank', rel: 'noopener' });
+      more.addEventListener('click', ev => ev.stopPropagation());
+      basis.appendChild(more);
+    }
+    im.appendChild(basis);
     const target = nodeIds.find(id => elMap.has(id));
     if (target) {
       li.classList.add('clickable');
       li.title = '클릭하면 해당 박스로 이동해요';
       li.addEventListener('click', () => {
         select(target);
-        elMap.get(target).scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        const el = elMap.get(target);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        // 위치를 찾기 쉽게 잠깐 깜빡임 (다시 누르면 처음부터)
+        el.classList.remove('locate');
+        void el.offsetWidth;   // 클래스를 뺐다 넣어도 애니메이션이 다시 시작되도록 화면 계산을 한 번 거침
+        el.classList.add('locate');
+        el.addEventListener('animationend', () => el.classList.remove('locate'), { once: true });
       });
     }
     return li;
@@ -190,7 +217,7 @@ function renderResult() {
     const list = document.createElement('ul');
     list.className = 'issues';
     validation.issues.forEach(issue => list.appendChild(makeItem(issue.rule.level, LEVEL_TEXT[issue.rule.level],
-      `규칙 ${issue.rule.id}. ${issue.rule.message}`, issue.message, '', issue.nodeIds)));
+      `규칙 ${issue.rule.id}. ${issue.rule.message}`, issue.message, '', issue.nodeIds, issue.rule)));
     $result.appendChild(list);
   }
 
@@ -203,7 +230,7 @@ function renderResult() {
     const list = document.createElement('ul');
     list.className = 'issues';
     validation.suggestions.forEach(s => list.appendChild(makeItem(s.rule.kind, s.rule.kind === 'improve' ? '개선' : '제거',
-      `제안 ${s.rule.id}. ${s.rule.title}`, s.reason, s.action, s.nodeIds)));
+      `제안 ${s.rule.id}. ${s.rule.title}`, s.reason, s.action, s.nodeIds, s.rule)));
     $result.appendChild(list);
   }
 }

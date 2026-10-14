@@ -192,6 +192,49 @@ body {
 .empty-hint b { color: #6b7785; }
 
 /* 줌 조절 버튼 (캔버스 우하단) */
+/* 서비스 설명 패널 (박스를 선택하면 캔버스 오른쪽 위) */
+.info-panel {
+  position: absolute;
+  top: 16px; right: 24px;
+  width: 300px;
+  max-height: calc(100% - 100px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  font-size: 12.5px;
+  line-height: 1.5;
+  z-index: 6;
+}
+.info-panel[hidden] { display: none; }
+.ip-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ip-name { font-size: 14px; font-weight: 700; }
+.ip-close {
+  margin-left: auto;
+  border: none; background: none;
+  font-size: 18px; line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ip-close:hover { color: var(--text); }
+.ip-desc { color: var(--text); margin-bottom: 8px; }
+.ip-note { padding: 6px 8px; background: #f5f7fa; border-radius: 4px; color: var(--muted); }
+.ip-doc { display: inline-block; margin-bottom: 6px; font-size: 12px; color: var(--select); text-decoration: none; }
+.ip-doc:hover { text-decoration: underline; }
+.ip-sec { margin: 10px 0 4px; font-weight: 700; color: #1d6b30; }
+.ip-sec.avoid { color: #9b2410; }
+.ip-list { list-style: none; margin: 0; padding: 0; }
+.ip-list li { padding: 5px 0; border-top: 1px solid #eef1f4; }
+.ip-to { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.ip-mark { width: 12px; text-align: center; color: var(--muted); }
+.ip-list li.on .ip-mark { color: #2e9e47; }
+.ip-list li.bad .ip-mark { color: #d13212; }
+.ip-tag { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 3px; background: #ebf7ee; color: #1d6b30; }
+.ip-list li.bad .ip-tag { background: #fdecea; color: #9b2410; }
+.ip-text { padding-left: 18px; color: var(--muted); }
+
 .zoom-ctrl {
   position: absolute;
   right: 24px; bottom: 24px;
@@ -266,6 +309,22 @@ body {
 /* 개선·제거 제안 대상 (오류·경고 강조가 없을 때만) */
 .node.v-suggest { outline: 2px dashed #2e73b8; outline-offset: 3px; }
 .node.v-suggest.selected { outline: 2px solid var(--select); }
+/* 오류·경고 강조(3px)가 있는 박스를 선택하면 그 바깥에 파란 테두리를 한 겹 더 (두 겹 모두 보이게) */
+.node.selected.v-error, .node.selected.v-warn { outline-width: 3px; outline-offset: 5px; }
+/* 결과 목록에서 찾아간 박스: 파란 고리가 퍼지며 두 번 깜빡임 ("여기예요") */
+.node.locate::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 3px solid var(--select);
+  border-radius: 8px;
+  pointer-events: none;
+  animation: locate-ring .5s ease-out 2;
+}
+@keyframes locate-ring {
+  from { inset: -6px;  opacity: 1; }
+  to   { inset: -22px; opacity: 0; }
+}
 .node:hover .del, .node.selected .del { display: block; }
 .node.dragging .del { display: none; }
 
@@ -451,6 +510,20 @@ body.connect-mode .node.connect-from .anchor { display: block; }
 .issue.remove .lv  { color: #5b4a7a; }
 .issue .act { display: block; margin-top: 2px; color: #1d4f82; }
 .issue.remove .act { color: #5b4a7a; }
+/* 근거: Well-Architected 기준 태그 + 왜 그런지 */
+.issue .basis { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+.issue .pillar {
+  padding: 0 6px;
+  border-radius: 3px;
+  background: #eef3f8;
+  color: #1d4f82;
+  font-weight: 600;
+  text-decoration: none;
+}
+a.pillar:hover { background: #dce8f4; text-decoration: underline; }
+.issue .pillar.basic { background: #f1f4f7; color: var(--muted); }
+.issue .ref { color: var(--select); text-decoration: none; white-space: nowrap; }
+.issue .ref:hover { text-decoration: underline; }
 
 /* ----- 안내 메시지(토스트) ----- */
 /* ----- 스크롤바: 평소엔 숨기고 스크롤하는 동안만 표시 ----- */

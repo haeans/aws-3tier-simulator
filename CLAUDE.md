@@ -37,7 +37,7 @@
   - 일반 `<script>` 태그를 index.html에 순서대로 둔다. 순서: data → rules → ui → main.js(항상 마지막)
   - 파일 사이에서는 전역 변수·함수를 공유한다.
   - 다른 파일의 함수는 실행 시점에만 호출한다. 파일을 불러오는 도중(최상위 코드)에 뒤쪽 파일의 함수를 부르면 안 된다.
-- 서비스 추가: `js/data/services.js`의 SERVICES와 SERVICE_DESC
+- 서비스 추가: `js/data/services.js`의 SERVICES와 SERVICE_DESC, `js/data/guide.js`의 SERVICE_GUIDE(설명 패널)
 - 규칙 추가: `js/rules/` 안의 배열(PLACEMENT_RULES / VALIDATION_RULES / SUGGESTION_RULES)
 - 배치·이동·크기 조절은 반드시 `commit(before, actedId, movedIds)`(js/ui/core.js)를 거친다.
   - commit은 소속을 다시 계산하고, 규칙 위반이나 겹침이 있으면 동작 전 상태로 되돌린다.
