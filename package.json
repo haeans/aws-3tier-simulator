@@ -1,0 +1,17 @@
+{
+  "name": "aws-t3-arch-sim",
+  "version": "1.9.0",
+  "private": true,
+  "description": "AWS 3-Tier 아키텍처 시뮬레이터 (개발 도구 설정: 자동 테스트·코드 검사)",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0"
+  }
+}

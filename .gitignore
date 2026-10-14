@@ -1,0 +1,7 @@
+# npm으로 내려받은 개발 도구 (package.json으로 다시 설치 가능)
+node_modules/
+
+# Playwright 테스트 결과물
+test-results/
+playwright-report/
+blob-report/
