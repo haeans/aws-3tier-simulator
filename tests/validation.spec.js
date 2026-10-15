@@ -40,6 +40,98 @@ test('Route 53·WAF는 놓기만 하면 연결하라고 제안하고, 연결하�
   expect(ids).not.toContain(9);
 });
 
+test('흐름: Route 53에 주소를 물어본 뒤(왕복) 출발하고, LB에서 WAF 검사(반짝임)를 거친 뒤 EC2로 간다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => {
+    addNode('route53', 120, 160); addNode('waf', 120, 440);
+    const T = t => state.nodes.find(n => n.type === t);
+    const E = (a, b) => state.edges.push({ id: newId('e'), from: T(a).id, to: T(b).id, fromSide: null, toSide: null, mid: null });
+    E('route53', 'pc'); E('waf', 'lb');   // 저장 순서를 일부러 들르는 곳 → 경로 박스로
+    render();
+  });
+  await page.click('#btn-validate');
+  const f = await page.evaluate(() => {
+    const typeOf = id => findNode(id).type;
+    const at = (a, b) => validation.flow.find(x => typeOf(x.src) === a && typeOf(x.dst) === b);
+    const pick = x => ({ start: x.start, end: x.start + x.dur, roundTrip: x.roundTrip, inspect: x.inspect, id: x.id });
+    return { dns: pick(at('pc', 'route53')), go: pick(at('pc', 'igw')), lbIn: pick(at('igw', 'lb')),
+             waf: pick(at('lb', 'waf')), toEc2: pick(at('lb', 'ec2')) };
+  });
+  expect(f.dns).toMatchObject({ start: 0, roundTrip: true });
+  expect(f.go.start).toBeCloseTo(f.dns.end);          // 주소를 받은 뒤 출발
+  expect(f.waf).toMatchObject({ roundTrip: false, inspect: true });
+  expect(f.waf.start).toBeCloseTo(f.lbIn.end);        // LB에 도착하면 검사
+  expect(f.toEc2.start).toBeCloseTo(f.waf.end);       // 검사를 통과한 뒤 EC2로
+  // WAF 선에는 점이 다니지 않고, 검사 중에 WAF 박스가 반짝인다
+  expect(await page.evaluate(id => flowDots.find(d => d.f.id === id).dot, f.waf.id)).toBeNull();
+  await page.waitForFunction(() => elMap.get(state.nodes.find(n => n.type === 'waf').id).classList.contains('flow-inspect'));
+  // Route 53·WAF 선은 양쪽 화살표
+  const waf = page.locator(`.edge[data-id="${f.waf.id}"]`);
+  await expect(waf).toHaveAttribute('marker-start', /arrow/);
+  await expect(waf).toHaveAttribute('marker-end', /arrow/);
+});
+
+test('LB — WAF — CloudFront처럼 WAF를 사이에 두면 제거 제안이 나오고, CloudFront를 경로에 두면 사라진다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => {
+    addNode('waf', 120, 440); addNode('cloudfront', 120, 580);
+    const T = t => state.nodes.find(n => n.type === t);
+    const E = (a, b) => state.edges.push({ id: newId('e'), from: T(a).id, to: T(b).id, fromSide: null, toSide: null, mid: null });
+    E('lb', 'waf'); E('waf', 'cloudfront');
+    render();
+  });
+  await page.click('#btn-validate');
+  let ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
+  expect(ids).toContain(10);
+  await expect(page.locator('#result')).toContainText('WAF는 길이 아니라서 CloudFront에는 요청이 들어오지 않아요');
+  await expect(page.locator('.issue.remove')).toContainText('사용자 — CloudFront — IGW');
+  // CloudFront를 사용자와 IGW 사이에 두면 제안이 사라진다
+  await page.evaluate(() => {
+    const T = t => state.nodes.find(n => n.type === t);
+    const E = (a, b) => state.edges.push({ id: newId('e'), from: T(a).id, to: T(b).id, fromSide: null, toSide: null, mid: null });
+    E('pc', 'cloudfront'); E('cloudfront', 'igw');
+    render();
+  });
+  await page.click('#btn-validate');
+  ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
+  expect(ids).not.toContain(10);
+});
+
+test('잘한 점: 좋은 구성이 실제로 있을 때만 칭찬하고, 문제가 있는 규칙은 칭찬하지 않는다', async ({ page }) => {
+  await openApp(page);
+  // 빈 VPC 틀만 있으면 (문제는 있어도) 칭찬할 것이 없다
+  await page.evaluate(() => { loadTemplate(); addNode('pc', 120, 300); });
+  await page.click('#btn-validate');
+  expect(await page.evaluate(() => validation.praises.length)).toBe(0);
+  await expect(page.locator('.issue.good')).toHaveCount(0);
+
+  await buildValidArch(page);
+  await page.click('#btn-validate');
+  const praised = () => page.evaluate(() => validation.praises.map(p => (p.rule.level ? '판정' : '제안') + p.rule.id));
+  expect(await praised()).toEqual(['판정1', '판정2', '판정4', '판정6', '판정7']);
+  await expect(page.locator('#result .msg')).toContainText('잘한 점 5개');
+  // 순서: 문제 → 잘한 점 → 제안
+  const titles = await page.locator('#result .suggest-title').allTextContents();
+  expect(titles).toEqual(['잘한 점', '더 나은 설계를 위한 제안']);
+  await expect(page.locator('.issue.good .pillar').first()).toBeVisible();   // 근거 태그도 붙음
+
+  // WAF·Route 53을 제대로 연결하면 제안 대신 잘한 점으로
+  await page.evaluate(() => {
+    addNode('route53', 120, 160); addNode('waf', 120, 440);
+    const T = t => state.nodes.find(n => n.type === t);
+    const E = (a, b) => state.edges.push({ id: newId('e'), from: T(a).id, to: T(b).id, fromSide: null, toSide: null, mid: null });
+    E('pc', 'route53'); E('waf', 'lb');
+    // DB를 사용자와 직접 연결 → 판정 4(DB 보호)는 칭찬에서 빠짐
+    E('pc', 'rds');
+    render();
+  });
+  await page.click('#btn-validate');
+  await expect(page.locator('#result .status')).toHaveText('오류');
+  expect(await praised()).toEqual(['판정1', '판정2', '판정6', '판정7', '제안8', '제안9']);
+});
+
 test('DB가 사용자와 직접 연결되면 "오류"와 빨간 강조가 표시된다', async ({ page }) => {
   await openApp(page);
   await buildValidArch(page);

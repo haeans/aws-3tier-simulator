@@ -42,7 +42,7 @@ function runValidation() {
 // ----- 동적 흐름: 검증 후 사용자에서 안쪽으로, 요청이 지나가는 순서대로 한 구간씩 점이 흐른다 -----
 // 사용자 → IGW 구간이 끝나면 IGW → LB 구간이 시작되는 식. 갈림길은 동시에, 마지막 구간 뒤 잠깐 쉬고 반복.
 // 정상=초록, 경고(병목)=노랑(느림), 오류=빨강(아주 느림). 성능 계산이 아니라 검증 결과를 보여주는 표시.
-// 요청 방향만 보여준다 (응답까지 그리면 점이 왕복해 헷갈림).
+// 요청 방향만 보여준다 (응답까지 그리면 점이 왕복해 헷갈림). 단, Route 53은 주소를 묻고 받는 왕복, WAF는 박스 반짝임으로 보여준다.
 const FLOW_HOP = { ok: 0.8, warn: 1.6, error: 3.2 };   // 한 구간을 지나는 시간(초)
 const FLOW_PAUSE = 0.6;                                 // 한 바퀴 끝나고 쉬는 시간(초)
 const FLOW_COLOR = { ok: '#2e9e47', warn: '#e0a800', error: '#d13212' };
@@ -50,11 +50,21 @@ const FLOW_SOURCES = [...USER_TYPES, 'dbadmin'];
 const $flowG = document.getElementById('flow-g');
 let flowRaf = null, flowFor = null, flowDots = [];
 
+// 요청 경로의 한 단계가 아니라, 경로 위의 박스가 잠깐 거쳤다가 다음으로 넘어가는 곳
+//   Route 53: 사용자가 먼저 도메인 주소를 물어보고(점 왕복), 답을 받은 뒤 CloudFront·IGW로 출발
+//   WAF: 따로 오가는 길이 없다. CloudFront·Load Balancer에 붙은 규칙으로 그 자리에서 검사하므로,
+//        요청이 도착하면 WAF 박스가 반짝이는 동안(검사) 기다렸다가 다음으로 보냄
+const SIDE_TRIP_TYPES = ['route53', 'waf'];
+const INSPECT_TYPES = ['waf'];
+
 // 사용자 박스에서 연결을 따라가며 거리를 매겨 방향을 정한다 (가까운 쪽 → 먼 쪽). 사용자와 이어지지 않은 선은 흐르지 않음.
 function computeFlow(nodeLevels) {
+  const isSide = id => SIDE_TRIP_TYPES.includes(findNode(id).type);
   const adj = new Map(state.nodes.map(n => [n.id, []]));
-  state.edges.forEach(e => {
-    if (adj.has(e.from) && adj.has(e.to)) { adj.get(e.from).push(e.to); adj.get(e.to).push(e.from); }
+  const edges = state.edges.filter(e => adj.has(e.from) && adj.has(e.to));
+  edges.forEach(e => {
+    if (isSide(e.from) || isSide(e.to)) return;   // 들르는 곳은 경로를 잇지 않음
+    adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
   });
   const queue = state.nodes.filter(n => FLOW_SOURCES.includes(n.type)).map(n => n.id);
   const dist = new Map(queue.map(id => [id, 0]));
@@ -63,21 +73,38 @@ function computeFlow(nodeLevels) {
       if (!dist.has(nb)) { dist.set(nb, dist.get(queue[i]) + 1); queue.push(nb); }
     });
   }
-  const flow = state.edges
-    .filter(e => dist.has(e.from) && dist.has(e.to))
-    .map(e => {
-      const lv = [nodeLevels.get(e.from), nodeLevels.get(e.to)];
-      const reverse = dist.get(e.to) < dist.get(e.from);
-      const level = lv.includes('error') ? 'error' : lv.includes('warn') ? 'warn' : 'ok';
-      return { id: e.id, reverse, level, src: reverse ? e.to : e.from, dst: reverse ? e.from : e.to, start: 0, dur: FLOW_HOP[level] };
-    });
-  // 시작 시각: 출발 박스에 요청이 처음 도착한 시각 (사용자 쪽에 가까운 구간부터 차례로 계산)
+  const levelOf = (x, y) => {
+    const lv = [nodeLevels.get(x), nodeLevels.get(y)];
+    return lv.includes('error') ? 'error' : lv.includes('warn') ? 'warn' : 'ok';
+  };
+  const flow = [];
+  edges.forEach(e => {
+    const sideFrom = isSide(e.from), sideTo = isSide(e.to);
+    if (sideFrom && sideTo) return;
+    const level = levelOf(e.from, e.to);
+    if (sideFrom || sideTo) {   // 경로 위 박스(src)가 거쳐 가는 곳(dst): 왕복(Route 53) 또는 검사 반짝임(WAF)
+      const host = sideFrom ? e.to : e.from, side = sideFrom ? e.from : e.to;
+      const inspect = INSPECT_TYPES.includes(findNode(side).type);
+      if (dist.has(host)) flow.push({ id: e.id, reverse: sideFrom, roundTrip: !inspect, inspect, level,
+        src: host, dst: side, start: 0, dur: FLOW_HOP[level] * (inspect ? 1 : 2) });
+      return;
+    }
+    if (!dist.has(e.from) || !dist.has(e.to)) return;
+    const reverse = dist.get(e.to) < dist.get(e.from);
+    flow.push({ id: e.id, reverse, roundTrip: false, inspect: false, level, src: reverse ? e.to : e.from, dst: reverse ? e.from : e.to, start: 0, dur: FLOW_HOP[level] });
+  });
+  // 박스마다 들렀다 오는 시간 (여러 곳이면 동시에 다녀옴)
+  const wait = new Map();
+  const side = flow.filter(f => f.roundTrip || f.inspect);
+  side.forEach(f => wait.set(f.src, Math.max(wait.get(f.src) || 0, f.dur)));
+  // 시작 시각: 출발 박스에 요청이 처음 도착한 시각 + 들렀다 오는 시간 (사용자 쪽에 가까운 구간부터 차례로 계산)
   const arrival = new Map(queue.filter(id => dist.get(id) === 0).map(id => [id, 0]));
-  [...flow].sort((a, b) => dist.get(a.src) - dist.get(b.src)).forEach(f => {
-    f.start = arrival.get(f.src) || 0;
+  flow.filter(f => !side.includes(f)).sort((a, b) => dist.get(a.src) - dist.get(b.src)).forEach(f => {
+    f.start = (arrival.get(f.src) || 0) + (wait.get(f.src) || 0);
     const end = f.start + f.dur;
     if (!arrival.has(f.dst) || end < arrival.get(f.dst)) arrival.set(f.dst, end);
   });
+  side.forEach(f => { f.start = arrival.get(f.src) || 0; });
   return flow;
 }
 
@@ -100,6 +127,7 @@ function stopFlow() {
   flowFor = null;
   flowDots = [];
   $flowG.innerHTML = '';
+  elMap.forEach(el => el.classList.remove('flow-inspect'));
 }
 
 // 검증 결과가 있으면 흐름을 시작하고, 없어지면 멈춘다 (render()마다 호출)
@@ -109,6 +137,7 @@ function syncFlow() {
   stopFlow();
   flowFor = validation;
   validation.flow.forEach(f => {
+    if (f.inspect) { flowDots.push({ f, dot: null }); return; }   // WAF: 점 대신 박스 반짝임
     const dot = svgEl('circle', { r: 4.5, class: 'flow-dot', fill: FLOW_COLOR[f.level], visibility: 'hidden' });
     $flowG.appendChild(dot);
     flowDots.push({ f, dot });
@@ -118,11 +147,16 @@ function syncFlow() {
   const tick = now => {
     const t = ((now - t0) / 1000) % cycle;
     flowDots.forEach(({ f, dot }) => {
-      const pts = edgePoints.get(f.id);   // 경로를 조절하면 바뀐 경로를 따라감
       const k = (t - f.start) / f.dur;    // 이 구간에서 지나간 비율 (0~1일 때만 보임)
+      if (!dot) {   // 검사 중인 동안 WAF 박스 반짝임
+        const el = elMap.get(f.dst);
+        if (el) el.classList.toggle('flow-inspect', k >= 0 && k < 1);
+        return;
+      }
+      const pts = edgePoints.get(f.id);   // 경로를 조절하면 바뀐 경로를 따라감
       if (!pts || k < 0 || k >= 1) { dot.setAttribute('visibility', 'hidden'); return; }
       const path = f.reverse ? [...pts].reverse() : pts;
-      const p = pointAlong(path, polyLength(path) * k);
+      const p = pointAlong(path, polyLength(path) * (f.roundTrip ? 1 - Math.abs(1 - 2 * k) : k));   // 왕복은 갔다가 돌아옴
       dot.setAttribute('cx', p.x);
       dot.setAttribute('cy', p.y);
       dot.setAttribute('visibility', 'visible');
@@ -168,6 +202,7 @@ function renderResult() {
   const warns = validation.issues.length - errors;
   const counts = [];
   if (validation.issues.length) counts.push(`오류 ${errors}개 · 경고 ${warns}개`);
+  if (validation.praises.length) counts.push(`잘한 점 ${validation.praises.length}개`);
   if (validation.suggestions.length) counts.push(`제안 ${validation.suggestions.length}개`);
   head.insertAdjacentHTML('beforeend',
     `<span class="status ${validation.status}">${st.label}</span>` +
@@ -236,6 +271,19 @@ function renderResult() {
     list.className = 'issues';
     validation.issues.forEach(issue => list.appendChild(makeItem(issue.rule.level, LEVEL_TEXT[issue.rule.level],
       `규칙 ${issue.rule.id}. ${issue.rule.message}`, issue.message, '', issue.nodeIds, issue.rule)));
+    $result.appendChild(list);
+  }
+
+  // 잘한 점 (문제 다음, 제안 앞): 좋은 구성이 실제로 있는 규칙만
+  if (validation.praises.length) {
+    const title = document.createElement('div');
+    title.className = 'suggest-title';
+    title.textContent = '잘한 점';
+    $result.appendChild(title);
+    const list = document.createElement('ul');
+    list.className = 'issues';
+    validation.praises.forEach(p => list.appendChild(makeItem('good', '✓ 잘함',
+      p.rule.message || p.rule.title, p.text, '', p.nodeIds, p.rule)));
     $result.appendChild(list);
   }
 

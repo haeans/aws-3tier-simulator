@@ -43,6 +43,8 @@ function buildContext(includeAll = false) {
   };
 }
 
+// praise(ctx): 이 규칙에 걸린 문제가 없을 때, 좋은 구성이 실제로 있으면 [{ text, nodeIds }]를 돌려준다 (잘한 점)
+//   문제가 없어도 해당 박스가 아예 없으면 칭찬하지 않는다 (규칙 통과 ≠ 잘한 점)
 const VALIDATION_RULES = [
   {
     id: 1, level: 'error', message: '진입 경로',
@@ -72,6 +74,8 @@ const VALIDATION_RULES = [
       }
       return [];
     },
+    praise: ctx => [{ nodeIds: ctx.ofType('igw', 'lb').map(n => n.id),
+      text: '인터넷 요청이 IGW를 지나 Load Balancer라는 한 입구로만 들어와요. 서버는 인터넷에 직접 드러나지 않아요.' }],
   },
   {
     id: 2, level: 'error', message: '계층 배치',
@@ -93,6 +97,12 @@ const VALIDATION_RULES = [
           message: 'EC2 앱 서버는 프라이빗 서브넷에 두어야 외부에서 직접 접근할 수 없어요.' });
       });
       return issues;
+    },
+    praise(ctx) {
+      const lbs = ctx.ofType('lb'), ec2s = ctx.ofType('ec2');
+      if (!lbs.length || !ec2s.length) return [];
+      return [{ nodeIds: [...lbs, ...ec2s].map(n => n.id),
+        text: 'Load Balancer는 퍼블릭 서브넷, EC2는 프라이빗 서브넷에 나눠 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
     },
   },
   {
@@ -129,6 +139,12 @@ const VALIDATION_RULES = [
       });
       return issues;
     },
+    praise(ctx) {
+      const dbs = ctx.ofType(...RDS_TYPES);
+      if (!dbs.length) return [];
+      return [{ nodeIds: dbs.map(n => n.id),
+        text: 'DB를 DB 서브넷에 두고 인터넷과 바로 이어지지 않게 했어요. 데이터를 가장 안쪽에서 보호해요.' }];
+    },
   },
   {
     id: 5, level: 'error', message: '앱-DB 연결',
@@ -163,6 +179,12 @@ const VALIDATION_RULES = [
           : 'NAT가 없어요. 프라이빗 서브넷의 EC2가 업데이트 등을 위해 인터넷으로 나갈 수 있도록 퍼블릭 서브넷에 NAT를 놓아주세요.',
       }];
     },
+    praise(ctx) {
+      const nats = ctx.ofType('nat').filter(n => ctx.zoneOf(n) === 'public');
+      if (!nats.length || !ctx.ofType('ec2').some(n => ctx.zoneOf(n) === 'private')) return [];
+      return [{ nodeIds: nats.map(n => n.id),
+        text: 'NAT를 퍼블릭 서브넷에 두었어요. 앱 서버는 숨긴 채로 업데이트처럼 밖으로 나가는 연결만 할 수 있어요.' }];
+    },
   },
   {
     id: 7, level: 'warn', message: '고가용성',
@@ -196,6 +218,8 @@ const VALIDATION_RULES = [
       });
       return issues;
     },
+    praise: ctx => [{ nodeIds: ctx.ofType('ec2', 'rds', 'rds-standby').map(n => n.id),
+      text: 'EC2와 DB(RDS·Standby)를 두 AZ에 나눠 두었어요. 한 AZ에 장애가 나도 서비스가 이어져요.' }],
   },
 ];
 
@@ -206,6 +230,13 @@ function validateArchitecture() {
   VALIDATION_RULES.forEach(rule => {
     rule.check(ctx).forEach(it => issues.push({ rule, message: it.message, nodeIds: it.nodeIds || [] }));
   });
+  // 잘한 점: 문제가 하나도 없는 규칙만 칭찬 후보 (판정 → 제안 순서)
+  const praises = [];
+  const addPraises = (rules, found, c) => rules.forEach(rule => {
+    if (!rule.praise || found.some(f => f.rule === rule)) return;
+    rule.praise(c).forEach(p => praises.push({ rule, text: p.text, nodeIds: p.nodeIds || [] }));
+  });
+  addPraises(VALIDATION_RULES, issues, ctx);
   // 박스별 강조 단계 (오류가 경고보다 우선)
   const nodeLevels = new Map();
   issues.forEach(i => i.nodeIds.forEach(id => {
@@ -220,6 +251,7 @@ function validateArchitecture() {
     rule.check(allCtx).forEach(it => suggestions.push({ rule, reason: it.reason, action: it.action, nodeIds: it.nodeIds || [] }));
   });
   const suggestNodes = new Set(suggestions.flatMap(s => s.nodeIds).filter(id => !nodeLevels.has(id)));
-  return { status, issues, nodeLevels, suggestions, suggestNodes };
+  addPraises(SUGGESTION_RULES, suggestions, allCtx);
+  return { status, issues, nodeLevels, suggestions, suggestNodes, praises };
 }
 

@@ -6,13 +6,20 @@
    - kind: 'improve'(개선) | 'remove'(제거)
    - 검증 대상이 아닌 서비스(validated: false)도 함께 본다.
    - check(ctx)는 [{ reason, action, nodeIds }]를 돌려준다 (빈 배열 = 제안 없음)
-   - pillars / basis: Well-Architected 기준 태그와 근거 (js/data/guide.js의 PILLARS) */
+   - pillars / basis: Well-Architected 기준 태그와 근거 (js/data/guide.js의 PILLARS)
+   - praise(ctx): 제안이 없고 좋은 구성이 실제로 있을 때 [{ text, nodeIds }] (잘한 점, 제거 제안에는 없음) */
 const SUGGESTION_RULES = [
   {
     id: 1, kind: 'improve', title: 'DB 캐싱',
     pillars: ['performance'],
     basis: '자주 읽는 데이터를 메모리 캐시에 두면 읽기가 빨라지고 DB 부담이 줄어요. 읽기가 쓰기보다 훨씬 많은 DB가 캐싱 대상이에요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/framework/perf_data_access_patterns_caching.html',
+    praise(ctx) {
+      const ec2s = ctx.ofType('ec2').filter(e => ctx.neighborsOf(e, 'elasticache').length);
+      if (!ec2s.length) return [];
+      return [{ nodeIds: [...ec2s, ...ec2s.flatMap(e => ctx.neighborsOf(e, 'elasticache'))].map(n => n.id),
+        text: 'EC2가 ElastiCache에서 자주 쓰는 데이터를 먼저 찾아요. DB 부담이 줄고 응답이 빨라져요.' }];
+    },
     check(ctx) {
       const caches = ctx.ofType('elasticache');
       const pairs = ctx.ofType('ec2').flatMap(e => ctx.neighborsOf(e, 'rds').map(r => [e, r]));
@@ -32,6 +39,12 @@ const SUGGESTION_RULES = [
     pillars: ['performance', 'cost'],
     basis: '사용자와 가까운 엣지 로케이션에서 캐시로 응답하면 지연이 줄고, 원본 서버가 처리할 요청과 데이터 이동도 줄어요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/framework/perf_networking_choose_workload_location_network_requirements.html',
+    praise(ctx) {
+      const cfs = ctx.ofType('cloudfront').filter(cf => ctx.neighborsOf(cf, ...USER_TYPES).length);
+      if (!cfs.length) return [];
+      return [{ nodeIds: cfs.map(n => n.id),
+        text: 'CloudFront가 사용자와 가까운 엣지에서 먼저 응답해요. 빠르고, 서버가 받는 요청도 줄어요.' }];
+    },
     check(ctx) {
       const users = ctx.ofType(...USER_TYPES);
       if (!users.length) return [];
@@ -56,6 +69,12 @@ const SUGGESTION_RULES = [
     pillars: ['security', 'cost'],
     basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html',
+    praise(ctx) {
+      const eps = ctx.ofType('vpce').filter(v => ctx.neighborsOf(v, 's3', 'dynamodb').length);
+      if (!eps.length) return [];
+      return [{ nodeIds: eps.map(n => n.id),
+        text: 'VPC Endpoints로 NAT 없이 S3·DynamoDB에 비공개로 접속해요. NAT 데이터 처리 요금도 줄어요.' }];
+    },
     check(ctx) {
       if (ctx.ofType('vpce').length) return [];
       const ec2s = ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private' && ctx.neighborsOf(e, 's3').length);
@@ -72,6 +91,12 @@ const SUGGESTION_RULES = [
     pillars: ['reliability', 'cost'],
     basis: 'Auto Scaling으로 사용량에 맞춰 서버를 자동으로 늘리고 줄이면, 몰릴 때 버티고 한가할 때 비용을 아껴요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_adapt_to_changes_autoscale_adapt.html',
+    praise(ctx) {
+      const used = ctx.asgGroups().filter(g => g.members.length);
+      if (!used.length) return [];
+      return [{ nodeIds: used.flatMap(g => g.members.map(e => e.id)),
+        text: 'Auto Scaling 그룹이 두 AZ의 EC2를 묶었어요. 사용량에 맞춰 늘고 줄며, 한 AZ에 장애가 나도 버텨요.' }];
+    },
     check(ctx) {
       const ec2s = ctx.ofType('ec2');
       const groups = ctx.asgGroups();
@@ -100,6 +125,12 @@ const SUGGESTION_RULES = [
     pillars: ['operations', 'security'],
     basis: '작업 기록(CloudTrail)과 상태 지표·로그(CloudWatch)를 남겨야 문제를 빨리 알아채고 원인을 찾을 수 있어요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_detect_investigate_events_app_service_logging.html',
+    praise(ctx) {
+      const tools = ctx.ofType('cloudwatch', 'cloudtrail');
+      if (!ctx.ofType('ec2').length || tools.length < 2) return [];
+      return [{ nodeIds: tools.map(n => n.id),
+        text: 'CloudWatch(상태·경보)와 CloudTrail(작업 기록)을 두었어요. 문제를 빨리 알아채고 원인을 찾을 수 있어요.' }];
+    },
     check(ctx) {
       if (!ctx.ofType('ec2').length) return [];
       const missing = [];
@@ -159,6 +190,12 @@ const SUGGESTION_RULES = [
     pillars: ['reliability'],
     basis: 'Route 53이 도메인 이름을 서비스 주소로 바꿔 사용자를 안내해요. 상태 확인을 켜면 문제가 생긴 곳을 피해 정상인 곳으로만 보내요.',
     ref: 'https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/dns-failover.html',
+    praise(ctx) {
+      const dns = ctx.ofType('route53').filter(r => ctx.neighborsOf(r, ...USER_TYPES).length);
+      if (!dns.length) return [];
+      return [{ nodeIds: dns.map(n => n.id),
+        text: 'Route 53으로 도메인 이름을 연결했어요. 상태 확인을 켜면 문제가 생긴 곳을 피해 안내할 수 있어요.' }];
+    },
     check(ctx) {
       const users = ctx.ofType(...USER_TYPES).filter(u => ctx.neighborsOf(u, 'igw', 'cloudfront').length);
       if (!users.length) return [];
@@ -178,6 +215,12 @@ const SUGGESTION_RULES = [
     pillars: ['security'],
     basis: 'HTTP(S)로 들어오는 요청은 웹 방화벽(WAF)으로 검사해요. 정한 규칙에 맞는 위험한 요청은 CloudFront나 Load Balancer에 닿기 전에 막아요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_inspection.html',
+    praise(ctx) {
+      const wafs = ctx.ofType('waf').filter(w => ctx.neighborsOf(w, 'cloudfront', 'lb').length);
+      if (!wafs.length) return [];
+      return [{ nodeIds: wafs.map(n => n.id),
+        text: 'WAF로 들어오는 요청을 검사해요. SQL 인젝션 같은 흔한 웹 공격을 앞단에서 막아요.' }];
+    },
     check(ctx) {
       const fronts = ctx.ofType('cloudfront', 'lb');
       if (!fronts.length || !ctx.ofType(...USER_TYPES).length) return [];
@@ -189,6 +232,38 @@ const SUGGESTION_RULES = [
           ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
           : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
       }];
+    },
+  },
+  {
+    id: 10, kind: 'remove', title: 'WAF를 사이에 둔 연결',
+    pillars: [],
+    basis: 'WAF는 요청이 지나가는 길이 아니라 CloudFront·Load Balancer(ALB)에 붙이는 검사 규칙이에요. WAF로 이어도 두 곳 사이에 요청이 오가지 않아요.',
+    ref: 'https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html',
+    check(ctx) {
+      // 사용자에서 출발해 요청이 닿는 박스 (Route 53·WAF는 길이 아니므로 거치지 않음)
+      const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
+      const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
+      const queue = [...reached];
+      for (let i = 0; i < queue.length; i++) {
+        ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
+          if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
+        });
+      }
+      const HOW = {
+        cloudfront: 'CloudFront는 사용자와 IGW 사이에 두세요. (사용자 — CloudFront — IGW)',
+        lb: 'Load Balancer는 IGW와 EC2 사이에 두세요. (IGW — Load Balancer — EC2)',
+      };
+      return ctx.ofType('waf').flatMap(w => {
+        const fronts = ctx.neighborsOf(w, 'cloudfront', 'lb');
+        const off = fronts.filter(f => !reached.has(f.id));
+        if (fronts.length < 2 || !off.length) return [];
+        return [{
+          nodeIds: [w.id, ...fronts.map(f => f.id)],
+          reason: `WAF가 ${fronts.map(ctx.nameOf).join('·')}를 이어 주는 것처럼 연결되어 있어요. ` +
+            `WAF는 길이 아니라서 ${off.map(ctx.nameOf).join('·')}에는 요청이 들어오지 않아요.`,
+          action: [...new Set(off.map(f => HOW[f.type]))].join(' '),
+        }];
+      });
     },
   },
 ];

@@ -393,8 +393,8 @@ function renderEdges() {
   spreadPorts(routes);
   spreadLegs(routes);
   spreadOverlaps(routes);
-  // 검증 후: 사용자와 이어진 선은 요청이 흘러가는 쪽에만 화살표 (reverse면 from 쪽이 도착점)
-  const flowDir = validation && validation.flow ? new Map(validation.flow.map(f => [f.id, f.reverse])) : null;
+  // 검증 후: 사용자와 이어진 선은 요청이 흘러가는 쪽에만 화살표 (reverse면 from 쪽이 도착점, Route 53·WAF 선은 양쪽)
+  const flowDir = validation && validation.flow ? new Map(validation.flow.map(f => [f.id, f.roundTrip || f.inspect ? null : f.reverse])) : null;
   state.edges.forEach(ed => {
     const route = routes.get(ed);
     if (!route) return;
