@@ -154,5 +154,42 @@ const SUGGESTION_RULES = [
       return issues;
     },
   },
+  {
+    id: 8, kind: 'improve', title: '도메인 연결(DNS)',
+    pillars: ['reliability'],
+    basis: 'Route 53이 도메인 이름을 서비스 주소로 바꿔 사용자를 안내해요. 상태 확인을 켜면 문제가 생긴 곳을 피해 정상인 곳으로만 보내요.',
+    ref: 'https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/dns-failover.html',
+    check(ctx) {
+      const users = ctx.ofType(...USER_TYPES).filter(u => ctx.neighborsOf(u, 'igw', 'cloudfront').length);
+      if (!users.length) return [];
+      if (users.some(u => ctx.neighborsOf(u, 'route53').length)) return [];
+      const dns = ctx.ofType('route53');
+      return [{
+        nodeIds: [...users, ...dns].map(n => n.id),
+        reason: '사용자가 도메인 이름(example.com) 없이 들어오고 있어요. 서비스 주소가 바뀌거나 한 곳에 문제가 생기면 사용자가 접속하지 못해요.',
+        action: dns.length
+          ? 'Route 53이 있지만 사용자와 연결되어 있지 않아요. 사용자와 연결하세요. (사용자 — Route 53)'
+          : 'Route 53을 VPC 밖에 두고 사용자와 연결하세요. (사용자 — Route 53)',
+      }];
+    },
+  },
+  {
+    id: 9, kind: 'improve', title: '웹 방화벽',
+    pillars: ['security'],
+    basis: 'HTTP(S)로 들어오는 요청은 웹 방화벽(WAF)으로 검사해요. 정한 규칙에 맞는 위험한 요청은 CloudFront나 Load Balancer에 닿기 전에 막아요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_inspection.html',
+    check(ctx) {
+      const fronts = ctx.ofType('cloudfront', 'lb');
+      if (!fronts.length || !ctx.ofType(...USER_TYPES).length) return [];
+      if (fronts.some(f => ctx.neighborsOf(f, 'waf').length)) return [];
+      return [{
+        nodeIds: fronts.map(f => f.id),
+        reason: '인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요.',
+        action: ctx.ofType('waf').length
+          ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
+          : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
+      }];
+    },
+  },
 ];
 

@@ -8,7 +8,7 @@
 // 받침 있는 영문 이름 (조사 은/는 선택용)
 const BATCHIM_NAMES = new Set([
   'IAM', 'ECR', 'NAT', 'Client VPN', 'CodeCommit', 'CodePipeline',
-  'CloudTrail', 'CloudFormation',
+  'CloudTrail', 'CloudFormation', 'Route 53',
 ]);
 // 이름 뒤에 '은/는'을 붙여 돌려준다
 function eunNeun(word) {
@@ -36,6 +36,11 @@ const PLACEMENT_RULES = {
   vpcEdge: {
     test: zone => zone === 'outside' || zone === 'vpc',
     message: name => `${eunNeun(name)} 서브넷 안에는 놓을 수 없어요. VPC 바깥이나 서브넷 밖의 VPC 영역에 놓아주세요.`,
+  },
+  // VPC Endpoints: 게이트웨이 엔드포인트는 VPC 경계, 인터페이스 엔드포인트는 서브넷 안(프라이빗 서브넷 권장)
+  endpoint: {
+    test: zone => zone === 'outside' || zone === 'vpc' || zone === 'private',
+    message: name => `${eunNeun(name)} VPC 경계나 VPC 안, 또는 프라이빗 서브넷 안에 놓아주세요.`,
   },
   private: {
     test: zone => zone === 'private',

@@ -14,8 +14,30 @@ test('정상 구성은 "정상"으로 판정되고 개선 제안이 함께 표�
   await page.click('#btn-validate');
   await expect(page.locator('#result .status')).toHaveText('정상');
   const ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
-  expect(ids).toEqual([1, 2, 4, 5]);                         // DB 캐싱, CDN 사용, 자동 확장(EC2 2대), 모니터링·감사
-  await expect(page.locator('.issue.improve')).toHaveCount(4);
+  expect(ids).toEqual([1, 2, 4, 5, 8, 9]);                   // DB 캐싱, CDN 사용, 자동 확장(EC2 2대), 모니터링·감사, DNS, 웹 방화벽
+  await expect(page.locator('.issue.improve')).toHaveCount(6);
+});
+
+test('Route 53·WAF는 놓기만 하면 연결하라고 제안하고, 연결하면 제안이 사라진다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('route53', 120, 160); addNode('waf', 120, 440); });   // 놓기만 하고 연결하지 않음
+  await page.click('#btn-validate');
+  await expect(page.locator('#result .status')).toHaveText('정상');   // 판정에는 영향 없음
+  let ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
+  expect(ids).toEqual(expect.arrayContaining([8, 9]));
+  await expect(page.locator('#result')).toContainText('Route 53이 있지만 사용자와 연결되어 있지 않아요');
+  await expect(page.locator('#result')).toContainText('WAF가 있지만 연결되어 있지 않아요');
+  await page.evaluate(() => {
+    const T = t => state.nodes.find(n => n.type === t);
+    const E = (a, b) => state.edges.push({ id: newId('e'), from: T(a).id, to: T(b).id, fromSide: null, toSide: null, mid: null });
+    E('pc', 'route53'); E('waf', 'lb');
+    render();
+  });
+  await page.click('#btn-validate');
+  ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
+  expect(ids).not.toContain(8);
+  expect(ids).not.toContain(9);
 });
 
 test('DB가 사용자와 직접 연결되면 "오류"와 빨간 강조가 표시된다', async ({ page }) => {

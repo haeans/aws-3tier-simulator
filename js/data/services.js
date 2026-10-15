@@ -21,7 +21,7 @@ const CATEGORIES = [
 const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
 // 서비스 목록 (여기에 항목을 추가하면 팔레트에 자동 반영)
-// allowedZone: 'outside' | 'vpcEdge' | 'private' | 'db' | 'any'
+// allowedZone: 'outside' | 'vpcEdge' | 'endpoint' | 'private' | 'db' | 'any'
 // validated: true = 검증 대상 / false = 배치·연결만 가능
 const SERVICES = [
   // 사용자
@@ -30,11 +30,12 @@ const SERVICES = [
   { type: 'pc',             name: 'PC',               category: 'user',      allowedZone: 'outside', validated: true  },
   { type: 'dbadmin',        name: 'DB 관리자',        category: 'user',      allowedZone: 'outside', validated: true  },
   // 네트워크
+  { type: 'route53',        name: 'Route 53',         category: 'network',   allowedZone: 'outside', validated: false },
   { type: 'cloudfront',     name: 'CloudFront',       category: 'network',   allowedZone: 'outside', validated: true  },
   { type: 'igw',            name: 'IGW',              category: 'network',   allowedZone: 'any',     validated: true  },
   { type: 'nat',            name: 'NAT',              category: 'network',   allowedZone: 'any',     validated: true  },
   { type: 'lb',             name: 'Load Balancer',    category: 'network',   allowedZone: 'any',     validated: true  },
-  { type: 'vpce',           name: 'VPC Endpoints',    category: 'network',   allowedZone: 'vpcEdge', validated: false },
+  { type: 'vpce',           name: 'VPC Endpoints',    category: 'network',   allowedZone: 'endpoint', validated: false },
   { type: 'clientvpn',      name: 'Client VPN',       category: 'network',   allowedZone: 'vpcEdge', validated: true  },
   // 컴퓨팅
   { type: 'ec2',            name: 'EC2',              category: 'compute',   allowedZone: 'any',     validated: true  },
@@ -56,6 +57,7 @@ const SERVICES = [
   { type: 'codepipeline',   name: 'CodePipeline',     category: 'cicd',      allowedZone: 'outside', validated: false },
   { type: 'codedeploy',     name: 'CodeDeploy',       category: 'cicd',      allowedZone: 'outside', validated: false },
   // 접근/운영
+  { type: 'waf',            name: 'WAF',              category: 'ops',       allowedZone: 'outside', validated: false },
   { type: 'sessionmanager', name: 'Session Manager',  category: 'ops',       allowedZone: 'outside', validated: false },
   { type: 'cloudtrail',     name: 'CloudTrail',       category: 'ops',       allowedZone: 'outside', validated: false },
   { type: 'iam',            name: 'IAM',              category: 'ops',       allowedZone: 'outside', validated: false },
@@ -71,11 +73,12 @@ const SERVICE_DESC = {
   tablet:         '서비스를 이용하는 사용자예요. 인터넷을 통해 들어와요.',
   pc:             '서비스를 이용하는 사용자예요. 인터넷을 통해 들어와요.',
   dbadmin:        'DB를 관리하는 사람이에요. DB를 인터넷에 공개하지 않고, Client VPN 같은 비공개 연결로 접속해요.',
+  route53:        '도메인 이름(example.com)을 서버 주소로 바꿔 사용자를 웹 서비스로 안내하는 DNS 서비스예요. 상태 확인으로 정상인 곳으로만 보낼 수 있어요.',
   cloudfront:     '콘텐츠를 사용자와 가까운 엣지 로케이션에서 전달하는 CDN이에요. 캐시에 없으면 원본(S3, 웹 서버 등)에서 가져와요.',
   igw:            'VPC와 인터넷 사이의 통신을 가능하게 하는 출입문이에요. IGW로 가는 경로가 있는 서브넷이 퍼블릭 서브넷이에요.',
   nat:            '프라이빗 서브넷의 서버가 VPC 밖으로 연결할 수 있게 해줘요. 밖에서 먼저 연결을 시작할 수는 없어요.',
   lb:             '들어온 요청을 여러 AZ의 대상(EC2 등)에 나눠줘요. 상태 확인을 해서 정상인 대상에만 보내요.',
-  vpce:           'IGW나 NAT 없이 VPC에서 AWS 서비스에 비공개로 접속하게 해줘요. S3·DynamoDB는 게이트웨이 엔드포인트를 써요.',
+  vpce:           'IGW나 NAT 없이 VPC에서 AWS 서비스에 비공개로 접속하게 해줘요. S3·DynamoDB는 게이트웨이 엔드포인트(VPC 경계), 그 밖의 서비스는 인터페이스 엔드포인트(프라이빗 서브넷 안)를 써요.',
   clientvpn:      '관리형 VPN 서비스예요. 관리자 PC에서 암호화된 연결로 VPC 안의 리소스에 접속하게 해줘요.',
   ec2:            'AWS 클라우드의 가상 서버예요. 필요한 만큼 늘리고 줄일 수 있고, 3-Tier에서 앱(로직) 계층을 맡아요.',
   ecr:            '컨테이너 이미지(Docker 등)를 보관하고 관리하는 AWS 관리형 저장소(레지스트리)예요.',
@@ -92,6 +95,7 @@ const SERVICE_DESC = {
   codebuild:      '소스 코드를 컴파일하고 테스트를 실행해서, 배포할 결과물을 만들어 줘요. 빌드 서버를 직접 관리하지 않아도 돼요.',
   codepipeline:   '소프트웨어를 내보내는 단계(소스→빌드→배포)를 정해 두고 자동으로 이어 실행해줘요.',
   codedeploy:     '앱을 EC2, 온프레미스 서버, Lambda, ECS에 자동으로 배포해요.',
+  waf:            '웹 방화벽이에요. CloudFront나 Load Balancer(ALB)로 들어오는 HTTP(S) 요청을 규칙에 따라 검사해서, 위험한 요청은 막아요.',
   sessionmanager: '인바운드 포트를 열거나 Bastion 서버·SSH 키를 관리하지 않고, 브라우저나 CLI로 서버에 접속하게 해줘요.',
   cloudtrail:     '사용자·역할·AWS 서비스가 한 작업을 이벤트로 기록해요. 누가 언제 무엇을 했는지 확인할 수 있어요.',
   iam:            '누가 로그인할 수 있고(인증) 어떤 AWS 리소스를 쓸 수 있는지(권한) 관리해요.',
@@ -109,6 +113,7 @@ const RECOMMENDED_ZONE = {
 const ZONE_TEXT = {
   outside: 'VPC 밖',
   vpcEdge: 'VPC 안팎 모두 가능 (서브넷 안은 불가)',
+  endpoint: 'VPC 경계·VPC 안, 또는 프라이빗 서브넷 안',
   private: '프라이빗 서브넷만',
   db:      'DB 서브넷만',
   any:     '위치 제한 없음',

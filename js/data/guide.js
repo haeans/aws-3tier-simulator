@@ -13,6 +13,7 @@ const GUIDE_DBS = ['rds', 'rds-replica', 'rds-standby'];
 
 const USER_GUIDE = {
   links: [
+    { to: ['route53'], text: '먼저 Route 53에 도메인 이름(example.com)의 주소를 물어봐요. 받은 주소로 CloudFront나 Load Balancer에 접속해요.' },
     { to: ['cloudfront'], text: '가까운 엣지 로케이션의 CloudFront가 먼저 응답해요. 캐시에 없는 요청은 CloudFront가 원본으로 보내요.' },
     { to: ['igw'], text: '웹 요청은 인터넷 게이트웨이(IGW)를 지나 퍼블릭 서브넷의 Load Balancer로 들어가요.' },
   ],
@@ -34,10 +35,20 @@ const SERVICE_GUIDE = {
       { to: GUIDE_DBS, text: 'DB를 인터넷에 공개하면 누구나 접속을 시도할 수 있어요. 공개하지 말고 Client VPN 같은 비공개 연결로 접속하세요.' },
     ],
   },
+  route53: {
+    links: [
+      { to: GUIDE_USERS, text: '사용자가 도메인 이름으로 접속하면, Route 53이 그 이름에 맞는 주소를 알려 줘요.' },
+      { to: ['cloudfront', 'lb'], text: '도메인 이름을 CloudFront나 Load Balancer로 이어 줘요. 상태 확인을 켜면 정상인 곳으로만 안내해요.' },
+    ],
+    avoid: [
+      { to: ['ec2', ...GUIDE_DBS], text: '서버와 DB 주소를 인터넷에 알리지 마세요. 도메인은 CloudFront나 Load Balancer로 연결해요.' },
+    ],
+  },
   cloudfront: {
     links: [
       { to: GUIDE_USERS, text: '사용자 요청을 가장 가까운 엣지 로케이션에서 받아, 캐시에 있으면 바로 응답해요.' },
       { to: ['s3'], text: 'S3를 원본(오리진)으로 삼아 이미지·정적 파일을 가져오고, 엣지에 캐시해 둬요.' },
+      { to: ['waf'], text: 'CloudFront에 WAF를 붙이면, 엣지에서 위험한 요청을 먼저 걸러내요.' },
       { to: ['igw'], text: '캐시에 없거나 매번 달라지는 요청(로그인·주문 등)은 원본인 Load Balancer로 보내요. 이 도구에서는 IGW → Load Balancer로 이어요.' },
     ],
     avoid: [
@@ -65,6 +76,7 @@ const SERVICE_GUIDE = {
   lb: {
     links: [
       { to: ['igw'], text: 'IGW를 지나 들어온 인터넷 요청을 받는 입구예요.' },
+      { to: ['waf'], text: 'Load Balancer(ALB)에 WAF를 붙이면, EC2로 보내기 전에 위험한 요청을 걸러내요.' },
       { to: ['ec2'], text: '여러 AZ의 EC2에 요청을 나눠요. 상태 확인으로 정상인 EC2에만 보내서, 한 곳이 멈춰도 버텨요.' },
     ],
     avoid: [
@@ -75,6 +87,7 @@ const SERVICE_GUIDE = {
     links: [
       { to: ['ec2'], text: 'EC2가 IGW나 NAT 없이 S3·DynamoDB에 가는 통로(게이트웨이 엔드포인트)예요.' },
       { to: ['s3', 'dynamodb'], text: 'VPC에서 S3·DynamoDB로 바로 이어 줘요. 게이트웨이 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금을 줄여요.' },
+      { to: ['ecr', 'cloudwatch', 'sessionmanager'], text: '인터페이스 엔드포인트는 프라이빗 서브넷 안에 만들어져요. NAT 없이 ECR·CloudWatch 같은 AWS 서비스에 비공개로 접속해요. 두 AZ 이상에 두는 것을 권장해요.' },
     ],
     avoid: [],
   },
@@ -215,6 +228,14 @@ const SERVICE_GUIDE = {
       { to: ['dbadmin'], text: '관리자가 서버에 접속할 때 써요. 누가 접속할 수 있는지는 IAM 정책으로 정해요.' },
     ],
     avoid: [],
+  },
+  waf: {
+    links: [
+      { to: ['cloudfront', 'lb'], text: 'CloudFront나 Load Balancer(ALB)에 붙여 써요. 들어오는 요청을 규칙(IP, 요청 내용 등)으로 검사해서 허용하거나 막아요.' },
+    ],
+    avoid: [
+      { to: ['ec2', ...GUIDE_DBS], text: 'WAF는 서버나 DB에 직접 붙이지 않아요. 앞단의 CloudFront나 Load Balancer에 붙이세요.' },
+    ],
   },
   cloudwatch: {
     links: [

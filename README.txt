@@ -50,7 +50,7 @@ css/, js/ 폴더가 index.html과 같은 위치에 있어야 한다. 공유할 �
 [검증]
 - [검증하기]: 정상 / 경고 / 오류 3단계 판정 + 문제 박스 강조 (규칙 7개)
 - 검증 중에는 버튼이 [검증 종료]로 바뀜. 누르면 결과를 지우고 검증 전 화면으로 (구성은 그대로)
-- 개선·제거 제안 (판정과 별개, 규칙 7개)
+- 개선·제거 제안 (판정과 별개, 규칙 9개)
 - 판정·제안마다 Well-Architected 기준 태그와 "왜 그런지" 근거, 근거 문서 링크(자세히) 표시
 - 서비스 설명·연결 안내는 AWS 공식 문서 기준 (설명 패널에서 공식 문서 열기)
 - 검증 후 요청 방향 화살표 + 사용자부터 한 구간씩 차례로 흐르는 점 (초록=정상, 노랑=병목, 빨강=오류)
@@ -86,7 +86,7 @@ aws-3tier-simulator/
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ validation.js      VALIDATION_RULES(판정 7개), 검증 실행 validateArchitecture
-│   │   └─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 7개)
+│   │   └─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 9개)
 │   ├─ ui/
 │   │   ├─ core.js            UI-1 상태·공통 유틸, UI-2 소속 판정·동작 검사
 │   │   ├─ palette.js         UI-3 팔레트·설명 툴팁
@@ -121,7 +121,7 @@ index.html 아래쪽의 <script> 순서대로 읽는다. (data → rules → ui 
  4. 변경 이력  (최신이 위)
 --------------------------------------------------------------
 변경 이력은 CHANGELOG.txt에 있다. (최신이 위)
-- 현재 버전: 1.19 (2026-10-15, 검증 종료 버튼)
+- 현재 버전: 1.20.1 (2026-10-15, Route 53 제안 수정)
 - 코드를 바꿀 때마다 CHANGELOG.txt 맨 위에 항목을 추가한다.
 
 --------------------------------------------------------------
@@ -254,7 +254,13 @@ index.html 아래쪽의 <script> 순서대로 읽는다. (data → rules → ui 
     - 0은 A~C의 바탕이 되는 박스·영역을 먼저 맞추는 단계
     - B는 C에서 그대로 다시 쓴다 (마이그레이션 전후 구성을 같은 성능 시뮬레이션으로 비교)
 
-10) [0. 팔레트 정리] 서비스 박스·영역·팔레트 수정 — 다음 작업
+10) [0. 팔레트 정리] 서비스 박스·영역·팔레트 수정 — 진행 중
+    결정 (2026-10-15 사용자):
+      → 10-1, 10-2 끝나면 팔레트 정리 완료. 다음은 11) A. 잘한 점 표시
+      10-1) VPC Endpoints 위치 넓히기 (박스 하나 유지, 프라이빗 서브넷 안도 허용) — 완료 (v1.19.1)
+      10-2) Route 53·AWS WAF 추가: 박스 + 제안 규칙(판정에는 넣지 않음). WAF는 "접근/운영" 묶음 — 완료 (v1.20)
+      유지: 컨테이너·CI/CD·IAM·CloudFormation(C단계 CI/CD에 필요), 스마트폰·태블릿·PC
+      보류: 내부용 LB, 보안 그룹, ACM, EFS
     근거: AWS 공식 자료 기준 검토 (2026-10-15)
       - Web Application Architecture on AWS (참조 구조도)
         https://docs.aws.amazon.com/reference-architecture-diagrams/latest/web-application-architecture/web-application-architecture.html
