@@ -1,0 +1,6 @@
+# 줄바꿈을 LF로 고정 (Windows에서 git이 파일을 되돌릴 때 CRLF로 바뀌어 수정 스크립트가 실패한 일이 있음)
+* text=auto eol=lf
+
+# 이미지는 줄바꿈 변환 대상에서 제외
+*.png binary
+*.jpg binary

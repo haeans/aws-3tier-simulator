@@ -12,7 +12,7 @@ const stateSig = () => JSON.stringify({
 });
 const LEVEL_TEXT = { error: '오류', warn: '경고' };
 const STATUS_TEXT = {
-  ok:    { label: '정상', desc: 'T-3 아키텍처의 기본 흐름이 모두 갖춰졌어요!' },
+  ok:    { label: '정상', desc: '3-Tier 아키텍처의 기본 흐름이 모두 갖춰졌어요!' },
   warn:  { label: '경고', desc: '동작은 하지만 권장 구성은 아니에요.' },
   error: { label: '오류', desc: '이대로는 서비스가 동작하지 않아요.' },
 };

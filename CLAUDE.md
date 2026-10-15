@@ -1,7 +1,7 @@
 # AWS 3-Tier 아키텍처 시뮬레이터 — 작업 안내
 
 캔버스에 AWS 서비스와 영역(VPC/AZ/서브넷)을 배치·연결하고 3-Tier 구성이 맞는지 검증하는 학습용 웹 도구.
-**작업 전에 README.txt를 먼저 읽는다.** 기능, 파일 구조, 변경 이력, 설계 결정(6장), 남은 작업(7장)이 정리되어 있다.
+**작업 전에 README.txt를 먼저 읽는다.** 기능, 파일 구조, 설계 결정(6장), 남은 작업(7장)이 정리되어 있다. 변경 이력은 CHANGELOG.txt에 있다.
 
 ## 작업 규칙 (사용자가 정한 것)
 
@@ -10,7 +10,7 @@
 - 작업이 끝나면 **사용자가 테스트할 항목 2~4개만** 적는다. 변경 내용과 내부 검증 과정은 쓰지 않는다. 아래 경우에만 그 내용을 보고한다:
   - 오류가 났거나 작업이 실패한 경우
   - 계획과 다르게 고쳤거나, 명세에 없어서 직접 정한 부분이 있는 경우
-- 코드를 바꿀 때마다 README.txt "4. 변경 이력" 맨 위에 항목을 추가한다.
+- 코드를 바꿀 때마다 CHANGELOG.txt 맨 위에 항목을 추가한다. package.json의 version도 같은 번호로 맞춘다.
   - 버전: 기능 추가는 가운데 숫자(1.8 → 1.9), 버그 수정만 있으면 끝 숫자(1.8 → 1.8.1)
   - 기능이나 구조가 바뀌면 2장(주요 기능), 3장(파일 구조), 6장(설계 결정), 7장(남은 작업)도 함께 맞춘다.
 - docs/ 폴더의 txt는 사용자의 개인 메모다. 사용자가 내용을 주며 요청할 때만 다룬다.
@@ -37,7 +37,7 @@
   - 일반 `<script>` 태그를 index.html에 순서대로 둔다. 순서: data → rules → ui → main.js(항상 마지막)
   - 파일 사이에서는 전역 변수·함수를 공유한다.
   - 다른 파일의 함수는 실행 시점에만 호출한다. 파일을 불러오는 도중(최상위 코드)에 뒤쪽 파일의 함수를 부르면 안 된다.
-- 서비스 추가: `js/data/services.js`의 SERVICES와 SERVICE_DESC, `js/data/guide.js`의 SERVICE_GUIDE(설명 패널)
+- 서비스 추가: `js/data/services.js`의 SERVICES와 SERVICE_DESC, `js/data/guide.js`의 SERVICE_GUIDE(설명 패널), `js/data/references.js`의 SERVICE_DOCS(공식 문서)
 - 규칙 추가: `js/rules/` 안의 배열(PLACEMENT_RULES / VALIDATION_RULES / SUGGESTION_RULES)
 - 배치·이동·크기 조절은 반드시 `commit(before, actedId, movedIds)`(js/ui/core.js)를 거친다.
   - commit은 소속을 다시 계산하고, 규칙 위반이나 겹침이 있으면 동작 전 상태로 되돌린다.
@@ -74,7 +74,7 @@ npm test         # Playwright 자동 테스트 (tests/*.spec.js, 이 PC의 Edge�
 npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 확인한다.
 
 - **테스트 페이지 만들기:** 세션 scratchpad에 만든다. 프로젝트 폴더에는 만들지 않는다.
-  - index.html을 복사하고, css/js 경로를 `file:///C:/mzc/ai-foundation/AWS_T3_Arch_Sim/...` 절대 경로로 바꾼다.
+  - index.html을 복사하고, css/js 경로를 `file:///C:/mzc/ai-foundation/aws-3tier-simulator/...` 절대 경로로 바꾼다.
   - `<head>`에 `localStorage.clear()`와 `window.onerror` 수집 코드를 넣는다.
   - `</body>` 앞에 테스트 스크립트를 넣는다. 결과는 `<pre id="out">`에 쓴다.
   - 테스트 스크립트를 넣을 때는 PowerShell 문자열 처리를 쓴다. bash의 sed 치환은 특수문자 때문에 실패했다.
@@ -92,8 +92,9 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
 
 ## Git
 
-- 원격 저장소: https://github.com/haeans/aws-t3-arch-sim (브랜치 main)
+- 원격 저장소: https://github.com/haeans/aws-3tier-simulator (브랜치 main)
+- 이름 고정: 저장소·로컬 폴더·package.json 이름은 모두 `aws-3tier-simulator` (2026-10-15 사용자 결정)
 - 작성자: 저장소 로컬 설정 `haean` / `270256123+haeans@users.noreply.github.com`
   - 개인 이메일은 쓰지 않는다.
-- 커밋 메시지는 한국어로 쓴다. 커밋할 때 README 변경 이력도 함께 맞춘다.
+- 커밋 메시지는 한국어로 쓴다. 커밋할 때 CHANGELOG.txt도 함께 맞춘다.
 - 커밋·푸시는 사용자 승인 후에만 한다.

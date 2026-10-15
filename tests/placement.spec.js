@@ -187,7 +187,7 @@ test('Auto Scaling 그룹은 VPC 밖이나 VPC 테두리에 걸치게 놓을 수
 
 test('예전 Auto Scaling 박스가 저장되어 있으면 지우고 안내한다', async ({ page }) => {
   await openApp(page);
-  await page.evaluate(() => localStorage.setItem('aws-t3-sim:v1', JSON.stringify({ version: 1, idSeq: 9, zoom: 1, state: {
+  await page.evaluate(() => localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, idSeq: 9, zoom: 1, state: {
     nodes: [{ id: 'n1', type: 'autoscaling', x: 100, y: 100, parentContainer: null },
             { id: 'n2', type: 'ec2', x: 300, y: 100, parentContainer: null }],
     containers: [], edges: [{ id: 'e3', from: 'n1', to: 'n2', fromSide: null, toSide: null, mid: null }],

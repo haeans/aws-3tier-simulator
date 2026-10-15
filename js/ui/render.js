@@ -193,7 +193,7 @@ function stepZoom(dir, anchor) {
 }
 
 // ----- 저장 / 불러오기 (브라우저 localStorage) -----
-const STORAGE_KEY = 'aws-t3-sim:v1';
+const STORAGE_KEY = 'aws-3tier-simulator:v1';
 let lastSaved = null;
 let savedScroll = null;   // 불러온 스크롤 위치 (시작 시 한 번 적용)
 let removedAsgBoxes = 0;  // 불러올 때 지운 예전 Auto Scaling 박스 수 (시작 시 안내)
