@@ -17,7 +17,16 @@ const STATUS_TEXT = {
   error: { label: '오류', desc: '이대로는 서비스가 동작하지 않아요.' },
 };
 
+const $validateBtn = document.getElementById('btn-validate');
+
+// [검증하기]를 누르면 검증, 결과가 떠 있을 때 다시 누르면([검증 종료]) 결과를 지우고 검증 전 화면으로
 function runValidation() {
+  if (validation) {
+    validation = null;
+    resultNote = '검증을 종료했어요. [검증하기]를 누르면 다시 확인할 수 있어요.';
+    render();
+    return;
+  }
   if (!state.nodes.length) {
     validation = null;
     resultNote = '서비스를 먼저 배치해주세요.';
@@ -142,6 +151,8 @@ function applyValidationMarks() {
 }
 
 function renderResult() {
+  $validateBtn.textContent = validation ? '검증 종료' : '검증하기';
+  $validateBtn.title = validation ? '검증 결과(강조·화살표·흐르는 점)를 지우고 검증 전 화면으로 돌아가요' : '';
   $result.innerHTML = '';
   const head = document.createElement('div');
   head.className = 'result-head';

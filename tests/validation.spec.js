@@ -80,6 +80,30 @@ test('검증 후 흐름 점이 사용자 쪽에서 DB 쪽으로 움직이고, �
   await expect(page.locator(`.edge[data-id="${rdsEdge.id}"]`)).toHaveAttribute('marker-end', /arrow/);
 });
 
+test('검증 중에 버튼을 다시 누르면 검증이 종료되고, 또 누르면 다시 검증한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  const btn = page.locator('#btn-validate');
+  await expect(btn).toHaveText('검증하기');
+  await btn.click();
+  await expect(btn).toHaveText('검증 종료');
+  await expect(page.locator('.flow-dot').first()).toBeAttached();
+  const before = await page.evaluate(() => JSON.stringify(state));
+  // 검증 종료: 결과·흐름 점·한쪽 화살표가 사라지고 구성은 그대로
+  await btn.click();
+  await expect(btn).toHaveText('검증하기');
+  await expect(page.locator('.flow-dot')).toHaveCount(0);
+  await expect(page.locator('#result .status')).toHaveCount(0);
+  await expect(page.locator('#result')).toContainText('검증을 종료했어요');
+  await expect(page.locator('.node.v-error, .node.v-warn, .v-badge')).toHaveCount(0);
+  await expect(page.locator('.edge[marker-start]').first()).toBeAttached();   // 다시 양쪽 화살표
+  expect(await page.evaluate(() => JSON.stringify(state))).toBe(before);
+  // 다시 누르면 다시 검증
+  await btn.click();
+  await expect(btn).toHaveText('검증 종료');
+  await expect(page.locator('#result .status')).toHaveText('정상');
+});
+
 test('결과 목록의 항목을 클릭하면 해당 박스가 선택된다', async ({ page }) => {
   await openApp(page);
   await buildValidArch(page);
