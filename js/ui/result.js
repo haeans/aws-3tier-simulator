@@ -132,6 +132,7 @@ function stopFlow() {
 
 // 검증 결과가 있으면 흐름을 시작하고, 없어지면 멈춘다 (render()마다 호출)
 function syncFlow() {
+  if (resultTab === 'sim') { if (flowFor) stopFlow(); return; }   // 시뮬레이션 탭에서는 트래픽 점만 보여줌
   if (!validation || !validation.flow || !validation.flow.length) { if (flowFor) stopFlow(); return; }
   if (flowFor === validation) return;   // 이미 이 결과로 흐르는 중
   stopFlow();
@@ -190,8 +191,17 @@ function renderResult() {
   $result.innerHTML = '';
   const head = document.createElement('div');
   head.className = 'result-head';
-  head.innerHTML = '<span class="label">검증 결과</span>';
+  // 탭: 검증 결과 / 성능 시뮬레이션 (UI-11 simulate.js)
+  head.innerHTML = '<span class="tabs"><button class="tab" data-tab="validate">검증 결과</button>' +
+    '<button class="tab" data-tab="sim">성능 시뮬레이션</button></span>';
+  head.querySelectorAll('.tab').forEach(b => {
+    const tab = b.getAttribute('data-tab');
+    b.classList.toggle('active', tab === resultTab);
+    b.addEventListener('click', () => { if (tab !== resultTab) { resultTab = tab; render(); } });
+  });
   $result.appendChild(head);
+  if (resultTab === 'sim') { renderSimPanel(head); return; }
+  stopSimAll();
 
   if (!validation) {
     head.insertAdjacentHTML('beforeend', `<span class="msg">${resultNote}</span>`);

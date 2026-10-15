@@ -62,6 +62,7 @@ npm test         # Playwright 자동 테스트 (tests/*.spec.js, 이 PC의 Edge�
   - `tests/placement.spec.js`: 배치·영역·겹침·스냅·크기 조절·저장
   - `tests/edges.spec.js`: 연결 모드·연결점·손잡이·경로 회피·강조
   - `tests/validation.spec.js`: 판정·제안·흐름 점·결과 클릭
+  - `tests/simulation.spec.js`: 성능 시뮬레이션 계산·탭·사용률 막대
 - **기능을 추가하거나 고치면** 해당 spec 파일에 테스트를 추가한다.
   - 화면 조작은 `page.mouse`로 실제 마우스처럼 한다.
   - 준비와 확인은 `page.evaluate`로 앱 전역(state, addNode 등)을 쓴다.

@@ -69,6 +69,11 @@ document.addEventListener('keydown', e => {
     if (e.code === 'KeyY' || e.shiftKey) redo(); else undo();
     return;
   }
+  if (simFaultMode && resultTab === 'sim') {   // 장애 넣기 중: 지우기·되돌리기 대신 Esc로 모드 끄기만
+    if (e.key === 'Escape') setSimFaultMode(false);
+    else if (e.key === 'Delete' || e.key === 'Backspace') showToast('장애 넣기 중에는 지울 수 없어요. Esc로 장애 넣기를 끈 뒤 지워주세요.', 'warn');
+    return;
+  }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
     e.preventDefault();
     deleteSelected();

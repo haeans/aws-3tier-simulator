@@ -480,6 +480,79 @@ body.connect-mode .node.connect-from .anchor { display: block; }
   overflow-y: auto;
 }
 .result-head { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+/* 결과 영역 탭: 검증 결과 / 성능 시뮬레이션 */
+.tabs { display: flex; gap: 2px; flex-shrink: 0; }
+.tab { border: 1px solid var(--line, #d5dbe1); background: #f7f9fb; color: var(--muted); font: inherit; font-weight: 700;
+  padding: 2px 10px; line-height: 18px; border-radius: 6px; cursor: pointer; }   /* 높이 24px: 결과 영역 높이를 바꾸지 않게 */
+.tab:hover { background: #eef2f6; }
+.tab.active { background: #fff; color: var(--text); border-color: var(--accent); }
+/* 성능 시뮬레이션 패널 */
+.sim-panel { margin-top: 8px; display: grid; gap: 6px; }
+.sim-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sim-controls .btn { padding: 3px 10px; }
+.sim-play { min-width: 76px; }
+.sim-speed { display: inline-flex; gap: 2px; }
+.sim-clock b { font-variant-numeric: tabular-nums; }
+.sim-now { color: #b0260e; font-weight: 700; }
+.sim-charts { display: flex; gap: 16px; flex-wrap: wrap; }
+.sim-charts figure { margin: 0; }
+.sim-charts figcaption { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+.sim-charts svg { width: 300px; height: 70px; display: block; background: #fbfcfd; border: 1px solid var(--line); border-radius: 4px; }
+.sim-charts .axis { stroke: #dfe5eb; stroke-width: 1; }
+.sim-charts text { font-size: 9px; fill: var(--muted); }
+.sim-charts .surge { fill: rgba(209, 50, 18, .10); }
+.sim-charts .mark { stroke: #7d6b9e; stroke-width: 1; stroke-dasharray: 2 2; }
+.sim-log-box { min-width: 280px; flex: 1; }
+.sim-log { margin: 0; padding: 4px 8px; list-style: none; height: 62px; overflow-y: auto; background: #fbfcfd;
+  border: 1px solid var(--line); border-radius: 4px; font-size: 11.5px; display: grid; gap: 2px; align-content: start; }
+.sim-log b { font-variant-numeric: tabular-nums; margin-right: 4px; color: var(--muted); }
+.sim-log .empty { color: var(--muted); }
+.sim-fault.active { background: #fdecea; border-color: #d13212; color: #b0260e; }
+body.fault-mode .node, body.fault-mode .area { cursor: crosshair; }
+body.fault-mode .del, body.fault-mode .resize { display: none !important; }   /* 장애 넣기 중 실수로 지우거나 크기를 바꾸지 않게 */
+/* 장애: 멈춘 박스(회색 + ✕), 복귀 확인 중(파랑), 멈춘 AZ(빗금) */
+.node.sim-down    { --c: #8a96a3 !important; --cbg: #e9edf1 !important; --cfg: #6b7785 !important; }
+.node.sim-down::before { content: '✕'; position: absolute; top: 2px; left: 6px; font-weight: 800; color: #b0260e; font-size: 13px; }
+.node.sim-recover { --c: #2e73b8 !important; --cbg: #eaf2fb !important; }
+.sim-bar.down i    { background: transparent; }
+.sim-bar.recover i { background: #9cc3ea; }
+.sim-bar.down span { color: #b0260e; }
+.area.sim-az-down { background-image: repeating-linear-gradient(45deg, rgba(120,130,140,.12) 0 8px, transparent 8px 16px); }
+.sim-traffic { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.sim-traffic input { width: 260px; }
+.sim-traffic b { min-width: 44px; text-align: right; }
+.sim-stats { display: flex; gap: 18px; flex-wrap: wrap; }
+.sim-stats b { margin-left: 4px; }
+.sim-stats b.bad { color: #b0260e; }
+.sim-bottleneck:empty { display: none; }
+.sim-bottleneck { padding: 6px 10px; border-left: 4px solid; border-radius: 4px; }
+.sim-bottleneck.busy { background: #fffaea; border-color: #f2b600; }
+.sim-bottleneck.over { background: #fdf3f1; border-color: #d13212; }
+.sim-assume { font-size: 11.5px; color: var(--muted); }
+.sim-assume a { color: var(--select); text-decoration: none; }
+/* 시뮬레이션 중 박스 색: 사용률별 (카테고리 색 변수를 덮어씀) */
+.node.sim-ok    { --c: #2e9e47 !important; --cbg: #eef8f0 !important; }
+.node.sim-busy  { --c: #e0a800 !important; --cbg: #fff7d6 !important; }
+.node.sim-over  { --c: #d13212 !important; --cbg: #fde4df !important; animation: sim-over-glow .7s ease-in-out infinite alternate; }
+.node.sim-stuck { --c: #d13212 !important; --cbg: #fdecea !important; border-style: dashed !important; }
+@keyframes sim-over-glow {
+  from { box-shadow: 0 0 0 1px rgba(209, 50, 18, .25); }
+  to   { box-shadow: 0 0 0 6px rgba(209, 50, 18, .45); }
+}
+/* 박스 안쪽 아래 사용률 막대 */
+.sim-bar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 13px; background: rgba(255,255,255,.85);
+  border: 1px solid rgba(0,0,0,.08); border-radius: 3px; overflow: hidden; pointer-events: none;
+  font-size: 10px; line-height: 12px; text-align: center; font-weight: 700; color: #2f3b48; white-space: nowrap; }
+.sim-bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+.sim-bar span { position: relative; }
+.sim-bar.ok i    { background: #8fd19e; }
+.sim-bar.busy i  { background: #f5cf4f; }
+.sim-bar.over i  { background: #ef8a76; }
+.sim-bar.stuck i { background: #f6c3b8; }
+.sim-bar.over span, .sim-bar.stuck span { color: #8a1c08; }
+.sim-dot { stroke: #fff; stroke-width: 1.2; pointer-events: none; }
+/* 가상의 길 (장애 조치 후 EC2 → 새 본체): 점선 */
+.sim-virtual { fill: none; stroke: #2e73b8; stroke-width: 1.6; stroke-dasharray: 6 4; opacity: .8; }
 .result .label { font-weight: 700; }
 .result .msg { color: var(--muted); }
 .status {
