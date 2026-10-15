@@ -99,3 +99,23 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
   - 교육용으로 공개 이메일을 쓴다 (2026-10-15 사용자 결정. 그 전 커밋은 noreply 주소)
 - 커밋 메시지는 한국어로 쓴다. 커밋할 때 CHANGELOG.txt도 함께 맞춘다.
 - 커밋·푸시는 사용자 승인 후에만 한다.
+
+## 세션 인계 (2026-10-15 기준, 새 세션은 여기부터 읽는다)
+
+- **현재 상태:** v1.29.2, GitHub에 푸시 완료 (ffff143). 작업 계획 3차 중 0(팔레트)·A(잘한 점)·B(성능 시뮬레이션 12-1~12-5) 완료.
+- **다음 작업:** README 7장 13번 [C. 마이그레이션 설계 + 성능 시뮬레이션]. 코드 전에 **설계안부터** 보여주고 승인받는다.
+  - 후보(공식 문서 확인 전): IDC(온프레미스) 영역, Site-to-Site VPN / Direct Connect, MGN, DMS, Lambda, API Gateway, 컨테이너·CI/CD 판정 규칙
+  - 옮기기 전후 구성을 12번 성능 시뮬레이션 엔진(js/rules/simulation.js)으로 비교한다. 새 서비스는 PERF·PERF_ROUTES(js/data/performance.js)에 성능 정보를 더하는 방식
+  - 컨테이너(ECR·ECS·EKS·Fargate)·CI/CD 박스는 13번에 필요하므로 빼자고 제안하지 않는다
+- **사용자가 일하는 방식 (지금까지 확인한 것)**
+  - 설계 선택지는 AskUserQuestion으로 골라서 정하게 한다 (추천안 표시, 필요하면 ASCII 미리보기)
+  - 테스트 항목은 "무엇을 어디서 눌러 무엇을 확인하는지" 순서대로 구체적으로 쓴다 (구성 만들기부터 물어볼 때가 있음)
+  - 동작은 AWS 공식 문서 근거, 문서에서 못 찾은 숫자는 "가정"으로 정하고 화면·README에 그렇게 밝힌다
+  - 화면 표현이 바뀌면 직접 스크린샷을 찍어 확인한 뒤 보고한다 (사용자가 "깔끔하지 않다" 같은 시각 피드백을 줌)
+  - "진행해"라고 하면 막힐 때(권한·자료 부족·설계 실패·오류 수정 불가)만 멈추고 끝까지 진행
+- **작업 요령 (이번 세션에서 겪은 것)**
+  - bash heredoc 안에 백틱·`${}`가 많은 JS를 넣으면 "unexpected EOF"로 실패할 때가 있다 → Write 도구로 scratchpad에 node 스크립트를 만들어 실행
+  - 화면 확인: scratchpad에 Playwright 설정(testDir = scratchpad, `require('C:/mzc/ai-foundation/aws-3tier-simulator/node_modules/@playwright/test')`)과 spec을 두고 `npx playwright test --config=<그 설정>`으로 스크린샷
+  - 결과 영역(아래 패널) 높이가 바뀌면 캔버스가 줄어 기존 테스트의 클릭 좌표가 패널에 가려진다 (탭 높이 24px 유지 이유)
+  - 사용자 전역 git 설정: `core.autocrlf = true`. 프로젝트는 .gitattributes로 LF 고정이라 영향 없음
+- **확인 못 한 질문:** VS Code 소스 제어에 "변경 9개"가 보인다고 함. git status는 docs/만 나옴. 새로고침·다른 저장소·줄바꿈 중 원인 확인 필요
