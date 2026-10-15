@@ -512,11 +512,23 @@ body.fault-mode .node, body.fault-mode .area { cursor: crosshair; }
 body.fault-mode .del, body.fault-mode .resize { display: none !important; }   /* 장애 넣기 중 실수로 지우거나 크기를 바꾸지 않게 */
 /* 장애: 멈춘 박스(회색 + ✕), 복귀 확인 중(파랑), 멈춘 AZ(빗금) */
 .node.sim-down    { --c: #8a96a3 !important; --cbg: #e9edf1 !important; --cfg: #6b7785 !important; }
-.node.sim-down::before { content: '✕'; position: absolute; top: 2px; left: 6px; font-weight: 800; color: #b0260e; font-size: 13px; }
+/* 고장 박스: 박스 전체 대각선으로 연한 빨간 ✕를 깔고 그 위에 이름 (멀리서도 한눈에 "고장") */
+.node.sim-down::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(to top right, transparent calc(50% - 1px), rgba(209, 50, 18, .28) calc(50% - 1px), rgba(209, 50, 18, .28) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(209, 50, 18, .28) calc(50% - 1px), rgba(209, 50, 18, .28) calc(50% + 1px), transparent calc(50% + 1px)); }
+/* 이름은 ✕ 위에, 조금 더 진하고 굵게 + 배경색 테두리로 ✕ 선과 떨어져 보이게 */
+.node.sim-down > span:first-of-type { position: relative; color: #3d4752; font-weight: 800;
+  text-shadow: 0 0 2px #e9edf1, 0 0 3px #e9edf1, 0 0 4px #e9edf1; }
 .node.sim-recover { --c: #2e73b8 !important; --cbg: #eaf2fb !important; }
 .sim-bar.down i    { background: transparent; }
 .sim-bar.recover i { background: #9cc3ea; }
+.sim-bar.info i    { background: #b9d3ee; }
+.sim-fix { margin-top: 3px; font-weight: 700; color: #1d4f82; }
 .sim-bar.down span { color: #b0260e; }
+/* Auto Scaling 그룹 위 지금 대수 */
+.sim-asg { position: absolute; top: -11px; right: 12px; white-space: nowrap; pointer-events: none;
+  background: #fff8ee; border: 1px solid #ec7211; color: #a34e00; font-size: 10.5px; font-weight: 700; line-height: 18px; padding: 0 8px; border-radius: 9px; }
 .area.sim-az-down { background-image: repeating-linear-gradient(45deg, rgba(120,130,140,.12) 0 8px, transparent 8px 16px); }
 .sim-traffic { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 .sim-traffic input { width: 260px; }
@@ -530,6 +542,7 @@ body.fault-mode .del, body.fault-mode .resize { display: none !important; }   /*
 .sim-bottleneck.over { background: #fdf3f1; border-color: #d13212; }
 .sim-assume { font-size: 11.5px; color: var(--muted); }
 .sim-assume a { color: var(--select); text-decoration: none; }
+.sim-assume summary { cursor: pointer; font-weight: 700; }   /* 가정값·근거는 접어 두고 필요할 때 펼쳐 봄 */
 /* 시뮬레이션 중 박스 색: 사용률별 (카테고리 색 변수를 덮어씀) */
 .node.sim-ok    { --c: #2e9e47 !important; --cbg: #eef8f0 !important; }
 .node.sim-busy  { --c: #e0a800 !important; --cbg: #fff7d6 !important; }
@@ -550,6 +563,12 @@ body.fault-mode .del, body.fault-mode .resize { display: none !important; }   /*
 .sim-bar.over i  { background: #ef8a76; }
 .sim-bar.stuck i { background: #f6c3b8; }
 .sim-bar.over span, .sim-bar.stuck span { color: #8a1c08; }
+
+/* 박스 안쪽 위 빨간 배지: 초당 실패 수
+   (박스 바깥에 두면 그쪽 변으로 들어오는 연결선 끝 = 실패 점이 사라지는 자리를 가림. 연결선은 테두리 바깥에서 끝나므로 안쪽은 안전) */
+.sim-fail { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  background: #d13212; color: #fff; font-size: 9.5px; font-weight: 800; line-height: 14px; padding: 0 6px; border-radius: 7px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.2); pointer-events: none; }
 .sim-dot { stroke: #fff; stroke-width: 1.2; pointer-events: none; }
 /* 가상의 길 (장애 조치 후 EC2 → 새 본체): 점선 */
 .sim-virtual { fill: none; stroke: #2e73b8; stroke-width: 1.6; stroke-dasharray: 6 4; opacity: .8; }
@@ -640,6 +659,9 @@ a.pillar:hover { background: #dce8f4; text-decoration: underline; }
 .tt-head { display: flex; align-items: center; gap: 6px; font-weight: 700; margin-bottom: 2px; }
 .tt-cat { display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .tt-desc { color: #3a4552; }
+/* 시뮬레이션 중 박스 설명 팝업 맨 위: 사용률 계산식·실패 */
+.tt-sim { margin-bottom: 6px; padding: 5px 7px; background: #f4f7fa; border-left: 3px solid var(--select); border-radius: 3px; font-size: 11.5px; }
+.tt-sim b { display: block; margin-bottom: 2px; }
 .tt-zone { margin-top: 5px; padding-top: 5px; border-top: 1px solid #eef1f4; font-size: 11.5px; color: var(--muted); }
 .tt-zone b { color: var(--text); font-weight: 600; }
 

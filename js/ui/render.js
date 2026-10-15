@@ -65,7 +65,7 @@ function buildNodeEl(node) {
   const label = document.createElement('span');
   label.textContent = svc.name;
   el.appendChild(label);
-  attachTooltip(el, () => serviceTooltip(svc));
+  attachTooltip(el, () => simTooltip(node.id) + serviceTooltip(svc));   // 시뮬레이션 중이면 사용률 설명을 맨 위에
 
   const del = document.createElement('div');
   del.className = 'del';

@@ -95,7 +95,7 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
 
 - 원격 저장소: https://github.com/haeans/aws-3tier-simulator (브랜치 main)
 - 이름 고정: 저장소·로컬 폴더·package.json 이름은 모두 `aws-3tier-simulator` (2026-10-15 사용자 결정)
-- 작성자: 저장소 로컬 설정 `haeans` / `270256123+haeans@users.noreply.github.com`
-  - 개인 이메일은 쓰지 않는다.
+- 작성자: 저장소 로컬 설정 `haeans` / `rlaalscjf9856@gmail.com`
+  - 교육용으로 공개 이메일을 쓴다 (2026-10-15 사용자 결정. 그 전 커밋은 noreply 주소)
 - 커밋 메시지는 한국어로 쓴다. 커밋할 때 CHANGELOG.txt도 함께 맞춘다.
 - 커밋·푸시는 사용자 승인 후에만 한다.
