@@ -470,3 +470,111 @@ test('CF-01·R53-02: CloudFront—DB, Route 53—EC2는 제거 제안이 나오�
   expect(r.msgs.join(' ')).toContain('Route 53 — EC2 연결');
   expect(r.praises).not.toContain('V4');
 });
+
+test('SRV-08: EC2가 퍼블릭 서브넷에 있으면 오류가 아니라 경고, DB 서브넷이면 오류', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  const moveEc2 = y => page.evaluate(y => {
+    const ec2 = state.nodes.filter(n => n.type === 'ec2')[0];
+    ec2.x = 480; ec2.y = y;
+    recomputeParents(); render();
+  }, y);
+  await moveEc2(240);                                        // AZ A 퍼블릭 서브넷
+  let r = await verdict(page);
+  expect(r.status).toBe('warn');
+  expect(r.issues).toContain(11);
+  expect(r.issues).not.toContain(2);
+  expect(r.praises).not.toContain('V2');                     // "앱 서버를 숨겼어요" 칭찬도 사라짐
+  expect(r.msgs.join(' ')).toContain('EC2가 퍼블릭 서브넷에 있어요');
+  await moveEc2(550);                                        // AZ A DB 서브넷
+  r = await verdict(page);
+  expect(r.status).toBe('error');
+  expect(r.issues).toContain(2);
+});
+
+// ----- 데이터 묶음: RDS (criteria/data.md DB-01~05) -----
+const moveNode = (page, type, x, y, idx = 0) => page.evaluate(([type, x, y, idx]) => {
+  const n = state.nodes.filter(n => n.type === type)[idx];
+  n.x = x; n.y = y;
+  recomputeParents(); render();
+}, [type, x, y, idx]);
+
+test('DB-05: DB가 프라이빗 서브넷에 있으면 오류가 아니라 제안, 퍼블릭 서브넷이면 경고, 서브넷 밖이면 오류', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await moveNode(page, 'rds', 520, 400);                     // AZ A 프라이빗 서브넷
+  let r = await verdict(page);
+  expect(r.status).toBe('ok');
+  expect(r.issues).not.toContain(4);
+  expect(r.sug).toContain(14);
+  expect(r.praises).not.toContain('V4');                     // DB 서브넷이 아니므로 칭찬은 없음
+  await moveNode(page, 'rds', 520, 250);                     // AZ A 퍼블릭 서브넷
+  r = await verdict(page);
+  expect(r.status).toBe('warn');
+  expect(r.issues).toContain(12);
+  expect(r.issues).not.toContain(4);
+  await moveNode(page, 'rds', 520, 160);                     // AZ A 안, 서브넷 밖
+  r = await verdict(page);
+  expect(r.status).toBe('error');
+  expect(r.issues).toContain(4);
+});
+
+test('DB-02·03·04·01: Standby에 EC2 연결 / RDS 없는 Replica / RDS보다 Standby가 적음 / AZ가 하나뿐인 VPC', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await connect(page, 'ec2', 'rds-standby');
+  let r = await verdict(page);
+  expect(r.status).toBe('error');
+  expect(r.issues).toContain(13);
+  // RDS 2개 + Standby 1개 → 고가용성 경고
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('rds', 560, 590); });
+  r = await verdict(page);
+  expect(r.issues).toContain(7);
+  expect(r.msgs.join(' ')).toContain('RDS가 2개인데 RDS Standby가 1개뿐이에요');
+  expect(r.praises).not.toContain('V7');
+  // RDS는 없고 Replica만 있음
+  await buildValidArch(page);
+  await page.evaluate(() => {
+    state.nodes = state.nodes.filter(n => n.type !== 'rds');
+    state.edges = state.edges.filter(e => state.nodes.some(n => n.id === e.from) && state.nodes.some(n => n.id === e.to));
+    addNode('rds-replica', 560, 590);
+  });
+  r = await verdict(page);
+  expect(r.issues).toContain(14);
+  // AZ B를 지우면 서브넷이 있는 AZ가 하나뿐
+  await buildValidArch(page);
+  await page.evaluate(() => { deleteContainer(state.containers.find(c => c.label === '가용 영역 B').id); });
+  r = await verdict(page);
+  expect(r.issues).toContain(15);
+});
+
+// ----- 데이터 묶음: ElastiCache·S3·DynamoDB (criteria/data.md CACHE-01, DDB-S-01) -----
+test('CACHE-01: ElastiCache는 DB 서브넷과 프라이빗 서브넷에는 놓을 수 있고 퍼블릭 서브넷에는 놓을 수 없다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  const count = () => page.evaluate(() => state.nodes.filter(n => n.type === 'elasticache').length);
+  await page.evaluate(() => { addNode('elasticache', 530, 270); });   // AZ A 퍼블릭 서브넷 → 거부
+  expect(await count()).toBe(0);
+  await page.evaluate(() => { addNode('elasticache', 560, 430); });   // AZ A 프라이빗 서브넷
+  expect(await count()).toBe(1);
+  await page.evaluate(() => { addNode('elasticache', 640, 590); });   // AZ A DB 서브넷
+  expect(await count()).toBe(2);
+});
+
+test('DDB-S-01: 프라이빗 EC2가 S3·DynamoDB에 가려면 서비스마다 VPC Endpoints가 이어져야 제안이 사라진다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('s3', 120, 160); addNode('dynamodb', 120, 460); addNode('vpce', 280, 520); });
+  await connect(page, 'ec2', 's3');
+  await connect(page, 'ec2', 'dynamodb');
+  await connect(page, 'vpce', 's3');                         // 엔드포인트는 S3에만 이어짐
+  let r = await verdict(page);
+  expect(r.sug).toContain(3);
+  expect(r.msgs.join(' ')).toContain('EC2가 DynamoDB에 가려면');
+  expect(r.msgs.join(' ')).not.toContain('EC2가 S3·DynamoDB에 가려면');
+  await connect(page, 'vpce', 'dynamodb');
+  r = await verdict(page);
+  expect(r.sug).not.toContain(3);
+  expect(r.praises).toContain('S3');
+});

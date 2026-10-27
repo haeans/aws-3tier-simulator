@@ -1,5 +1,5 @@
 // @ts-check
-// js/rules/validation.js — 검증 규칙 10개 (정상/경고/오류) + 검증 실행
+// js/rules/validation.js — 검증 규칙 15개 (정상/경고/오류) + 검증 실행
 
 /* =========================================================
    검증 규칙
@@ -98,8 +98,9 @@ const VALIDATION_RULES = [
         if (ctx.zoneOf(n) !== 'public') issues.push({ nodeIds: [n.id],
           message: 'Load Balancer는 퍼블릭 서브넷에 있어야 인터넷에서 오는 요청을 받을 수 있어요.' });
       });
+      // 근거: SRV-08 — 퍼블릭 서브넷의 EC2는 문서가 금지하지 않으므로 오류가 아니라 경고(규칙 11). 서브넷 밖·DB 서브넷은 오류 유지
       ctx.ofType('ec2').forEach(n => {
-        if (ctx.zoneOf(n) !== 'private') issues.push({ nodeIds: [n.id],
+        if (!['private', 'public'].includes(ctx.zoneOf(n))) issues.push({ nodeIds: [n.id],
           message: 'EC2 앱 서버는 프라이빗 서브넷에 두어야 외부에서 직접 접근할 수 없어요.' });
       });
       return issues;
@@ -107,8 +108,9 @@ const VALIDATION_RULES = [
     praise(ctx) {
       const lbs = ctx.ofType('lb'), ec2s = ctx.ofType('ec2');
       if (!lbs.length || !ec2s.length) return [];
-      // 근거: IGW-03 — 서버가 인터넷과 바로 이어져 있으면 "숨겼다"고 칭찬하지 않는다
+      // 근거: IGW-03 — 서버가 인터넷과 바로 이어져 있으면 "숨겼다"고 칭찬하지 않는다. SRV-08 — 퍼블릭 서브넷의 EC2가 있어도 마찬가지
       if (ec2s.some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
+      if (ec2s.some(e => ctx.zoneOf(e) !== 'private')) return [];
       return [{ nodeIds: [...lbs, ...ec2s].map(n => n.id),
         text: 'Load Balancer는 퍼블릭 서브넷, EC2는 프라이빗 서브넷에 나눠 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
     },
@@ -138,8 +140,9 @@ const VALIDATION_RULES = [
       const issues = [];
       ctx.ofType(...RDS_TYPES).forEach(db => {
         const name = ctx.nameOf(db);
-        if (ctx.zoneOf(db) !== 'db') issues.push({ nodeIds: [db.id],
-          message: `${eunNeun(name)} DB 서브넷에 있어야 해요. 데이터는 가장 안쪽에 두어 보호해요.` });
+        // 근거: DB-05 — 서브넷 안(DB·프라이빗·퍼블릭)이면 오류가 아니다. 퍼블릭은 규칙 12(경고), 프라이빗은 제안 14. 서브넷 밖만 오류
+        if (!['db', 'private', 'public'].includes(ctx.zoneOf(db))) issues.push({ nodeIds: [db.id],
+          message: `${eunNeun(name)} 서브넷 안에 있어야 해요. DB 서브넷(없으면 프라이빗 서브넷)에 놓아 인터넷에서 숨겨요.` });
         ctx.neighborsOf(db, ...USER_TYPES, 'igw').forEach(other => issues.push({ nodeIds: [db.id, other.id],
           message: `DB가 인터넷에 직접 노출돼 있어요. ${name} — ${ctx.nameOf(other)} 연결을 지우고 앱 서버(EC2)를 거치도록 연결해주세요.` }));
         ctx.neighborsOf(db, 'dbadmin').forEach(admin => issues.push({ nodeIds: [db.id, admin.id],
@@ -157,6 +160,8 @@ const VALIDATION_RULES = [
         return other && ['cloudfront', 'route53', 'waf'].includes(other.type);
       }));
       if (exposed) return [];
+      // 근거: DB-05 — 칭찬은 모든 DB가 DB 서브넷에 있을 때만 (프라이빗은 오류는 아니지만 칭찬은 아님, 퍼블릭은 경고)
+      if (dbs.some(db => ctx.zoneOf(db) !== 'db')) return [];
       return [{ nodeIds: dbs.map(n => n.id),
         text: 'DB를 DB 서브넷에 두고 인터넷과 바로 이어지지 않게 했어요. 데이터를 가장 안쪽에서 보호해요.' }];
     },
@@ -233,17 +238,26 @@ const VALIDATION_RULES = [
       });
       // RDS: RDS와 RDS Standby가 서로 다른 AZ
       const rdss = ctx.ofType('rds'), standbys = ctx.ofType('rds-standby');
-      const paired = rdss.some(r => standbys.some(s => {
-        const a = ctx.azOf(r), b = ctx.azOf(s);
-        return a && b && a !== b;
-      }));
+      // 근거: DB-04 — RDS(본체)마다 서로 다른 AZ의 Standby와 1대1로 짝이 맞아야 한다 (Standby 하나로 RDS 둘을 덮지 않음)
+      const taken = new Set();
+      const unpaired = rdss.filter(r => {
+        const s = standbys.find(s => {
+          const a = ctx.azOf(r), b = ctx.azOf(s);
+          return !taken.has(s.id) && a && b && a !== b;
+        });
+        if (s) taken.add(s.id);
+        return !s;
+      });
+      const paired = !unpaired.length;
       if (!paired) issues.push({
         nodeIds: [...rdss, ...standbys].map(n => n.id),
         message: !rdss.length
           ? 'RDS가 없어서 DB 이중화를 확인할 수 없어요.'
           : !standbys.length
             ? 'RDS Standby가 없어요. 다른 AZ에 RDS Standby를 두면 DB 장애 때 자동으로 넘어갈 수 있어요.'
-            : 'RDS와 RDS Standby가 서로 다른 AZ에 있지 않아요. 두 박스를 서로 다른 AZ의 DB 서브넷에 놓아주세요.',
+            : standbys.length < rdss.length
+              ? `RDS가 ${rdss.length}개인데 RDS Standby가 ${standbys.length}개뿐이에요. RDS마다 다른 AZ에 RDS Standby를 하나씩 두세요.`
+              : 'RDS와 RDS Standby가 서로 다른 AZ에 있지 않아요. 두 박스를 서로 다른 AZ의 DB 서브넷에 놓아주세요.',
       });
       return issues;
     },
@@ -290,6 +304,70 @@ const VALIDATION_RULES = [
       ctx.ofType('nat').forEach(n => ctx.neighborsOf(n, ...USER_TYPES).forEach(u => issues.push({ nodeIds: [n.id, u.id],
         message: `${ctx.nameOf(u)}가 NAT에 연결돼 있어요. 인터넷 쪽에서 먼저 NAT로 들어올 수는 없어요. 이 연결을 지우고 사용자 → IGW → Load Balancer로 들어오게 해주세요.` })));
       return issues;
+    },
+  },
+  {
+    // 근거: SRV-08 (등급 B)
+    id: 11, level: 'warn', message: '서버 위치',
+    pillars: ['security'],
+    basis: '서버(EC2)는 프라이빗 서브넷에 두는 것이 안전해요. 퍼블릭 서브넷에 두면 공개 IP를 받아 인터넷에 드러날 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html',
+    check(ctx) {
+      return ctx.ofType('ec2').filter(n => ctx.zoneOf(n) === 'public').map(n => ({ nodeIds: [n.id],
+        message: 'EC2가 퍼블릭 서브넷에 있어요. 인터넷에 드러날 수 있으니 프라이빗 서브넷에 두는 것이 안전해요. (관리용 접속이 목적이라면 Session Manager를 쓰세요.)' }));
+    },
+  },
+  {
+    // 근거: DB-05 (등급 B) — 퍼블릭 서브넷의 DB (RDS.2는 공개 접속 금지, 공개 접속은 서브넷이 공개일 때만 가능)
+    id: 12, level: 'warn', message: 'DB 위치',
+    pillars: ['security'],
+    basis: 'DB는 프라이빗 서브넷에 두는 것이 안전해요. 서브넷이 공개(퍼블릭)이면 공개 접속을 켰을 때 인터넷에서 DB에 닿을 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/securityhub/latest/userguide/rds-controls.html',
+    check(ctx) {
+      return ctx.ofType(...RDS_TYPES).filter(db => ctx.zoneOf(db) === 'public').map(db => ({ nodeIds: [db.id],
+        message: `${eunNeun(ctx.nameOf(db))} 퍼블릭 서브넷에 있어요. 인터넷에서 닿을 수 있는 자리예요. DB 서브넷(또는 프라이빗 서브넷)으로 옮겨주세요.` }));
+    },
+  },
+  {
+    // 근거: DB-02 (등급 A)
+    id: 13, level: 'error', message: 'Standby 접속',
+    pillars: ['reliability'],
+    basis: 'RDS Standby는 장애를 대비한 예비본이라 읽기·쓰기 요청을 받지 않아요. 앱 서버는 RDS(본체)나 Read Replica에 접속해요.',
+    ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('rds-standby').forEach(s => ctx.neighborsOf(s, 'ec2').forEach(e => issues.push({ nodeIds: [s.id, e.id],
+        message: 'EC2가 RDS Standby에 바로 연결돼 있어요. Standby는 읽기·쓰기를 받지 않아요. 이 연결을 지우고 EC2 — RDS(본체)로 연결해주세요.' })));
+      return issues;
+    },
+  },
+  {
+    // 근거: DB-03 (등급 A)
+    id: 14, level: 'error', message: 'Replica 원본',
+    pillars: ['reliability'],
+    basis: 'Read Replica는 이미 있는 RDS를 원본으로 만들어요. RDS 없이 Replica만 있을 수 없어요.',
+    ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReadRepl.html',
+    check(ctx) {
+      const replicas = ctx.ofType('rds-replica');
+      if (!replicas.length || ctx.ofType('rds').length) return [];
+      return [{ nodeIds: replicas.map(n => n.id),
+        message: 'RDS Read Replica는 있는데 원본이 될 RDS가 없어요. Replica는 RDS를 복사해서 만드니, RDS를 먼저 놓아주세요.' }];
+    },
+  },
+  {
+    // 근거: DB-01 (등급 A)
+    id: 15, level: 'error', message: 'DB 서브넷 AZ',
+    pillars: ['reliability'],
+    basis: 'RDS를 만들려면 VPC에 서로 다른 AZ의 서브넷이 2개 이상 필요해요. AZ 하나뿐이면 만들 수 없어요.',
+    ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html',
+    check(ctx) {
+      const dbs = ctx.ofType(...RDS_TYPES);
+      const subnets = state.containers.filter(c => SUBNET_TYPES.includes(c.type));
+      if (!dbs.length || !subnets.length) return [];   // 서브넷이 아예 없으면 규칙 4가 알림
+      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => findContainer(id)?.type === 'az'));
+      if (azIds.size >= 2) return [];
+      return [{ nodeIds: dbs.map(n => n.id),
+        message: 'RDS는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
     },
   },
 ];

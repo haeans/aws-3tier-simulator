@@ -50,6 +50,11 @@ const PLACEMENT_RULES = {
     test: zone => zone === 'db',
     message: name => `${eunNeun(name)} DB 서브넷 안에만 놓을 수 있어요.`,
   },
+  // ElastiCache: 문서는 VPC 안의 서브넷 그룹이라고만 한다 (criteria/data.md CACHE-01). DB 서브넷이 권장, 프라이빗 서브넷도 가능
+  dataSubnet: {
+    test: zone => zone === 'db' || zone === 'private',
+    message: name => `${eunNeun(name)} DB 서브넷이나 프라이빗 서브넷 안에만 놓을 수 있어요.`,
+  },
   any: {
     test: () => true,
     message: () => '',

@@ -12,12 +12,12 @@
 | 2b | 반영 | 입구: LB·IGW·NAT 규칙 + 테스트 | 규칙, tests/, CHANGELOG | ☑ v1.30 (4단계로 나눠 진행) |
 | 2c | 조사 | 입구: Route 53, CloudFront, WAF | entry.md | ☑ |
 | 2d | 반영 | 입구: Route 53·CloudFront·WAF 규칙 + 테스트 | 규칙, tests/, CHANGELOG | ☑ v1.31 |
-| 3a | 조사 | 서버: EC2, Auto Scaling, 서브넷·AZ | server.md | ☐ |
-| 3b | 반영 | 서버 규칙 + 테스트 | 〃 | ☐ |
-| 3c | 조사 | 데이터: RDS·Standby·Replica | data.md | ☐ |
-| 3d | 반영 | RDS 계열 규칙 + 테스트 | 〃 | ☐ |
-| 3e | 조사 | 데이터: ElastiCache, S3, DynamoDB | data.md | ☐ |
-| 3f | 반영 | 캐시·S3·DynamoDB 규칙 + 테스트 | 〃 | ☐ |
+| 3a | 조사 | 서버: EC2, Auto Scaling, 서브넷·AZ | server.md | ☑ (대부분 이미 반영됨, 고칠 곳 1개) |
+| 3b | 반영 | 서버 규칙 + 테스트 (SRV-08 하나) | 〃 | ☑ v1.32 |
+| 3c | 조사 | 데이터: RDS·Standby·Replica | data.md | ☑ |
+| 3d | 반영 | RDS 계열 규칙 + 테스트 | 〃 | ☑ v1.33 |
+| 3e | 조사 | 데이터: ElastiCache, S3, DynamoDB | data.md | ☑ |
+| 3f | 반영 | 캐시·S3·DynamoDB 규칙 + 테스트 | 〃 | ☑ v1.34 |
 | 3g | 조사 | 접근·운영 (VPCE, VPN, SSM, IAM) | ops.md | ☐ |
 | 3h | 반영 | 접근 규칙 + 테스트 | 〃 | ☐ |
 | 3i | 조사 | 운영 (CloudTrail, CloudWatch, CloudFormation) | ops.md | ☐ |

@@ -65,9 +65,9 @@ const SUGGESTION_RULES = [
     },
   },
   {
-    id: 3, kind: 'improve', title: 'S3 전용 통로',
+    id: 3, kind: 'improve', title: 'S3·DynamoDB 전용 통로',
     pillars: ['security', 'cost'],
-    basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
+    basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3·DynamoDB에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html',
     praise(ctx) {
       const eps = ctx.ofType('vpce').filter(v => ctx.neighborsOf(v, 's3', 'dynamodb').length);
@@ -76,14 +76,19 @@ const SUGGESTION_RULES = [
         text: 'VPC Endpoints로 NAT 없이 S3·DynamoDB에 비공개로 접속해요. NAT 데이터 처리 요금도 줄어요.' }];
     },
     check(ctx) {
-      if (ctx.ofType('vpce').length) return [];
-      const ec2s = ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private' && ctx.neighborsOf(e, 's3').length);
-      if (!ec2s.length) return [];
-      return [{
-        nodeIds: ec2s.flatMap(e => [e.id, ...ctx.neighborsOf(e, 's3').map(n => n.id)]),
-        reason: '프라이빗 서브넷의 EC2가 S3에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.',
-        action: 'VPC Endpoints를 VPC 안(서브넷 밖)에 두고 EC2와 S3 사이를 연결하세요.',
-      }];
+      // 근거: DDB-S-01 — S3·DynamoDB는 서비스마다 게이트웨이 엔드포인트가 따로 필요하다 (VPC Endpoints가 하나라도 있으면 통과시키지 않음)
+      const issues = [];
+      ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').forEach(e => {
+        const bare = ctx.neighborsOf(e, 's3', 'dynamodb').filter(sv => !ctx.neighborsOf(sv, 'vpce').length);
+        if (!bare.length) return;
+        const names = [...new Set(bare.map(ctx.nameOf))].join('·');
+        issues.push({
+          nodeIds: [e.id, ...bare.map(n => n.id)],
+          reason: `프라이빗 서브넷의 EC2가 ${names}에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.`,
+          action: `VPC Endpoints를 VPC 안(서브넷 밖)에 두고 ${names}와 연결하세요. (엔드포인트는 서비스마다 따로 필요해요)`,
+        });
+      });
+      return issues;
     },
   },
   {
@@ -358,6 +363,22 @@ const SUGGESTION_RULES = [
         nodeIds: ctx.ofType('nat').map(n => n.id),
         reason: `${missing.map(a => a.label).join(', ')}의 서버는 다른 AZ의 NAT를 같이 써요. 그 NAT가 있는 AZ에 장애가 나면 인터넷으로 나갈 수 없어요.`,
         action: `${missing.map(a => a.label).join(', ')}의 퍼블릭 서브넷에도 NAT를 두세요.`,
+      }];
+    },
+  },
+  {
+    // 근거: DB-05 (등급 C) — 프라이빗 서브넷의 DB는 오류가 아니지만, 앱 서버와 계층을 나누면 더 안전
+    id: 14, kind: 'improve', title: 'DB 서브넷 분리',
+    pillars: ['security'],
+    basis: 'DB를 앱 서버와 다른 서브넷(DB 서브넷)에 두면, 서브넷 단위로 접근을 더 좁게 막을 수 있어요. 프라이빗 서브넷의 DB도 동작은 하지만 계층이 섞여요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_layered.html',
+    check(ctx) {
+      const dbs = ctx.ofType(...RDS_TYPES).filter(db => ctx.zoneOf(db) === 'private');
+      if (!dbs.length) return [];
+      return [{
+        nodeIds: dbs.map(n => n.id),
+        reason: 'DB가 앱 서버(EC2)와 같은 프라이빗 서브넷에 있어요. 서브넷 단위로 접근을 따로 좁히기 어려워요.',
+        action: 'DB 서브넷을 만들어 DB를 옮기세요. 앱 서버가 있는 서브넷과 계층이 나뉘어요.',
       }];
     },
   },

@@ -103,13 +103,23 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
 - 커밋 메시지는 한국어로 쓴다. 커밋할 때 CHANGELOG.md도 함께 맞춘다.
 - 커밋·푸시는 사용자 승인 후에만 한다.
 
-## 세션 인계 (2026-10-27 기준, 새 세션은 여기부터 읽는다)
+## 세션 인계 (2026-10-27 기준, v1.34, 새 세션은 여기부터 읽는다)
 
-- **현재 상태:** v1.29.2, GitHub 푸시는 602d2ff까지. 작업 계획 3차 중 0(팔레트)·A(잘한 점)·B(성능 시뮬레이션 12-1~12-5) 완료.
-  - 2026-10-27 문서 구조 정리(README.txt → README.md + GUIDE.md + ROADMAP.md, CHANGELOG.md)는 아직 커밋 전
-- **다음 작업:** ROADMAP.md 14번 [판정 기준 정비] 0단계(설계). 계획·단계·예상 양은 ROADMAP.md 14번에 있다.
+- **현재 상태:** v1.34, 브랜치 `docs/criteria` (커밋 1c746fd~8f2bac9 "docs: 규칙 및 판정 설계 #1~#4"). **GitHub 푸시는 안 했다** (origin/main은 602d2ff).
+  - 작업 계획 3차 중 0(팔레트)·A(잘한 점)·B(성능 시뮬레이션) 완료. ROADMAP.md 14번 [판정 기준 정비]는 진행 중
+  - 14번 진행: 0(설계)·1a(변이 테스트)·2a~2d(입구 묶음)·3a~3f(서버·데이터 묶음) 완료. **다음 칸은 3g(접근·운영 조사)**
+- **다음 작업:** `criteria/PROGRESS.md`를 읽고 첫 ☐ 칸부터 한다. 기준표·양식은 `criteria/README.md`, 조사 결과는 `criteria/entry.md`·`server.md`·`data.md`
+  - 남은 칸: 3g~3j 접근·운영(VPC Endpoints·Client VPN·Session Manager·IAM·CloudTrail·CloudWatch·CloudFormation), 3k~3l 컨테이너·CI/CD, 4 문서 정리
+  - 조사 칸은 코드를 바꾸지 않고 criteria/*.md에 쓴다. 반영 칸은 규칙 + 테스트 + CHANGELOG/버전(다음은 1.35) + 문서
   - 사용자는 Team 요금제라 토큰 한도가 빠듯하다. 작업 단위 1개 = 새 세션 1개로 잘게 진행하고, 결과는 파일에 저장한다
-  - 0단계에서 판정 기준표·저장 위치·진행표를 정해 승인받고, WebSearch·WebFetch 사용 승인도 받는다
+- **판정 기준 정비의 원칙 (사용자 결정, 2026-10-27)**
+  - **판정은 현실(AWS 공식 문서)과 벗어나지 않는다.** 문서가 금지하지 않는 것을 오류로 막아도 안 되고(너무 엄격), 문서가 못 박은 것을 통과시켜도 안 된다(너무 느슨).
+    - 예: EC2가 퍼블릭 서브넷에 있으면 오류 → 경고(v1.32), 프라이빗 서브넷의 DB는 오류가 아님(v1.33)
+  - 등급: A 오류(문서가 필수·안 됨) / B 경고(Security Hub·Config) / C 제안(Well-Architected) / X 제외(근거 없음, 칭찬만 막음). 근거 없는 항목은 규칙을 만들지 않는다
+  - 근거 등급과 화면 수준이 다를 수 있다: B등급이어도 "정상"의 의미를 흔들면 제안으로 두고 GUIDE.md에 이유를 적는다. WAF 같은 검증 대상 아닌 서비스(validated:false)의 A등급은 제안(제거)으로 반영
+  - `some`(하나라도 있으면 통과)으로 판정하던 규칙은 "모두/각각"으로 바꾸거나, 칭찬을 문제가 없을 때만 내도록 좁힌다
+  - 승인 범위(이 작업에서 사용자가 준 것): WebSearch·WebFetch는 AWS 공식 문서 조사용, 코드 수정은 조사한 항목 반영에 한해 승인. **커밋은 사용자가 요청할 때만** 한다 (이 작업 동안은 "커밋 없이 쭉 진행"이 기본이었고, 커밋 메시지는 "docs: 규칙 및 판정 설계 #번호")
+  - 근거가 불확실하면 사용자에게 선택지(AskUserQuestion)로 추천안과 함께 묻는다
 - **그다음 작업:** ROADMAP.md 13번 [C. 마이그레이션 설계 + 성능 시뮬레이션]. 코드 전에 **설계안부터** 보여주고 승인받는다.
   - 후보(공식 문서 확인 전): IDC(온프레미스) 영역, Site-to-Site VPN / Direct Connect, MGN, DMS, Lambda, API Gateway, 컨테이너·CI/CD 판정 규칙
   - 옮기기 전후 구성을 12번 성능 시뮬레이션 엔진(js/rules/simulation.js)으로 비교한다. 새 서비스는 PERF·PERF_ROUTES(js/data/performance.js)에 성능 정보를 더하는 방식
@@ -125,5 +135,7 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
   - 화면 확인: scratchpad에 Playwright 설정(testDir = scratchpad, `require('C:/mzc/ai-foundation/aws-3tier-simulator/node_modules/@playwright/test')`)과 spec을 두고 `npx playwright test --config=<그 설정>`으로 스크린샷
   - 결과 영역(아래 패널) 높이가 바뀌면 캔버스가 줄어 기존 테스트의 클릭 좌표가 패널에 가려진다 (탭 높이 24px 유지 이유)
   - 사용자 전역 git 설정: `core.autocrlf = true`. 프로젝트는 .gitattributes로 LF 고정이라 영향 없음
-- **확인 못 한 질문:** VS Code 소스 제어에 "변경 9개"가 보인다고 함. git status는 docs/만 나옴. 새로고침·다른 저장소·줄바꿈 중 원인 확인 필요
-  - 2026-10-27: 사용자가 push·pull로 동기화한 뒤 git status가 깨끗해짐 (docs/는 .gitignore로 제외된 것으로 보임). VS Code 화면은 다시 확인하지 않음
+  - 이 PC에는 파이썬이 없다 (문서·파일 일괄 수정은 node 스크립트로). 승인된 uv 설치는 아직 안 했고 필요 없었다
+  - scratchpad에서 playwright 설정을 만들 때 `testDir`을 `process.env.TEMP`로 두면 EPERM(WinSAT)이 난다 → scratchpad 경로를 `__dirname`으로
+  - 규칙 반영 요령: 판정 규칙은 js/rules/validation.js(맨 끝에 추가), 제안은 js/rules/suggestions.js, 배치는 js/rules/placement.js. 규칙 코드 주석에 `// 근거: LB-02`처럼 criteria ID를 적는다. 검증 대상이 아닌 서비스(route53·waf 등)는 판정 ctx에 없어 `state.edges`로 직접 찾는다
+  - 새 테스트는 tests/validation.spec.js 맨 아래의 `connect`·`verdict`·`moveNode` 도구를 쓴다. 정상 구성(buildValidArch)의 NAT는 AZ A에만 있어 "NAT를 AZ마다" 제안(제안 12)이 기본으로 뜬다
