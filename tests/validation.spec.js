@@ -1,6 +1,6 @@
 // 검증·제안·동적 흐름 테스트
 const { test, expect } = require('@playwright/test');
-const { openApp, buildValidArch, dragWorld } = require('./helpers');
+const { openApp, buildValidArch, dragWorld, connect, verdict, moveNode } = require('./helpers');
 
 test('빈 캔버스에서 검증하면 서비스를 먼저 배치하라고 안내한다', async ({ page }) => {
   await openApp(page);
@@ -320,26 +320,28 @@ test('모든 서비스와 규칙에 AWS 공식 문서 출처가 있다', async (
   expect(missing).toEqual([]);
 });
 
-// ----- 판정 기준 정비 (criteria/entry.md, ROADMAP 14번) -----
-// 박스 종류로 연결선 하나 더하기 (i, j = 같은 종류 중 몇 번째)
-const connect = (page, a, b, i = 0, j = 0) => page.evaluate(([a, b, i, j]) => {
-  const T = (t, k) => state.nodes.filter(n => n.type === t)[k];
-  state.edges.push({ id: newId('e'), from: T(a, i).id, to: T(b, j).id, fromSide: null, toSide: null, mid: null });
-  render();
-}, [a, b, i, j]);
-// 검증을 새로 돌려 결과 요약을 돌려준다 (이미 결과가 떠 있으면 한 번 종료했다가 다시 검증)
-const verdict = async page => {
-  if (await page.locator('#btn-validate').textContent() === '검증 종료') await page.click('#btn-validate');
-  await page.click('#btn-validate');
-  return page.evaluate(() => ({
-    status: validation.status,
-    issues: validation.issues.map(i => i.rule.id),
-    praises: validation.praises.map(p => (p.rule.level ? 'V' : 'S') + p.rule.id),
-    sug: validation.suggestions.map(s => s.rule.id),
-    msgs: [...validation.issues.map(i => i.message), ...validation.suggestions.map(s => s.reason)],
-  }));
-};
+test('criteria 문서와 코드가 맞는다: 반영된 항목은 코드에 근거 주석이 있고, 코드의 근거 ID는 문서에 있다', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '..');
+  const jsText = fs.readdirSync(path.join(root, 'js'), { recursive: true })
+    .filter(f => String(f).endsWith('.js')).map(f => fs.readFileSync(path.join(root, 'js', String(f)), 'utf8')).join('\n');
+  const items = new Map();   // ID → 상태
+  fs.readdirSync(path.join(root, 'criteria')).filter(f => f.endsWith('.md') && !['README.md', 'PROGRESS.md'].includes(f)).forEach(f => {
+    fs.readFileSync(path.join(root, 'criteria', f), 'utf8').split(/^### /m).slice(1).forEach(sec => {
+      const id = sec.match(/^[A-Z0-9-]+/)[0];
+      items.set(id, (sec.match(/^- 상태: (.*)$/m) || [])[1] || '');
+    });
+  });
+  // UI-10 같은 화면 구역 번호(js/ui/core.js)는 criteria ID가 아니다
+  const cited = new Set(jsText.match(/\b[A-Z][A-Z0-9]*(?:-[A-Z])?-\d{2}\b/g).filter(id => !id.startsWith('UI-')));
+  const notCited = [...items].filter(([id, st]) => st.startsWith('반영') && !cited.has(id)).map(([id]) => id);
+  const unknown = [...cited].filter(id => !items.has(id));
+  expect(notCited).toEqual([]);
+  expect(unknown).toEqual([]);
+});
 
+// ----- 판정 기준 정비 (criteria/entry.md, ROADMAP 14번) -----
 test('LB-02: LB와 연결된 EC2가 한 AZ에만 있으면 경고한다', async ({ page }) => {
   await openApp(page);
   await buildValidArch(page);
@@ -493,12 +495,6 @@ test('SRV-08: EC2가 퍼블릭 서브넷에 있으면 오류가 아니라 경고
 });
 
 // ----- 데이터 묶음: RDS (criteria/data.md DB-01~05) -----
-const moveNode = (page, type, x, y, idx = 0) => page.evaluate(([type, x, y, idx]) => {
-  const n = state.nodes.filter(n => n.type === type)[idx];
-  n.x = x; n.y = y;
-  recomputeParents(); render();
-}, [type, x, y, idx]);
-
 test('DB-05: DB가 프라이빗 서브넷에 있으면 오류가 아니라 제안, 퍼블릭 서브넷이면 경고, 서브넷 밖이면 오류', async ({ page }) => {
   await openApp(page);
   await buildValidArch(page);

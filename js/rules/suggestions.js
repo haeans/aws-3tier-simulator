@@ -7,24 +7,27 @@
    - 검증 대상이 아닌 서비스(validated: false)도 함께 본다.
    - check(ctx)는 [{ reason, action, nodeIds }]를 돌려준다 (빈 배열 = 제안 없음)
    - pillars / basis: Well-Architected 기준 태그와 근거 (js/data/guide.js의 PILLARS)
-   - praise(ctx): 제안이 없고 좋은 구성이 실제로 있을 때 [{ text, nodeIds }] (잘한 점, 제거 제안에는 없음) */
+   - praise(ctx): 제안이 없고 좋은 구성이 실제로 있을 때 [{ text, nodeIds }] (잘한 점, 제거 제안에는 없음)
+   - 배열 순서 = 화면에 나오는 순서. id는 화면의 "제안 N" 번호이자 criteria 문서가 가리키는 번호라 순서에 맞춰 바꾸지 않는다
+     (예: 13 잘못된 WAF 연결은 WAF 제안끼리 모이도록 10 다음에 둔다) */
 const SUGGESTION_RULES = [
   {
+    // 근거: CACHE-02
     id: 1, kind: 'improve', title: 'DB 캐싱',
     pillars: ['performance'],
     basis: '자주 읽는 데이터를 메모리 캐시에 두면 읽기가 빨라지고 DB 부담이 줄어요. 읽기가 쓰기보다 훨씬 많은 DB가 캐싱 대상이에요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/framework/perf_data_access_patterns_caching.html',
     praise(ctx) {
-      const ec2s = ctx.ofType('ec2').filter(e => ctx.neighborsOf(e, 'elasticache').length);
+      const ec2s = ctx.ofType(...APP_TYPES).filter(e => ctx.neighborsOf(e, 'elasticache').length);
       if (!ec2s.length) return [];
       return [{ nodeIds: [...ec2s, ...ec2s.flatMap(e => ctx.neighborsOf(e, 'elasticache'))].map(n => n.id),
         text: 'EC2가 ElastiCache에서 자주 쓰는 데이터를 먼저 찾아요. DB 부담이 줄고 응답이 빨라져요.' }];
     },
     check(ctx) {
       const caches = ctx.ofType('elasticache');
-      const pairs = ctx.ofType('ec2').flatMap(e => ctx.neighborsOf(e, 'rds').map(r => [e, r]));
+      const pairs = ctx.ofType(...APP_TYPES).flatMap(e => ctx.neighborsOf(e, 'rds').map(r => [e, r]));
       if (!pairs.length) return [];
-      if (ctx.ofType('ec2').some(e => ctx.neighborsOf(e, 'elasticache').length)) return [];
+      if (ctx.ofType(...APP_TYPES).some(e => ctx.neighborsOf(e, 'elasticache').length)) return [];
       return [{
         nodeIds: [...new Set(pairs.flat().map(n => n.id))],
         reason: 'EC2가 RDS를 직접 조회하고 있어요. 같은 데이터를 반복해서 읽으면 DB 부담이 커지고 응답이 느려져요.',
@@ -49,9 +52,9 @@ const SUGGESTION_RULES = [
       const users = ctx.ofType(...USER_TYPES);
       if (!users.length) return [];
       // 사용자가 S3나 EC2에 바로 붙어 있는 경우
-      const direct = users.filter(u => ctx.neighborsOf(u, 's3', 'ec2').length);
+      const direct = users.filter(u => ctx.neighborsOf(u, 's3', ...APP_TYPES).length);
       if (direct.length) return [{
-        nodeIds: direct.flatMap(u => [u.id, ...ctx.neighborsOf(u, 's3', 'ec2').map(n => n.id)]),
+        nodeIds: direct.flatMap(u => [u.id, ...ctx.neighborsOf(u, 's3', ...APP_TYPES).map(n => n.id)]),
         reason: '사용자가 S3나 EC2에서 파일을 직접 받아가요. 멀리 있는 사용자는 느리고, 서버가 모든 전송을 떠안아요.',
         action: '정적 파일은 S3에 두고 CloudFront를 거쳐 전달하세요. (사용자 — CloudFront — S3 / IGW)',
       }];
@@ -65,6 +68,7 @@ const SUGGESTION_RULES = [
     },
   },
   {
+    // 근거: S3-01, VPCE-01, DDB-S-01
     id: 3, kind: 'improve', title: 'S3·DynamoDB 전용 통로',
     pillars: ['security', 'cost'],
     basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3·DynamoDB에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
@@ -78,7 +82,7 @@ const SUGGESTION_RULES = [
     check(ctx) {
       // 근거: DDB-S-01 — S3·DynamoDB는 서비스마다 게이트웨이 엔드포인트가 따로 필요하다 (VPC Endpoints가 하나라도 있으면 통과시키지 않음)
       const issues = [];
-      ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').forEach(e => {
+      ctx.ofType(...APP_TYPES).filter(e => ctx.zoneOf(e) === 'private').forEach(e => {
         const bare = ctx.neighborsOf(e, 's3', 'dynamodb').filter(sv => !ctx.neighborsOf(sv, 'vpce').length);
         if (!bare.length) return;
         const names = [...new Set(bare.map(ctx.nameOf))].join('·');
@@ -92,6 +96,7 @@ const SUGGESTION_RULES = [
     },
   },
   {
+    // 근거: SRV-03, SRV-04
     id: 4, kind: 'improve', title: '자동 확장',
     pillars: ['reliability', 'cost'],
     basis: 'Auto Scaling으로 사용량에 맞춰 서버를 자동으로 늘리고 줄이면, 몰릴 때 버티고 한가할 때 비용을 아껴요.',
@@ -126,6 +131,7 @@ const SUGGESTION_RULES = [
     },
   },
   {
+    // 근거: CT-01, CT-02
     id: 5, kind: 'improve', title: '모니터링·감사',
     pillars: ['operations', 'security'],
     basis: '작업 기록(CloudTrail)과 상태 지표·로그(CloudWatch)를 남겨야 문제를 빨리 알아채고 원인을 찾을 수 있어요.',
@@ -133,12 +139,12 @@ const SUGGESTION_RULES = [
     praise(ctx) {
       // 근거: CT-02 — 둘이 이어졌을 때만 칭찬 (CloudTrail 로그가 CloudWatch Logs로 가야 이상한 작업을 바로 알림받음)
       const pairs = ctx.ofType('cloudtrail').flatMap(t => ctx.neighborsOf(t, 'cloudwatch').map(w => [t, w]));
-      if (!ctx.ofType('ec2').length || !pairs.length) return [];
+      if (!ctx.ofType(...APP_TYPES).length || !pairs.length) return [];
       return [{ nodeIds: [...new Set(pairs.flat().map(n => n.id))],
         text: 'CloudTrail(작업 기록)을 CloudWatch(상태·경보)와 이었어요. 문제를 빨리 알아채고 원인을 찾을 수 있어요.' }];
     },
     check(ctx) {
-      if (!ctx.ofType('ec2').length) return [];
+      if (!ctx.ofType(...APP_TYPES).length) return [];
       const missing = [];
       if (!ctx.ofType('cloudwatch').length) missing.push('CloudWatch(상태 모니터링·알림)');
       if (!ctx.ofType('cloudtrail').length) missing.push('CloudTrail(작업 기록)');
@@ -178,6 +184,7 @@ const SUGGESTION_RULES = [
     },
   },
   {
+    // 근거: CACHE-02, CF-01, R53-02, VPCE-02, LB-06 (조합별 주석 참고)
     id: 7, kind: 'remove', title: '불필요한 연결',
     pillars: [],
     basis: '실제로 통신하지 않는 연결은 구성을 잘못 이해하게 만들어요. 캐시는 앱이 먼저 확인하고, 없으면 앱이 DB에서 읽어 캐시에 넣어요.',
@@ -193,7 +200,7 @@ const SUGGESTION_RULES = [
           'CloudFront의 원본은 S3나 웹 서버(Load Balancer)예요. DB는 CloudFront가 아니라 앱 서버(EC2)가 조회해요.',
           '이 연결을 지우고 EC2 — RDS로 연결하세요.'],
         // 근거: R53-02 (등급 C)
-        ['route53', ['ec2', ...RDS_TYPES],
+        ['route53', [...APP_TYPES, ...RDS_TYPES],
           'Route 53은 도메인을 CloudFront나 Load Balancer 같은 공개 입구로 이어 줘요. 프라이빗 서브넷의 서버·DB는 공개 IP가 있어도 인터넷과 통신할 수 없어요.',
           '이 연결을 지우고 사용자 — Route 53 — CloudFront(또는 Load Balancer)로 연결하세요.'],
         // 근거: VPCE-02 (등급 C)
@@ -217,6 +224,7 @@ const SUGGESTION_RULES = [
     },
   },
   {
+    // 근거: R53-01
     id: 8, kind: 'improve', title: '도메인 연결(DNS)',
     pillars: ['reliability'],
     basis: 'Route 53이 도메인 이름을 서비스 주소로 바꿔 사용자를 안내해요. 상태 확인을 켜면 문제가 생긴 곳을 피해 정상인 곳으로만 보내요.',
@@ -342,7 +350,7 @@ const SUGGESTION_RULES = [
     basis: 'Load Balancer는 하나를 만들어 여러 AZ에 걸쳐 쓰는 것이 기본이에요. AZ마다 따로 두면 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지도 못해요.',
     ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
     praise(ctx) {
-      const lbs = ctx.ofType('lb').filter(lb => new Set(ctx.neighborsOf(lb, 'ec2').map(ctx.azOf).filter(Boolean)).size > 1);
+      const lbs = ctx.ofType('lb').filter(lb => new Set(ctx.neighborsOf(lb, ...APP_TYPES).map(ctx.azOf).filter(Boolean)).size > 1);
       if (!lbs.length) return [];
       return [{ nodeIds: lbs.map(n => n.id),
         text: 'Load Balancer 하나가 여러 AZ의 EC2에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
@@ -396,69 +404,42 @@ const SUGGESTION_RULES = [
       }];
     },
   },
+  {
+    // 근거: SSM-03 (Security Hub SSM.1은 B, 정상의 의미를 흔들지 않도록 제안)
+    id: 15, kind: 'improve', title: 'Session Manager로 서버 관리',
+    pillars: ['security', 'operations'],
+    basis: 'Session Manager로 서버를 관리하면 열린 접속 포트·Bastion·SSH 키가 필요 없어요. 모든 EC2를 Systems Manager로 관리하는 것이 권장이에요.',
+    ref: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html',
+    praise(ctx) {
+      const ec2s = ctx.ofType('ec2');
+      if (!ec2s.length || ec2s.some(e => !ec2HasSessionManager(e))) return [];
+      return [{ nodeIds: ec2s.map(n => n.id),
+        text: '모든 EC2를 Session Manager로 관리해요. 열린 접속 포트나 SSH 키 없이 안전하게 접속해요.' }];
+    },
+    check(ctx) {
+      const bare = ctx.ofType('ec2').filter(e => !ec2HasSessionManager(e));
+      if (!bare.length) return [];
+      return [{
+        nodeIds: bare.map(n => n.id),
+        reason: 'Session Manager와 이어지지 않은 EC2가 있어요. 서버에 들어가려면 SSH 포트를 열고 키를 관리해야 해요.',
+        action: 'Session Manager를 VPC 밖에 두고 EC2와 연결하세요. (프라이빗 서브넷이면 NAT나 VPC Endpoints도 필요해요)',
+      }];
+    },
+  },
+  {
+    // 근거: CTR-04 (등급 C)
+    id: 16, kind: 'improve', title: 'Fargate 짝',
+    pillars: ['operations'],
+    basis: 'Fargate는 ECS나 EKS가 컨테이너를 서버 관리 없이 실행하는 방식이에요. 혼자서는 컨테이너를 실행하지 않아요.',
+    ref: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html',
+    check(ctx) {
+      const lone = ctx.ofType('fargate').filter(f => !ctx.neighborsOf(f, 'ecs', 'eks').length);
+      if (!lone.length) return [];
+      return [{
+        nodeIds: lone.map(n => n.id),
+        reason: 'ECS나 EKS와 이어지지 않은 Fargate가 있어요. Fargate는 ECS 작업이나 EKS Pod를 실행해 주는 방식이에요.',
+        action: 'Fargate를 ECS(또는 EKS)와 연결하세요.',
+      }];
+    },
+  },
 ];
-
-// 근거: SSM-03 (Security Hub SSM.1은 B, 정상의 의미를 흔들지 않도록 제안)
-SUGGESTION_RULES.push({
-  id: 15, kind: 'improve', title: 'Session Manager로 서버 관리',
-  pillars: ['security', 'operations'],
-  basis: 'Session Manager로 서버를 관리하면 열린 접속 포트·Bastion·SSH 키가 필요 없어요. 모든 EC2를 Systems Manager로 관리하는 것이 권장이에요.',
-  ref: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html',
-  praise(ctx) {
-    const ec2s = ctx.ofType('ec2');
-    if (!ec2s.length || ec2s.some(e => !ec2HasSessionManager(e))) return [];
-    return [{ nodeIds: ec2s.map(n => n.id),
-      text: '모든 EC2를 Session Manager로 관리해요. 열린 접속 포트나 SSH 키 없이 안전하게 접속해요.' }];
-  },
-  check(ctx) {
-    const bare = ctx.ofType('ec2').filter(e => !ec2HasSessionManager(e));
-    if (!bare.length) return [];
-    return [{
-      nodeIds: bare.map(n => n.id),
-      reason: 'Session Manager와 이어지지 않은 EC2가 있어요. 서버에 들어가려면 SSH 포트를 열고 키를 관리해야 해요.',
-      action: 'Session Manager를 VPC 밖에 두고 EC2와 연결하세요. (프라이빗 서브넷이면 NAT나 VPC Endpoints도 필요해요)',
-    }];
-  },
-});
-
-// 근거: CTR-04 (등급 C)
-SUGGESTION_RULES.push({
-  id: 16, kind: 'improve', title: 'Fargate 짝',
-  pillars: ['operations'],
-  basis: 'Fargate는 ECS나 EKS가 컨테이너를 서버 관리 없이 실행하는 방식이에요. 혼자서는 컨테이너를 실행하지 않아요.',
-  ref: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html',
-  check(ctx) {
-    const lone = ctx.ofType('fargate').filter(f => !ctx.neighborsOf(f, 'ecs', 'eks').length);
-    if (!lone.length) return [];
-    return [{
-      nodeIds: lone.map(n => n.id),
-      reason: 'ECS나 EKS와 이어지지 않은 Fargate가 있어요. Fargate는 ECS 작업이나 EKS Pod를 실행해 주는 방식이에요.',
-      action: 'Fargate를 ECS(또는 EKS)와 연결하세요.',
-    }];
-  },
-});
-
-function ec2HasSessionManager(e) {
-  return linkedNodes(e, 'sessionmanager').length > 0;
-}
-
-// 프라이빗 서브넷에 EC2가 있는 AZ 목록과, 그중 같은 AZ의 퍼블릭 서브넷에 NAT가 있는 AZ 목록
-function natCoverage(ctx) {
-  const azs = [...new Set(ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').map(ctx.azOf).filter(Boolean))];
-  const covered = azs.filter(a => ctx.ofType('nat').some(n => ctx.zoneOf(n) === 'public' && ctx.azOf(n) === a));
-  return { azs, covered };
-}
-
-
-// 사용자에서 출발해 요청이 닿는 박스 id 집합 (Route 53·WAF는 길이 아니므로 거치지 않음)
-function requestReach(ctx) {
-  const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
-  const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
-  const queue = [...reached];
-  for (let i = 0; i < queue.length; i++) {
-    ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
-      if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
-    });
-  }
-  return reached;
-}

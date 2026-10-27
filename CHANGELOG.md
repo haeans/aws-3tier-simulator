@@ -13,6 +13,18 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.37.2] 2026-10-27  판정 코드 구조 정리 (리팩터링, 판정·제안·시뮬레이션 결과 변화 없음)
+  추가: 기준선 테스트 tests/regression.spec.js — 정상·풍부한 구성과 그 변형(박스·연결선 빼기, 연결 더하기, 자리 옮기기),
+        시뮬레이션(트래픽·공격·장애·Auto Scaling)의 결과를 스냅샷과 비교
+  추가: criteria 문서와 코드 대조 테스트 — "반영됨" 항목마다 규칙 코드에 근거 주석이 있는지, 코드의 근거 ID가 문서에 있는지
+  변경: 앱 서버 역할 APP_TYPES(지금은 EC2만)를 두고, 규칙·시뮬레이션이 'ec2' 대신 역할로 찾게 함 (EC2만의 기능은 그대로 'ec2').
+        USER_TYPES·RDS_TYPES도 js/data/services.js로 옮겨 guide.js의 같은 목록(GUIDE_USERS·GUIDE_DBS)을 대신함
+  변경: 공용 조회 도구를 js/rules/context.js로 모음 (buildContext, linkedNodes, natCoverage 등). simAzOf → azOf, asgMembers → asgMembersOf로 하나로 합침
+  변경: 제안 15·16을 SUGGESTION_RULES 배열 안으로 옮김 (순서·번호 그대로). 근거 주석이 없던 규칙 13곳에 criteria ID 주석 추가
+  변경: js/ui/simulate.js의 캔버스 표시(박스 색·사용률 막대·트래픽 점)를 js/ui/sim-canvas.js(UI-12)로 나눔
+  변경: 테스트 도구 connect·verdict·moveNode를 tests/helpers.js로 옮기고, simulation.spec.js의 같은 도구(link)를 connect로 바꿈
+  비고: 동작이 바뀌지 않으므로 끝 숫자만 올림. 브랜치 refactor/rules
+
 [1.37.1] 2026-10-27  판정 기준 정비 9차: 변이 테스트 재측정·문서 정리 (1b·4단계)
   수정: LB—RDS 연결이 있어도 칭찬 4("DB를 DB 서브넷에 두고 인터넷과 바로 이어지지 않게 했어요")가 남던 것을 막음 (LB-07 보류 항목 마무리).
         오류·경고는 근거가 없어 만들지 않고 칭찬만 막음 (NLB로 DB를 열 수도 있어 "숨겼다"고 단정할 수 없음)
