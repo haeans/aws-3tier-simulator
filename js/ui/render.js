@@ -46,7 +46,6 @@ function buildAreaEl(c) {
 
   el.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
-    if (connectMode) { ev.stopPropagation(); cancelPendingConnect(); return; }
     if (ev.shiftKey) { startMarquee(ev); return; }   // Shift+드래그: 영역 위에서도 범위 선택
     const handle = /** @type {Element} */ (ev.target).closest('.resize');
     if (handle) startResize(ev, c, handle, handle.getAttribute('data-corner'));
@@ -75,7 +74,7 @@ function buildNodeEl(node) {
   del.addEventListener('click', ev => { ev.stopPropagation(); deleteNode(node.id); });
   el.appendChild(del);
 
-  // 연결점 (네 변의 중앙)
+  // 연결점 (네 변의 중앙). 마우스를 올리면 보이고, 끌어서 다른 박스에 놓으면 연결
   SIDES.forEach(side => {
     const a = document.createElement('div');
     a.className = 'anchor';
@@ -85,13 +84,8 @@ function buildNodeEl(node) {
 
   el.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
-    if (connectMode) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      const anchor = /** @type {Element} */ (ev.target).closest('.anchor');
-      handleConnectClick(node.id, anchor ? anchor.getAttribute('data-side') : null);
-      return;
-    }
+    const anchor = /** @type {Element} */ (ev.target).closest('.anchor');
+    if (anchor) { startConnectDrag(ev, node.id, anchor.getAttribute('data-side')); return; }
     if (ev.shiftKey) { ev.stopPropagation(); toggleMulti(node.id); return; }   // Shift+클릭: 여러 개 선택에 넣고 빼기
     startMoveDrag(ev, node, el);
   });
@@ -190,6 +184,28 @@ function stepZoom(dir, anchor) {
     ? ZOOM_STEPS.find(s => s > zoom + 1e-6)
     : [...ZOOM_STEPS].reverse().find(s => s < zoom - 1e-6);
   if (next) setZoom(next, anchor);
+}
+
+// ----- 화면 끌어 옮기기 (흰 배경 끌기, 스페이스바+끌기) -----
+function startPan(e) {
+  e.preventDefault();
+  const sx = e.clientX, sy = e.clientY;
+  const left = $wrap.scrollLeft, top = $wrap.scrollTop;
+  document.body.classList.add('panning');
+  hideTooltip();
+  const move = ev => {
+    $wrap.scrollLeft = left - (ev.clientX - sx);
+    $wrap.scrollTop  = top - (ev.clientY - sy);
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    document.body.classList.remove('panning');
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 }
 
 // ----- 저장 / 불러오기 (브라우저 localStorage) -----

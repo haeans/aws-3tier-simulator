@@ -1,46 +1,111 @@
 // @ts-check
-// js/ui/edges.js — UI-5 연결선 (연결 모드·직각 경로·손잡이·그리기)
+// js/ui/edges.js — UI-5 연결선 (연결점 끌기·직각 경로·손잡이·그리기)
 
 /* ---------------------------------------------------------
-   UI-5. 연결선 (연결 모드·직각 경로·손잡이·그리기)
+   UI-5. 연결선 (연결점 끌기·직각 경로·손잡이·그리기)
    --------------------------------------------------------- */
 
-// ----- 연결 모드 -----
-function setConnectMode(on) {
-  connectMode = on;
-  cancelPendingConnect();
-  $btnConnect.classList.toggle('active', on);
-  $btnConnect.textContent = on ? '연결 모드 켜짐' : '연결 모드';
-  document.body.classList.toggle('connect-mode', on);
-  render();
-  if (on) showToast('시작 박스를 클릭한 뒤 도착 박스를 클릭하세요. (Esc: 취소)');
-}
+// ----- 연결점으로 연결 (끌어 놓기, 또는 클릭 → 도착 박스 클릭) -----
+let connectCleanup = null;   // 연결 중에 걸어 둔 이벤트를 떼는 함수
 
 function cancelPendingConnect() {
+  if (connectCleanup) { connectCleanup(); connectCleanup = null; }
   if (!connectFrom) return;
   connectFrom = null;
   connectFromSide = null;
-  elMap.forEach(el => el.classList.remove('connect-from'));
+  elMap.forEach(el => el.classList.remove('connect-from', 'connect-target'));
+  document.body.classList.remove('connecting');
   $tempEdge.setAttribute('visibility', 'hidden');
 }
 
-// 연결 모드에서 박스 클릭 처리 (종류와 관계없이 연결 허용)
-// side: 연결점(변 중앙)을 눌렀으면 그 변, 박스 몸통을 눌렀으면 null(자동)
-function handleConnectClick(id, side) {
-  if (!connectFrom) {
-    connectFrom = id;
-    connectFromSide = side;
-    elMap.get(id).classList.add('connect-from');
-    return;
-  }
-  if (connectFrom === id) { cancelPendingConnect(); return; }
-  const from = connectFrom, fromSide = connectFromSide;
-  const dup = state.edges.some(ed =>
-    (ed.from === from && ed.to === id) || (ed.from === id && ed.to === from));
+// 포인터 아래의 박스와 연결점(변) 찾기
+function nodeAtPoint(cx, cy) {
+  const target = document.elementFromPoint(cx, cy);
+  const el = target && target.closest('#node-layer .node');
+  if (!el) return null;
+  const anchor = target.closest('.anchor');
+  return { id: el.getAttribute('data-id'), side: anchor ? anchor.getAttribute('data-side') : null };
+}
+
+// 연결 만들기. 도착이 연결점이면 양 끝 변을 그대로 쓰고, 박스 몸통이면 양 끝 모두 자동(박스를 피하는 경로)
+function finishConnect(from, side, hit) {
   cancelPendingConnect();
+  if (!hit || hit.id === from) return;
+  const dup = state.edges.some(ed =>
+    (ed.from === from && ed.to === hit.id) || (ed.from === hit.id && ed.to === from));
   if (dup) { showToast('이미 연결된 박스예요.'); return; }
-  state.edges.push({ id: newId('e'), from, to: id, fromSide, toSide: side, mid: null });
+  state.edges.push({ id: newId('e'), from, to: hit.id,
+    fromSide: hit.side ? side : null, toSide: hit.side, mid: null });
   render();
+}
+
+// 박스의 연결점을 누르면 연결 시작 (종류와 관계없이 연결 허용)
+// - 끌어서 다른 박스에 놓으면 연결
+// - 움직이지 않고 떼면 대기 → 다음에 누른 박스와 연결. 빈 곳·같은 박스를 누르거나 Esc면 취소
+//   (대기 중에도 휠·스페이스바+끌기로 화면을 옮길 수 있어 멀리 있는 박스도 이을 수 있다)
+function startConnectDrag(e, id, side) {
+  e.preventDefault();
+  e.stopPropagation();
+  cancelPendingConnect();
+  connectFrom = id;
+  connectFromSide = side;
+  elMap.get(id).classList.add('connect-from');
+  document.body.classList.add('connecting');
+  const sx = e.clientX, sy = e.clientY;
+  let moved = false;
+  let over = null;
+  const move = ev => {
+    if (!connectFrom) return;
+    if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 4) moved = true;
+    const from = findNode(connectFrom);
+    const c = anchorPoint(from, side);
+    const p = clientToWorld(ev.clientX, ev.clientY);
+    $tempEdge.setAttribute('x1', String(c.x));
+    $tempEdge.setAttribute('y1', String(c.y));
+    $tempEdge.setAttribute('x2', String(p.x));
+    $tempEdge.setAttribute('y2', String(p.y));
+    $tempEdge.setAttribute('visibility', 'visible');
+    const hit = nodeAtPoint(ev.clientX, ev.clientY);
+    const next = hit && hit.id !== connectFrom ? hit.id : null;
+    if (next !== over) {
+      if (over && elMap.get(over)) elMap.get(over).classList.remove('connect-target');
+      if (next) elMap.get(next).classList.add('connect-target');
+      over = next;
+    }
+  };
+  const up = ev => {
+    if (!connectFrom) return;
+    if (ev.type === 'pointerup' && !moved) {   // 클릭만 함 → 도착 박스를 누를 때까지 대기
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.addEventListener('pointerdown', down, true);
+      showToast('연결할 박스를 클릭하세요. (Esc: 취소)');
+      return;
+    }
+    finishConnect(id, side, ev.type === 'pointerup' ? nodeAtPoint(ev.clientX, ev.clientY) : null);
+  };
+  // 대기 중 다음 누름: 박스면 연결(박스 이동은 막음), 그 밖이면 취소. 스페이스바+끌기는 화면 이동이라 대기 유지
+  const down = ev => {
+    if (spaceHeld || ev.button !== 0) return;
+    const hit = nodeAtPoint(ev.clientX, ev.clientY);
+    if (hit && hit.id !== id) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      finishConnect(id, side, hit);
+    } else {
+      if (hit) { ev.preventDefault(); ev.stopPropagation(); }   // 같은 박스를 다시 누르면 취소만
+      cancelPendingConnect();
+    }
+  };
+  connectCleanup = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    window.removeEventListener('pointerdown', down, true);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 }
 
 // ----- 연결선 경로 (직각) -----
@@ -416,7 +481,7 @@ function renderEdges() {
       ev.stopPropagation();
       cancelPendingConnect();
       // 이미 선택된 선의 끝부분(화살촉 근처)을 잡으면 끝점 끌기로 처리
-      if (ed.id === selectedId && !connectMode) {
+      if (ed.id === selectedId) {
         const p = clientToWorld(ev.clientX, ev.clientY);
         const dist = q => Math.hypot(q.x - p.x, q.y - p.y);
         const dFrom = dist(pts[0]), dTo = dist(pts[pts.length - 1]);
@@ -428,7 +493,7 @@ function renderEdges() {
       select(ed.id);
     });
     $edgeG.append(line, hit);
-    if (!sel || connectMode) return;
+    if (!sel) return;
 
     // 선택된 연결선: 양 끝(연결 변 바꾸기) + 가운데(경로 옮기기) 손잡이. 더블클릭하면 자동으로 되돌림.
     // 손잡이는 박스 위 레이어에 그려서 박스·다른 선에 가려지지 않게 한다.

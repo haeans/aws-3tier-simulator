@@ -270,3 +270,23 @@ test('Shift+드래그로 범위 안의 박스를 고르고 Delete로 함께 지�
   await page.keyboard.press('Control+z');
   expect(await nodesOf(page, 'ec2')).toHaveLength(2);
 });
+
+test('흰 배경을 끌면 화면이 움직이고, 스페이스바를 누른 채 끌면 영역 위에서도 화면만 움직인다', async ({ page }) => {
+  await openApp(page);
+  const scroll = () => page.evaluate(() => ({ x: $wrap.scrollLeft, y: $wrap.scrollTop }));
+  await dragWorld(page, { x: 600, y: 500 }, { x: 400, y: 350 });   // 빈 캔버스(흰 배경) 끌기
+  expect(await scroll()).toEqual({ x: 200, y: 150 });
+
+  await page.click('#btn-template');                               // 화면을 맨 위로 되돌리고 영역을 채움
+  const sub = await page.evaluate(() => { const c = state.containers.find(c => c.type === 'public'); return { x: c.x + 50, y: c.y + 50 }; });
+  const before = await page.evaluate(() => state.containers.map(c => [c.x, c.y]));
+  const s = await toScreen(page, sub.x, sub.y);
+  await page.keyboard.down('Space');
+  await page.mouse.move(s.x, s.y);
+  await page.mouse.down();
+  await page.mouse.move(s.x - 150, s.y - 100, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+  expect(await scroll()).toEqual({ x: 150, y: 100 });
+  expect(await page.evaluate(() => state.containers.map(c => [c.x, c.y]))).toEqual(before);   // 영역은 그대로
+});
