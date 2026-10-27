@@ -79,6 +79,7 @@ const NESTING_RULES = {
       ? 'AZ(가용 영역)는 VPC 안에 놓아야 해요.'
       : 'AZ(가용 영역)는 서브넷이나 다른 AZ 안에 놓을 수 없어요. VPC 안의 빈 곳에 놓아주세요.',
   },
+  // 근거: SRV-01 — 서브넷은 AZ 하나 안에만 만들 수 있다
   subnet: {
     test: parentType => parentType === 'az',
     message: (parentType, name) => SUBNET_TYPES.includes(parentType)

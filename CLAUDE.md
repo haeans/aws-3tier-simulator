@@ -66,6 +66,7 @@ npm test         # Playwright 자동 테스트 (tests/*.spec.js, 이 PC의 Edge�
   - `tests/edges.spec.js`: 연결 모드·연결점·손잡이·경로 회피·강조
   - `tests/validation.spec.js`: 판정·제안·흐름 점·결과 클릭
   - `tests/simulation.spec.js`: 성능 시뮬레이션 계산·탭·사용률 막대
+  - `tests/regression.spec.js`: 리팩터링 기준선 (판정·제안·시뮬레이션 결과 스냅샷). 결과를 일부러 바꿀 때만 `npx playwright test regression --update-snapshots`
 - **기능을 추가하거나 고치면** 해당 spec 파일에 테스트를 추가한다.
   - 화면 조작은 `page.mouse`로 실제 마우스처럼 한다.
   - 준비와 확인은 `page.evaluate`로 앱 전역(state, addNode 등)을 쓴다.
@@ -103,9 +104,10 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
 - 커밋 메시지는 한국어로 쓴다. 커밋할 때 CHANGELOG.md도 함께 맞춘다.
 - 커밋·푸시는 사용자 승인 후에만 한다.
 
-## 세션 인계 (2026-10-27 기준, v1.37.1, 새 세션은 여기부터 읽는다)
+## 세션 인계 (2026-10-27 기준, v1.37.2, 새 세션은 여기부터 읽는다)
 
-- **현재 상태:** v1.37.1, 브랜치 `docs/criteria` (커밋 1c746fd~d538256 "docs: 규칙 및 판정 설계 #1~#4" 이후 **v1.30~v1.37.1 변경은 아직 커밋 안 함**). GitHub 푸시도 안 했다 (origin/main은 602d2ff).
+- **현재 상태:** v1.37.2, 브랜치 `refactor/rules` (main c54c5be = PR #1 "docs: 규칙 및 판정 설계 #5"까지 병합된 상태에서 분기). **리팩터링(v1.37.2) 변경은 아직 커밋 안 함**
+  - 리팩터링: 판정 결과는 그대로 두고 구조만 정리 (GUIDE.md 4장 [판정 코드 구조 정리]). 기준선 테스트 tests/regression.spec.js가 결과 변화를 잡는다
   - 작업 계획 3차 중 0(팔레트)·A(잘한 점)·B(성능 시뮬레이션) 완료. **ROADMAP.md 14번 [판정 기준 정비]도 완료** (criteria/PROGRESS.md 전 칸 ☑, 판정 19개·제안 16개)
 - **다음 작업:** ROADMAP.md 13번 [C. 마이그레이션 설계 + 성능 시뮬레이션]. 코드 전에 **설계안부터** 보여주고 승인받는다. 커밋은 사용자가 요청할 때만 한다 (커밋 메시지 형식 "docs: 규칙 및 판정 설계 #번호"였음)
   - 먼저 풀 것: 판정이 앱 서버를 EC2로만 봐서 컨테이너 구성이 오류가 난다 (criteria/container.md CTR-05)
@@ -134,4 +136,4 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
   - 이 PC에는 파이썬이 없다 (문서·파일 일괄 수정은 node 스크립트로). 승인된 uv 설치는 아직 안 했고 필요 없었다
   - scratchpad에서 playwright 설정을 만들 때 `testDir`을 `process.env.TEMP`로 두면 EPERM(WinSAT)이 난다 → scratchpad 경로를 `__dirname`으로
   - 규칙 반영 요령: 판정 규칙은 js/rules/validation.js(맨 끝에 추가), 제안은 js/rules/suggestions.js, 배치는 js/rules/placement.js. 규칙 코드 주석에 `// 근거: LB-02`처럼 criteria ID를 적는다. 검증 대상이 아닌 서비스(route53·waf 등)는 판정 ctx에 없어 `state.edges`로 직접 찾는다
-  - 새 테스트는 tests/validation.spec.js 맨 아래의 `connect`·`verdict`·`moveNode` 도구를 쓴다. 정상 구성(buildValidArch)의 NAT는 AZ A에만 있어 "NAT를 AZ마다" 제안(제안 12)이 기본으로 뜬다
+  - 새 테스트는 tests/helpers.js의 `connect`·`verdict`·`moveNode` 도구를 쓴다. 정상 구성(buildValidArch)의 NAT는 AZ A에만 있어 "NAT를 AZ마다" 제안(제안 12)이 기본으로 뜬다

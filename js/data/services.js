@@ -67,6 +67,15 @@ const SERVICES = [
 // 서비스별 색상은 카테고리 색을 그대로 사용
 SERVICES.forEach(s => { s.color = CAT_MAP[s.category].color; });
 
+// 역할별 박스 종류 (판정·제안·시뮬레이션이 "종류" 대신 "역할"로 박스를 찾을 때 쓴다)
+// APP_TYPES: 앱 서버 역할. 지금은 EC2만이다
+//   컨테이너(ECS·EKS·Fargate)를 앱 서버로 인정할지는 ROADMAP 13번에서 정한다 (criteria/container.md CTR-05)
+//   EC2만의 기능은 역할이 아니라 'ec2'로 직접 찾는다: Auto Scaling 그룹, Session Manager, Bastion,
+//   서버 위치(판정 11 — 컨테이너는 판정 17이 따로 본다)
+const USER_TYPES = ['smartphone', 'tablet', 'pc'];
+const APP_TYPES  = ['ec2'];
+const RDS_TYPES  = ['rds', 'rds-replica', 'rds-standby'];
+
 // 서비스 설명 (툴팁에 표시)
 const SERVICE_DESC = {
   smartphone:     '서비스를 이용하는 사용자예요. 인터넷을 통해 들어와요.',

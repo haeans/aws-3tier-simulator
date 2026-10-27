@@ -119,7 +119,7 @@ function simulateTraffic(rps, faults = null, attack = 0) {
     const targets = next.map(m => ({ m, share: fwd * weightOf(m) / totalWeight }));
     // EC2의 DB 조회: ElastiCache가 연결돼 있으면 캐시에 있는 몫은 캐시가 응답 (lazy loading)
     //               Read Replica가 연결돼 있으면 남은 조회 중 읽기 몫은 Replica로, 쓰기는 본체(RDS)로
-    if (n.type === 'ec2' && nextType === 'rds') {
+    if (APP_TYPES.includes(n.type) && nextType === 'rds') {
       const caches = farther.filter(m => m.type === 'elasticache');
       const replicas = farther.filter(m => m.type === 'rds-replica');
       let rest = 1;
@@ -166,19 +166,13 @@ function simulateTraffic(rps, faults = null, attack = 0) {
    - AZ 장애: 그 AZ 안의 EC2·DB가 모두 멈춤. LB·IGW는 여러 AZ에 걸친 관리형이라 그대로 동작
    ========================================================= */
 const HEALTH_INTERVAL = 30, UNHEALTHY_COUNT = 2, HEALTHY_COUNT = 5, FAILOVER_TIME = 90;
-const FAULT_TYPES = ['ec2', ...RDS_TYPES];   // 장애를 넣을 수 있는 박스
+const FAULT_TYPES = [...APP_TYPES, ...RDS_TYPES];   // 장애를 넣을 수 있는 박스
 
-// 박스가 속한 AZ 영역 (없으면 null)
-function simAzOf(n) {
-  let c = findContainer(n.parentContainer);
-  while (c && c.type !== 'az') c = findContainer(c.parentContainer);
-  return c || null;
-}
 // 사건 기록용 이름: "EC2(가용 영역 A)"
 function simNodeName(id) {
   const n = findNode(id);
   if (!n) return '';
-  const az = simAzOf(n);
+  const az = azOf(n);
   return SVC_MAP[n.type].name + (az ? `(${az.label})` : '');
 }
 
@@ -193,7 +187,7 @@ function faultDownNodes(f) {
   const set = new Set();
   state.nodes.forEach(n => {
     if (!FAULT_TYPES.includes(n.type)) return;
-    const az = simAzOf(n);
+    const az = azOf(n);
     if (f.down.has(n.id) || (az && f.downAzs.has(az.id))) set.add(n.id);
   });
   return set;
@@ -201,8 +195,8 @@ function faultDownNodes(f) {
 
 // RDS 본체의 짝 Standby (다른 AZ에 있는 첫 Standby)
 function standbyOf(rds) {
-  const az = simAzOf(rds);
-  const s = state.nodes.find(n => n.type === 'rds-standby' && simAzOf(n) && simAzOf(n) !== az);
+  const az = azOf(rds);
+  const s = state.nodes.find(n => n.type === 'rds-standby' && azOf(n) && azOf(n) !== az);
   return s || null;
 }
 
@@ -212,7 +206,7 @@ function stepFaults(f, t, last = null) {
   const down = faultDownNodes(f);
   const log = text => f.log.push({ t, text });
   // LB 상태 확인 (30초마다)
-  if (t % HEALTH_INTERVAL === 0) state.nodes.filter(n => n.type === 'ec2').forEach(n => {
+  if (t % HEALTH_INTERVAL === 0) state.nodes.filter(n => APP_TYPES.includes(n.type)).forEach(n => {
     const h = f.health.get(n.id) || { fails: 0, oks: 0, inService: true };
     f.health.set(n.id, h);
     if (down.has(n.id)) {
@@ -277,15 +271,11 @@ function stepFaults(f, t, last = null) {
    - 고장 교체: 그룹 안 EC2가 고장 나서 LB에서 빠지면 새 EC2로 교체. AZ 장애면 다른 AZ에 띄우고, 돌아오면 균형을 맞춤 */
 const ASG_TARGET = 0.5, ASG_OUT_AFTER = 60, ASG_IN_AFTER = 300, ASG_READY = 90, ASG_MAX_FACTOR = 3;
 
-// 그룹 영역 안의 EC2 박스 (박스 중심이 영역 안)
-function asgMembers(area) {
-  return state.nodes.filter(n => n.type === 'ec2' && inRect(rectOf(area), centerOf(n)));
-}
 const asgRunning = g => [...g.running.values()].reduce((a, b) => a + b, 0);
 
 // 그룹 상태를 만들고 그룹 안 박스 변화에 맞춤 (새 박스는 1대, 빠진 박스는 지움). 그룹 안에 EC2가 없으면 null
 function asgState(f, area) {
-  const members = asgMembers(area);
+  const members = asgMembersOf(area);
   if (!members.length) { f.asg.delete(area.id); return null; }
   let g = f.asg.get(area.id);
   if (!g) {
@@ -336,7 +326,7 @@ function stepAsg(f, t, last, down) {
       const lost = g.running.get(m.id) || 0;
       if (!down.has(m.id) || !h || h.inService || lost === 0) return;
       g.running.set(m.id, 0);
-      const az = simAzOf(m);
+      const az = azOf(m);
       if (!(az && f.downAzs.has(az.id))) {   // 박스만 고장: 같은 자리에 교체
         g.launching.push({ box: m.id, readyAt: t + ASG_READY, replace: true });
         log(`Auto Scaling이 고장 난 ${nameOf(m.id)}를 알아채고 새 EC2로 교체하기 시작해요 (약 ${ASG_READY}초)`);

@@ -1,6 +1,6 @@
 // 성능 시뮬레이션 테스트
 const { test, expect } = require('@playwright/test');
-const { openApp, buildValidArch } = require('./helpers');
+const { openApp, buildValidArch, connect } = require('./helpers');
 
 // 기본 구성 + 두 번째 EC2도 RDS와 연결 (모든 EC2가 DB를 쓰는 구성)
 async function buildSimArch(page) {
@@ -462,12 +462,6 @@ test('Auto Scaling 화면: 그룹 위에 대수, 늘어난 박스 이름에 ×�
 });
 
 // 테스트용: 두 박스를 연결
-const link = (page, a, b) => page.evaluate(([a, b]) => {
-  const A = state.nodes.find(n => n.type === a), B = state.nodes.find(n => n.type === b);
-  state.edges.push({ id: newId('e'), from: A.id, to: B.id, fromSide: null, toSide: null, mid: null });
-  render();
-}, [a, b]);
-
 test('CloudFront: 요청의 50%를 엣지 캐시가 바로 응답해서 EC2로 가는 요청이 절반이 된다', async ({ page }) => {
   await openApp(page);
   await buildSimArch(page);
@@ -526,7 +520,7 @@ test('공격 시나리오: WAF가 없으면 봇 요청이 서버까지 들어와
   await expect(page.locator('#sim-bottleneck')).toContainText('봇 요청');
   await expect(page.locator('#sim-bottleneck .sim-fix')).toContainText('제안 9 웹 방화벽');
   await page.evaluate(() => { addNode('waf', 120, 440); });
-  await link(page, 'waf', 'lb');
+  await connect(page, 'waf', 'lb');
   await expect(page.locator('#sim-now')).toContainText('WAF가 막는 중');
   await expect(page.locator('#sim-success')).toHaveText('100.0%');
   await expect(page.locator('.node .sim-bar.info', { hasText: '차단 300/초' })).toHaveCount(1);
@@ -562,7 +556,7 @@ test('해결 방법: EC2 병목은 자동 확장, DB 병목은 DB 캐싱으로 �
 test('RDS Standby는 장애 조치 전에는 RDS와 연결돼 있어도 "예비로 대기", 장애 조치 뒤에만 "새 본체"', async ({ page }) => {
   await openApp(page);
   await buildSimArch(page);
-  await link(page, 'rds', 'rds-standby');
+  await connect(page, 'rds', 'rds-standby');
   await page.locator('#result .tab[data-tab="sim"]').click();
   await page.locator('#sim-play').click();
   await page.locator('#sim-rps').fill('100');

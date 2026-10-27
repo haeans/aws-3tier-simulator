@@ -58,4 +58,30 @@ async function buildValidArch(page) {
 const nodesOf = (page, type) => page.evaluate(t => state.nodes.filter(n => n.type === t), type);
 const areasOf = (page, type) => page.evaluate(t => state.containers.filter(c => c.type === t), type);
 
-module.exports = { APP_URL, openApp, toScreen, drag, dragWorld, paletteDrop, buildValidArch, nodesOf, areasOf };
+// 박스 종류로 연결선 하나 더하기 (i, j = 같은 종류 중 몇 번째)
+const connect = (page, a, b, i = 0, j = 0) => page.evaluate(([a, b, i, j]) => {
+  const T = (t, k) => state.nodes.filter(n => n.type === t)[k];
+  state.edges.push({ id: newId('e'), from: T(a, i).id, to: T(b, j).id, fromSide: null, toSide: null, mid: null });
+  render();
+}, [a, b, i, j]);
+// 검증을 새로 돌려 결과 요약을 돌려준다 (이미 결과가 떠 있으면 한 번 종료했다가 다시 검증)
+const verdict = async page => {
+  if (await page.locator('#btn-validate').textContent() === '검증 종료') await page.click('#btn-validate');
+  await page.click('#btn-validate');
+  return page.evaluate(() => ({
+    status: validation.status,
+    issues: validation.issues.map(i => i.rule.id),
+    praises: validation.praises.map(p => (p.rule.level ? 'V' : 'S') + p.rule.id),
+    sug: validation.suggestions.map(s => s.rule.id),
+    msgs: [...validation.issues.map(i => i.message), ...validation.suggestions.map(s => s.reason)],
+  }));
+};
+
+// 박스 종류로 찾은 박스를 (x, y)로 옮기고 소속을 다시 계산 (idx = 같은 종류 중 몇 번째)
+const moveNode = (page, type, x, y, idx = 0) => page.evaluate(([type, x, y, idx]) => {
+  const n = state.nodes.filter(n => n.type === type)[idx];
+  n.x = x; n.y = y;
+  recomputeParents(); render();
+}, [type, x, y, idx]);
+
+module.exports = { APP_URL, openApp, toScreen, drag, dragWorld, paletteDrop, buildValidArch, nodesOf, areasOf, connect, verdict, moveNode };
