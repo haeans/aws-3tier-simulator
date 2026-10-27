@@ -19,16 +19,15 @@ test('팔레트에서 끌어 놓으면 배치되고, 허용되지 않는 위치�
   await expect(page.locator('#toast')).toContainText('VPC 밖에서 사용하는 서비스');
 });
 
-test('VPC Endpoints는 VPC 안·프라이빗 서브넷에 놓을 수 있고, 퍼블릭·DB 서브넷은 거부된다', async ({ page }) => {
+test('VPC Endpoints는 VPC 안과 모든 서브넷(퍼블릭·프라이빗·DB)에 놓을 수 있다 (VPCE-03)', async ({ page }) => {
   await openApp(page);
   await page.click('#btn-template');
   await paletteDrop(page, 'VPC Endpoints', 540, 430);       // 프라이빗 서브넷 A (인터페이스 엔드포인트)
   await paletteDrop(page, 'VPC Endpoints', 1200, 110);      // VPC 안, AZ 밖 (게이트웨이 엔드포인트)
   expect(await nodesOf(page, 'vpce')).toHaveLength(2);
-  await paletteDrop(page, 'VPC Endpoints', 540, 270);       // 퍼블릭 서브넷 A
+  await paletteDrop(page, 'VPC Endpoints', 540, 270);       // 퍼블릭 서브넷 A (문서는 서브넷 종류를 제한하지 않음)
   await paletteDrop(page, 'VPC Endpoints', 540, 590);       // DB 서브넷 A
-  expect(await nodesOf(page, 'vpce')).toHaveLength(2);
-  await expect(page.locator('#toast')).toContainText('프라이빗 서브넷 안에 놓아주세요');
+  expect(await nodesOf(page, 'vpce')).toHaveLength(4);
 });
 
 test('영역 중첩 규칙: AZ는 VPC 밖에 놓을 수 없다', async ({ page }) => {

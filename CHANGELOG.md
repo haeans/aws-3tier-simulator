@@ -13,6 +13,39 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.37.1] 2026-10-27  판정 기준 정비 9차: 변이 테스트 재측정·문서 정리 (1b·4단계)
+  수정: LB—RDS 연결이 있어도 칭찬 4("DB를 DB 서브넷에 두고 인터넷과 바로 이어지지 않게 했어요")가 남던 것을 막음 (LB-07 보류 항목 마무리).
+        오류·경고는 근거가 없어 만들지 않고 칭찬만 막음 (NLB로 DB를 열 수도 있어 "숨겼다"고 단정할 수 없음)
+  추가: 자동 테스트 1개
+  비고: 변이 19건을 다시 돌려 우선순위 표를 갱신 (criteria/PROGRESS.md). 남은 "조용한" 변이는 모두 근거 없음으로 제외한 항목.
+        GUIDE.md·ROADMAP.md 정리 — 14번 [판정 기준 정비] 완료로 옮김
+
+[1.37] 2026-10-27  판정 기준 정비 8차: 컨테이너·CI/CD 묶음
+  변경: 판정 규칙 16개 → 19개, 제안 규칙 15개 → 16개. 근거는 criteria/container.md (CTR-01~04)
+  변경: ECS·EKS·Fargate 배치 — 프라이빗 서브넷만 허용하던 것을 퍼블릭 서브넷까지 넓힘 (문서가 퍼블릭 서브넷도 허용, CTR-01). 팔레트 안내 문구도 바뀜
+  추가: 판정 17 컨테이너 위치(경고) — 퍼블릭 서브넷의 ECS·EKS·Fargate (공개 IP로 인터넷에 드러남, Security Hub ECS.2)
+  추가: 판정 18 컨테이너 이미지 경로(경고) — 프라이빗 서브넷의 컨테이너가 ECR과 이어졌는데 NAT도 VPC Endpoints도 없을 때
+  추가: 판정 19 EKS 서브넷 AZ(오류) — 서브넷이 있는 AZ가 하나뿐일 때
+  추가: 제안 16 Fargate 짝 — ECS·EKS와 이어지지 않은 Fargate
+  추가: 자동 테스트 4개 (배치 테스트는 변경 없음)
+  비고: CI/CD 4종·ECR은 근거가 없어 규칙을 만들지 않음. 컨테이너를 앱 서버(EC2 대신)로 인정하는 판정 확장은 13번에서 함께 설계 (criteria/container.md CTR-05)
+
+[1.36] 2026-10-27  판정 기준 정비 7차: 운영 묶음 (CloudTrail·CloudWatch·CloudFormation)
+  변경: 제안 5(모니터링·감사) — CloudTrail과 CloudWatch가 둘 다 있으면 칭찬하던 것을, 둘이 선으로 이어졌을 때만 칭찬 (CT-02, Security Hub CloudTrail.5)
+  추가: 둘이 따로 있으면 "CloudTrail — CloudWatch 연결" 제안
+  추가: 자동 테스트 1개
+  비고: CloudWatch(기본 지표는 자동 수집)·CloudFormation(설정값 컨트롤뿐)·IAM은 근거가 없어 규칙을 만들지 않음 (criteria/ops.md CW-01·CFN-01·IAM-01)
+
+[1.35] 2026-10-27  판정 기준 정비 6차: 접근 묶음 (VPC Endpoints·Client VPN·Session Manager)
+  변경: 판정 규칙 15개 → 16개, 제안 규칙 14개 → 15개. 근거는 criteria/ops.md (VPCE-02·03, SSM-01·03)
+  추가: 판정 16 Session Manager 경로(경고) — 프라이빗 서브넷의 EC2가 Session Manager와 이어졌는데 NAT도 VPC Endpoints도 없을 때
+  추가: 제안 15 Session Manager로 서버 관리 — Session Manager와 이어지지 않은 EC2가 있으면 제안, 모든 EC2가 이어지면 칭찬 (Security Hub SSM.1)
+  추가: 제안 7(불필요한 연결)에 VPC Endpoints — IGW·NAT 연결 (VPC Endpoints는 IGW·NAT 없이 가는 길)
+  변경: VPC Endpoints 배치 — 프라이빗 서브넷만 허용하던 것을 퍼블릭·DB 서브넷까지 넓힘 (문서는 서브넷 종류를 제한하지 않음)
+  변경: 정상 구성에도 제안 15가 기본으로 나타남 (자동 테스트 기대값 수정)
+  추가: 자동 테스트 4개
+  비고: Client VPN(서브넷 연결·AZ 이중화는 박스 1개로 표현 불가)·IAM은 규칙을 만들지 않음
+
 [1.34] 2026-10-27  판정 기준 정비 5차: 데이터 묶음 2 (ElastiCache·S3·DynamoDB)
   변경: ElastiCache 배치 — DB 서브넷에만 놓을 수 있던 것을 DB 서브넷 또는 프라이빗 서브넷으로 넓힘 (문서는 VPC 안 서브넷 그룹이라고만 함, CACHE-01).
         퍼블릭 서브넷은 근거가 없어 그대로 막음. 팔레트 안내 문구도 바뀜

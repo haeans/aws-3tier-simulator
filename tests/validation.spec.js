@@ -14,8 +14,8 @@ test('정상 구성은 "정상"으로 판정되고 개선 제안이 함께 표�
   await page.click('#btn-validate');
   await expect(page.locator('#result .status')).toHaveText('정상');
   const ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
-  expect(ids).toEqual([1, 2, 4, 5, 8, 9, 12]);               // DB 캐싱, CDN 사용, 자동 확장(EC2 2대), 모니터링·감사, DNS, 웹 방화벽, NAT를 AZ마다(NAT 1개)
-  await expect(page.locator('.issue.improve')).toHaveCount(7);
+  expect(ids).toEqual([1, 2, 4, 5, 8, 9, 12, 15]);           // DB 캐싱, CDN 사용, 자동 확장(EC2 2대), 모니터링·감사, DNS, 웹 방화벽, NAT를 AZ마다(NAT 1개), Session Manager
+  await expect(page.locator('.issue.improve')).toHaveCount(8);
 });
 
 test('Route 53·WAF는 놓기만 하면 연결하라고 제안하고, 연결하면 제안이 사라진다', async ({ page }) => {
@@ -577,4 +577,137 @@ test('DDB-S-01: 프라이빗 EC2가 S3·DynamoDB에 가려면 서비스마다 VP
   r = await verdict(page);
   expect(r.sug).not.toContain(3);
   expect(r.praises).toContain('S3');
+});
+
+test('VPCE-02: VPC Endpoints를 IGW·NAT와 잇는 것은 불필요한 연결 제안이 나온다 (오류·경고 아님)', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('vpce', 1200, 110); });   // VPC 안, AZ 밖
+  let r = await verdict(page);
+  expect(r.msgs.join(' ')).not.toContain('VPC Endpoints는 IGW·NAT 없이');
+  await connect(page, 'vpce', 'igw');
+  await connect(page, 'vpce', 'nat');
+  r = await verdict(page);
+  expect(r.sug).toContain(7);
+  expect(r.msgs.filter(m => m.includes('VPC Endpoints는 IGW·NAT 없이'))).toHaveLength(2);
+  expect(r.status).toBe('ok');                               // 판정은 그대로
+});
+
+test('SSM-01: 프라이빗 EC2가 Session Manager와 이어졌는데 NAT도 VPC Endpoints도 없으면 경고한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('sessionmanager', 120, 160); addNode('vpce', 1200, 110); addNode('vpce', 1200, 200); });
+  let r = await verdict(page);
+  expect(r.issues).not.toContain(16);                        // Session Manager를 안 이었으면 판정 없음
+  await connect(page, 'ec2', 'sessionmanager', 0, 0);
+  r = await verdict(page);
+  expect(r.issues).toContain(16);
+  expect(r.status).toBe('warn');
+  await connect(page, 'vpce', 'sessionmanager', 0, 0);       // VPC Endpoints로 길이 생김
+  r = await verdict(page);
+  expect(r.issues).not.toContain(16);
+  // 이번엔 VPC Endpoints 대신 NAT 경로 (두 번째 EC2)
+  await connect(page, 'ec2', 'sessionmanager', 1, 0);
+  await connect(page, 'ec2', 'nat', 1, 0);
+  r = await verdict(page);
+  expect(r.issues).not.toContain(16);
+});
+
+test('SSM-03: Session Manager와 이어지지 않은 EC2가 있으면 제안, 모두 이어지면 칭찬', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  let r = await verdict(page);
+  expect(r.sug).toContain(15);
+  await page.evaluate(() => { addNode('sessionmanager', 120, 160); });
+  await connect(page, 'ec2', 'sessionmanager', 0, 0);
+  r = await verdict(page);
+  expect(r.sug).toContain(15);                               // 두 번째 EC2는 아직
+  expect(r.praises).not.toContain('S15');
+  await connect(page, 'ec2', 'sessionmanager', 1, 0);
+  r = await verdict(page);
+  expect(r.sug).not.toContain(15);
+  expect(r.praises).toContain('S15');
+});
+
+test('CT-02: CloudTrail·CloudWatch가 따로 있으면 연결 제안, 이어지면 칭찬', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('cloudtrail', 120, 160); addNode('cloudwatch', 120, 460); });
+  let r = await verdict(page);
+  expect(r.sug).toContain(5);                                // 둘 다 있어도 이어지지 않음
+  expect(r.msgs.join(' ')).toContain('CloudTrail과 CloudWatch가 따로');
+  expect(r.praises).not.toContain('S5');
+  await connect(page, 'cloudtrail', 'cloudwatch');
+  r = await verdict(page);
+  expect(r.sug).not.toContain(5);
+  expect(r.praises).toContain('S5');
+});
+
+// ----- 컨테이너 묶음 (criteria/container.md CTR-01~04) -----
+test('CTR-01: 컨테이너는 퍼블릭 서브넷에도 놓을 수 있지만 경고하고, 프라이빗 서브넷이면 경고가 없다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('fargate', 530, 270); addNode('ecs', 640, 430); });   // 퍼블릭 / 프라이빗 서브넷 A
+  expect(await page.evaluate(() => state.nodes.filter(n => n.type === 'fargate' || n.type === 'ecs').length)).toBe(2);
+  let r = await verdict(page);
+  expect(r.issues).toContain(17);
+  expect(r.msgs.filter(m => m.includes('퍼블릭 서브넷에 있어요. 공개 IP'))).toHaveLength(1);   // 퍼블릭의 Fargate만
+  await moveNode(page, 'fargate', 560, 430);                 // 프라이빗 서브넷으로
+  r = await verdict(page);
+  expect(r.issues).not.toContain(17);
+});
+
+test('CTR-02: 프라이빗 컨테이너가 ECR과 이어졌는데 NAT도 VPC Endpoints도 없으면 경고한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('ecr', 120, 160); addNode('fargate', 560, 430); addNode('vpce', 1200, 110); });
+  let r = await verdict(page);
+  expect(r.issues).not.toContain(18);                        // ECR과 안 이었으면 판정 없음
+  await connect(page, 'fargate', 'ecr');
+  r = await verdict(page);
+  expect(r.issues).toContain(18);
+  await connect(page, 'vpce', 'ecr');                        // ECR용 VPC Endpoints로 길이 생김
+  r = await verdict(page);
+  expect(r.issues).not.toContain(18);
+  // NAT 경로
+  await page.evaluate(() => { state.edges = state.edges.filter(e => !state.nodes.some(n => n.type === 'vpce' && (n.id === e.from || n.id === e.to))); render(); });
+  r = await verdict(page);
+  expect(r.issues).toContain(18);
+  await connect(page, 'fargate', 'nat');
+  r = await verdict(page);
+  expect(r.issues).not.toContain(18);
+});
+
+test('CTR-03: EKS는 서브넷이 있는 AZ가 하나뿐이면 오류', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('eks', 560, 430); });
+  let r = await verdict(page);
+  expect(r.issues).not.toContain(19);
+  await page.evaluate(() => { deleteContainer(state.containers.find(c => c.label === '가용 영역 B').id); });
+  r = await verdict(page);
+  expect(r.issues).toContain(19);
+  expect(r.status).toBe('error');
+});
+
+test('CTR-04: ECS·EKS와 이어지지 않은 Fargate는 제안한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('fargate', 560, 430); addNode('ecs', 700, 430); });
+  let r = await verdict(page);
+  expect(r.sug).toContain(16);
+  await connect(page, 'fargate', 'ecs');
+  r = await verdict(page);
+  expect(r.sug).not.toContain(16);
+});
+
+test('LB-07: LB—RDS 연결은 오류·경고는 아니지만 "DB를 숨겼다"는 칭찬은 막는다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  let r = await verdict(page);
+  expect(r.praises).toContain('V4');
+  await connect(page, 'lb', 'rds');
+  r = await verdict(page);
+  expect(r.status).toBe('ok');                               // 판정은 그대로 (근거 없음)
+  expect(r.praises).not.toContain('V4');
 });

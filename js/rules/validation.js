@@ -1,5 +1,5 @@
 // @ts-check
-// js/rules/validation.js — 검증 규칙 15개 (정상/경고/오류) + 검증 실행
+// js/rules/validation.js — 검증 규칙 19개 (정상/경고/오류) + 검증 실행
 
 /* =========================================================
    검증 규칙
@@ -10,6 +10,13 @@
    ========================================================= */
 const USER_TYPES = ['smartphone', 'tablet', 'pc'];
 const RDS_TYPES  = ['rds', 'rds-replica', 'rds-standby'];
+
+// 연결선으로 이어진 박스 중 해당 종류 (검증 대상이 아닌 서비스도 찾는다)
+function linkedNodes(n, ...types) {
+  return state.edges
+    .map(e => findNode(e.from === n.id ? e.to : e.to === n.id ? e.from : ''))
+    .filter(m => m && types.includes(m.type));
+}
 
 // 규칙에서 쓰는 조회 도구 모음
 // includeAll: true면 검증 대상이 아닌 서비스도 포함 (개선·제거 제안용)
@@ -153,11 +160,11 @@ const VALIDATION_RULES = [
     praise(ctx) {
       const dbs = ctx.ofType(...RDS_TYPES);
       if (!dbs.length) return [];
-      // 근거: CF-01·R53-02 — CloudFront·Route 53·WAF가 DB에 바로 이어져 있으면 "인터넷과 바로 이어지지 않는다"고 칭찬하지 않는다
-      // (Route 53·WAF는 검증 대상이 아니라 ctx에 없으므로 연결선에서 직접 찾는다)
+      // 근거: CF-01·R53-02·LB-07 — CloudFront·Route 53·WAF·Load Balancer가 DB에 바로 이어져 있으면 "인터넷과 바로 이어지지 않는다"고 칭찬하지 않는다
+      // (LB—RDS는 오류·경고 근거가 없어(등급 X) 판정은 그대로 두고 칭찬만 막는다. Route 53·WAF는 검증 대상이 아니라 ctx에 없으므로 연결선에서 직접 찾는다)
       const exposed = dbs.some(db => state.edges.some(e => {
         const other = findNode(e.from === db.id ? e.to : e.to === db.id ? e.from : '');
-        return other && ['cloudfront', 'route53', 'waf'].includes(other.type);
+        return other && ['cloudfront', 'route53', 'waf', 'lb'].includes(other.type);
       }));
       if (exposed) return [];
       // 근거: DB-05 — 칭찬은 모든 DB가 DB 서브넷에 있을 때만 (프라이빗은 오류는 아니지만 칭찬은 아님, 퍼블릭은 경고)
@@ -370,7 +377,76 @@ const VALIDATION_RULES = [
         message: 'RDS는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
     },
   },
+  {
+    // 근거: SSM-01 (근거 A, 라우팅을 표현하지 못해 화면은 경고)
+    id: 16, level: 'warn', message: 'Session Manager 경로',
+    pillars: ['security', 'operations'],
+    basis: 'Session Manager는 서버가 AWS 쪽으로 먼저 연결해요. 인터넷으로 나갈 수 없는 프라이빗 서브넷의 서버는 NAT나 VPC Endpoints(ssm·ssmmessages)가 있어야 닿아요.',
+    ref: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/setup-create-vpc.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').forEach(e => {
+        const sms = linkedNodes(e, 'sessionmanager');
+        if (!sms.length || ctx.neighborsOf(e, 'nat').length) return;
+        const bare = sms.filter(sm => !linkedNodes(sm, 'vpce').length);
+        if (bare.length !== sms.length) return;
+        issues.push({ nodeIds: [e.id, ...sms.map(n => n.id)],
+          message: '프라이빗 서브넷의 EC2가 Session Manager에 닿을 길이 없어 보여요. NAT에 연결하거나, VPC Endpoints를 Session Manager와 연결해주세요.' });
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: CTR-01 (등급 B, Security Hub ECS.2)
+    id: 17, level: 'warn', message: '컨테이너 위치',
+    pillars: ['security'],
+    basis: '컨테이너(ECS·EKS·Fargate)는 프라이빗 서브넷에 두는 것이 안전해요. 퍼블릭 서브넷에서 공개 IP를 받으면 인터넷에 드러날 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/securityhub/latest/userguide/ecs-controls.html',
+    check() {
+      return containerNodes().filter(n => zoneOf(n) === 'public').map(n => ({ nodeIds: [n.id],
+        message: `${eunNeun(SVC_MAP[n.type].name)} 퍼블릭 서브넷에 있어요. 공개 IP를 받으면 인터넷에 드러날 수 있으니 프라이빗 서브넷에 두는 것이 안전해요.` }));
+    },
+  },
+  {
+    // 근거: CTR-02 (근거 A, 라우팅을 표현하지 못해 화면은 경고)
+    id: 18, level: 'warn', message: '컨테이너 이미지 경로',
+    pillars: ['security', 'operations'],
+    basis: '컨테이너가 이미지를 받으려면 인터넷으로 나가는 길이 있어야 해요. 프라이빗 서브넷에서는 NAT를 거치거나 ECR용 VPC Endpoints를 써요.',
+    ref: 'https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html',
+    check() {
+      const issues = [];
+      containerNodes().filter(n => zoneOf(n) === 'private').forEach(n => {
+        const ecrs = linkedNodes(n, 'ecr');
+        if (!ecrs.length || linkedNodes(n, 'nat').length) return;
+        if (ecrs.some(r => linkedNodes(r, 'vpce').length)) return;
+        issues.push({ nodeIds: [n.id, ...ecrs.map(r => r.id)],
+          message: `프라이빗 서브넷의 ${SVC_MAP[n.type].name}가 ECR에서 이미지를 받아올 길이 없어 보여요. NAT에 연결하거나, VPC Endpoints를 ECR과 연결해주세요.` });
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: CTR-03 (등급 A)
+    id: 19, level: 'error', message: 'EKS 서브넷 AZ',
+    pillars: ['reliability'],
+    basis: 'EKS 클러스터는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html',
+    check() {
+      const eks = state.nodes.filter(n => n.type === 'eks');
+      const subnets = state.containers.filter(c => SUBNET_TYPES.includes(c.type));
+      if (!eks.length || !subnets.length) return [];
+      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => findContainer(id)?.type === 'az'));
+      if (azIds.size >= 2) return [];
+      return [{ nodeIds: eks.map(n => n.id),
+        message: 'EKS는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
+    },
+  },
 ];
+
+// 컨테이너 박스 (ECS·EKS·Fargate는 검증 대상이 아니라 ctx에 없어 직접 찾는다)
+function containerNodes() {
+  return state.nodes.filter(n => ['ecs', 'eks', 'fargate'].includes(n.type));
+}
 
 // 모든 규칙을 실행해 결과를 만든다
 function validateArchitecture() {

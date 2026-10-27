@@ -91,7 +91,7 @@ const SERVICE_GUIDE = {
     links: [
       { to: ['ec2'], text: 'EC2가 IGW나 NAT 없이 S3·DynamoDB에 가는 통로(게이트웨이 엔드포인트)예요.' },
       { to: ['s3', 'dynamodb'], text: 'VPC에서 S3·DynamoDB로 바로 이어 줘요. 게이트웨이 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금을 줄여요.' },
-      { to: ['ecr', 'cloudwatch', 'sessionmanager'], text: '인터페이스 엔드포인트는 프라이빗 서브넷 안에 만들어져요. NAT 없이 ECR·CloudWatch 같은 AWS 서비스에 비공개로 접속해요. 두 AZ 이상에 두는 것을 권장해요.' },
+      { to: ['ecr', 'cloudwatch', 'sessionmanager'], text: '인터페이스 엔드포인트는 고른 서브넷마다 만들어져요(보통 프라이빗 서브넷). NAT 없이 ECR·CloudWatch 같은 AWS 서비스에 비공개로 접속해요. 두 AZ 이상에 두는 것을 권장해요.' },
     ],
     avoid: [],
   },

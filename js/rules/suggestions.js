@@ -131,17 +131,27 @@ const SUGGESTION_RULES = [
     basis: '작업 기록(CloudTrail)과 상태 지표·로그(CloudWatch)를 남겨야 문제를 빨리 알아채고 원인을 찾을 수 있어요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_detect_investigate_events_app_service_logging.html',
     praise(ctx) {
-      const tools = ctx.ofType('cloudwatch', 'cloudtrail');
-      if (!ctx.ofType('ec2').length || tools.length < 2) return [];
-      return [{ nodeIds: tools.map(n => n.id),
-        text: 'CloudWatch(상태·경보)와 CloudTrail(작업 기록)을 두었어요. 문제를 빨리 알아채고 원인을 찾을 수 있어요.' }];
+      // 근거: CT-02 — 둘이 이어졌을 때만 칭찬 (CloudTrail 로그가 CloudWatch Logs로 가야 이상한 작업을 바로 알림받음)
+      const pairs = ctx.ofType('cloudtrail').flatMap(t => ctx.neighborsOf(t, 'cloudwatch').map(w => [t, w]));
+      if (!ctx.ofType('ec2').length || !pairs.length) return [];
+      return [{ nodeIds: [...new Set(pairs.flat().map(n => n.id))],
+        text: 'CloudTrail(작업 기록)을 CloudWatch(상태·경보)와 이었어요. 문제를 빨리 알아채고 원인을 찾을 수 있어요.' }];
     },
     check(ctx) {
       if (!ctx.ofType('ec2').length) return [];
       const missing = [];
       if (!ctx.ofType('cloudwatch').length) missing.push('CloudWatch(상태 모니터링·알림)');
       if (!ctx.ofType('cloudtrail').length) missing.push('CloudTrail(작업 기록)');
-      if (!missing.length) return [];
+      if (!missing.length) {
+        // 근거: CT-02 (CloudTrail.5) — 둘 다 있는데 이어지지 않은 경우
+        const traces = ctx.ofType('cloudtrail');
+        if (traces.some(t => ctx.neighborsOf(t, 'cloudwatch').length)) return [];
+        return [{
+          nodeIds: [...traces, ...ctx.ofType('cloudwatch')].map(n => n.id),
+          reason: 'CloudTrail과 CloudWatch가 따로 있어요. 누가 무엇을 바꿨는지 기록만 쌓이고, 이상한 작업이 있어도 바로 알림받지 못해요.',
+          action: 'CloudTrail — CloudWatch를 연결하세요. 기록을 CloudWatch로 보내면 경보를 걸 수 있어요.',
+        }];
+      }
       return [{
         nodeIds: [],
         reason: '서버 상태나 누가 무엇을 바꿨는지 볼 수단이 없어요. 문제가 생겨도 원인을 찾기 어려워요.',
@@ -186,6 +196,10 @@ const SUGGESTION_RULES = [
         ['route53', ['ec2', ...RDS_TYPES],
           'Route 53은 도메인을 CloudFront나 Load Balancer 같은 공개 입구로 이어 줘요. 프라이빗 서브넷의 서버·DB는 공개 IP가 있어도 인터넷과 통신할 수 없어요.',
           '이 연결을 지우고 사용자 — Route 53 — CloudFront(또는 Load Balancer)로 연결하세요.'],
+        // 근거: VPCE-02 (등급 C)
+        ['vpce', ['igw', 'nat'],
+          'VPC Endpoints는 IGW·NAT 없이 AWS 서비스로 가는 길이에요. 둘을 서로 이을 필요가 없어요.',
+          '이 연결을 지우세요. VPC Endpoints는 접속할 서비스(S3·DynamoDB 등)와 이어요.'],
         // 근거: LB-06 (등급 C)
         ['lb', ['nat'],
           'Load Balancer는 서버의 사설 IP로 요청을 보내요. NAT는 안에서 밖으로 나가는 연결만 도와서 둘 사이에는 오가는 요청이 없어요.',
@@ -383,6 +397,50 @@ const SUGGESTION_RULES = [
     },
   },
 ];
+
+// 근거: SSM-03 (Security Hub SSM.1은 B, 정상의 의미를 흔들지 않도록 제안)
+SUGGESTION_RULES.push({
+  id: 15, kind: 'improve', title: 'Session Manager로 서버 관리',
+  pillars: ['security', 'operations'],
+  basis: 'Session Manager로 서버를 관리하면 열린 접속 포트·Bastion·SSH 키가 필요 없어요. 모든 EC2를 Systems Manager로 관리하는 것이 권장이에요.',
+  ref: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html',
+  praise(ctx) {
+    const ec2s = ctx.ofType('ec2');
+    if (!ec2s.length || ec2s.some(e => !ec2HasSessionManager(e))) return [];
+    return [{ nodeIds: ec2s.map(n => n.id),
+      text: '모든 EC2를 Session Manager로 관리해요. 열린 접속 포트나 SSH 키 없이 안전하게 접속해요.' }];
+  },
+  check(ctx) {
+    const bare = ctx.ofType('ec2').filter(e => !ec2HasSessionManager(e));
+    if (!bare.length) return [];
+    return [{
+      nodeIds: bare.map(n => n.id),
+      reason: 'Session Manager와 이어지지 않은 EC2가 있어요. 서버에 들어가려면 SSH 포트를 열고 키를 관리해야 해요.',
+      action: 'Session Manager를 VPC 밖에 두고 EC2와 연결하세요. (프라이빗 서브넷이면 NAT나 VPC Endpoints도 필요해요)',
+    }];
+  },
+});
+
+// 근거: CTR-04 (등급 C)
+SUGGESTION_RULES.push({
+  id: 16, kind: 'improve', title: 'Fargate 짝',
+  pillars: ['operations'],
+  basis: 'Fargate는 ECS나 EKS가 컨테이너를 서버 관리 없이 실행하는 방식이에요. 혼자서는 컨테이너를 실행하지 않아요.',
+  ref: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html',
+  check(ctx) {
+    const lone = ctx.ofType('fargate').filter(f => !ctx.neighborsOf(f, 'ecs', 'eks').length);
+    if (!lone.length) return [];
+    return [{
+      nodeIds: lone.map(n => n.id),
+      reason: 'ECS나 EKS와 이어지지 않은 Fargate가 있어요. Fargate는 ECS 작업이나 EKS Pod를 실행해 주는 방식이에요.',
+      action: 'Fargate를 ECS(또는 EKS)와 연결하세요.',
+    }];
+  },
+});
+
+function ec2HasSessionManager(e) {
+  return linkedNodes(e, 'sessionmanager').length > 0;
+}
 
 // 프라이빗 서브넷에 EC2가 있는 AZ 목록과, 그중 같은 AZ의 퍼블릭 서브넷에 NAT가 있는 AZ 목록
 function natCoverage(ctx) {
