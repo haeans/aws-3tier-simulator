@@ -150,6 +150,13 @@ const VALIDATION_RULES = [
     praise(ctx) {
       const dbs = ctx.ofType(...RDS_TYPES);
       if (!dbs.length) return [];
+      // 근거: CF-01·R53-02 — CloudFront·Route 53·WAF가 DB에 바로 이어져 있으면 "인터넷과 바로 이어지지 않는다"고 칭찬하지 않는다
+      // (Route 53·WAF는 검증 대상이 아니라 ctx에 없으므로 연결선에서 직접 찾는다)
+      const exposed = dbs.some(db => state.edges.some(e => {
+        const other = findNode(e.from === db.id ? e.to : e.to === db.id ? e.from : '');
+        return other && ['cloudfront', 'route53', 'waf'].includes(other.type);
+      }));
+      if (exposed) return [];
       return [{ nodeIds: dbs.map(n => n.id),
         text: 'DB를 DB 서브넷에 두고 인터넷과 바로 이어지지 않게 했어요. 데이터를 가장 안쪽에서 보호해요.' }];
     },

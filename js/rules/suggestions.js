@@ -173,6 +173,14 @@ const SUGGESTION_RULES = [
         ['elasticache', RDS_TYPES,
           'ElastiCache는 RDS 앞에서 요청을 대신 전달하지 않아요. 앱(EC2)이 캐시와 DB에 각각 접속해요.',
           '이 연결을 지우고 EC2 — ElastiCache, EC2 — RDS로 각각 연결하세요.'],
+        // 근거: CF-01 (등급 C)
+        ['cloudfront', RDS_TYPES,
+          'CloudFront의 원본은 S3나 웹 서버(Load Balancer)예요. DB는 CloudFront가 아니라 앱 서버(EC2)가 조회해요.',
+          '이 연결을 지우고 EC2 — RDS로 연결하세요.'],
+        // 근거: R53-02 (등급 C)
+        ['route53', ['ec2', ...RDS_TYPES],
+          'Route 53은 도메인을 CloudFront나 Load Balancer 같은 공개 입구로 이어 줘요. 프라이빗 서브넷의 서버·DB는 공개 IP가 있어도 인터넷과 통신할 수 없어요.',
+          '이 연결을 지우고 사용자 — Route 53 — CloudFront(또는 Load Balancer)로 연결하세요.'],
         // 근거: LB-06 (등급 C)
         ['lb', ['nat'],
           'Load Balancer는 서버의 사설 IP로 요청을 보내요. NAT는 안에서 밖으로 나가는 연결만 도와서 둘 사이에는 오가는 요청이 없어요.',
@@ -228,13 +236,20 @@ const SUGGESTION_RULES = [
     check(ctx) {
       const fronts = ctx.ofType('cloudfront', 'lb');
       if (!fronts.length || !ctx.ofType(...USER_TYPES).length) return [];
-      if (fronts.some(f => ctx.neighborsOf(f, 'waf').length)) return [];
+      // 근거: WAF-03 — 입구(CloudFront·Load Balancer)마다 WAF가 있어야 한다 (하나라도 있으면 통과시키지 않음)
+      const bare = fronts.filter(f => !ctx.neighborsOf(f, 'waf').length);
+      if (!bare.length) return [];
+      const names = [...new Set(bare.map(ctx.nameOf))].join('·');
       return [{
-        nodeIds: fronts.map(f => f.id),
-        reason: '인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요.',
-        action: ctx.ofType('waf').length
-          ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
-          : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
+        nodeIds: bare.map(f => f.id),
+        reason: bare.length < fronts.length
+          ? `WAF가 없는 입구가 있어요(${names}). 그곳으로 들어오는 요청은 검사 없이 그대로 받아요.`
+          : '인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요.',
+        action: bare.length < fronts.length
+          ? `${names}에도 WAF를 연결하세요. (WAF는 입구 하나에 하나씩 연결해요)`
+          : ctx.ofType('waf').length
+            ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
+            : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
       }];
     },
   },
@@ -244,15 +259,7 @@ const SUGGESTION_RULES = [
     basis: 'WAF는 요청이 지나가는 길이 아니라 CloudFront·Load Balancer(ALB)에 붙이는 검사 규칙이에요. WAF로 이어도 두 곳 사이에 요청이 오가지 않아요.',
     ref: 'https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html',
     check(ctx) {
-      // 사용자에서 출발해 요청이 닿는 박스 (Route 53·WAF는 길이 아니므로 거치지 않음)
-      const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
-      const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
-      const queue = [...reached];
-      for (let i = 0; i < queue.length; i++) {
-        ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
-          if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
-        });
-      }
+      const reached = requestReach(ctx);
       const HOW = {
         cloudfront: 'CloudFront는 사용자와 IGW 사이에 두세요. (사용자 — CloudFront — IGW)',
         lb: 'Load Balancer는 IGW와 EC2 사이에 두세요. (IGW — Load Balancer — EC2)',
@@ -268,6 +275,45 @@ const SUGGESTION_RULES = [
           action: [...new Set(off.map(f => HOW[f.type]))].join(' '),
         }];
       });
+    },
+  },
+  {
+    // 근거: WAF-01 (등급 C), WAF-02 (등급 A이나 WAF는 검증 대상이 아니라 제안으로 반영 — 사용자 결정 2026-10-27)
+    id: 13, kind: 'remove', title: '잘못된 WAF 연결',
+    pillars: [],
+    basis: 'WAF는 CloudFront나 Application Load Balancer에 붙이는 검사 규칙이에요. 입구 하나에는 WAF를 하나만 붙일 수 있고, 한 WAF를 CloudFront와 Load Balancer에 함께 붙일 수도 없어요.',
+    ref: 'https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-associating-aws-resource.html',
+    check(ctx) {
+      const issues = [];
+      const FRONTS = ['cloudfront', 'lb'];
+      ctx.ofType('waf').forEach(w => {
+        // 붙일 수 없는 곳(EC2·DB·NAT 등)과 연결
+        ctx.neighborsOf(w, ...SERVICES.map(v => v.type).filter(t => !FRONTS.includes(t))).forEach(m => issues.push({
+          nodeIds: [w.id, m.id],
+          reason: `WAF — ${ctx.nameOf(m)} 연결: WAF는 ${ctx.nameOf(m)}에 붙일 수 없어요. CloudFront나 Load Balancer(ALB)에만 붙여요.`,
+          action: '이 연결을 지우고 WAF를 CloudFront나 Load Balancer와 연결하세요.',
+        }));
+        // 한 WAF가 CloudFront와 Load Balancer에 함께 연결
+        const fronts = ctx.neighborsOf(w, ...FRONTS);
+        // (요청 경로에 안 놓인 입구가 있으면 '길이 아니다' 제안(10)이 이미 알리므로 겹쳐 알리지 않는다)
+        const reached = requestReach(ctx);
+        if (fronts.every(f => reached.has(f.id)) &&
+            fronts.some(f => f.type === 'cloudfront') && fronts.some(f => f.type === 'lb')) issues.push({
+          nodeIds: [w.id, ...fronts.map(f => f.id)],
+          reason: 'WAF 하나가 CloudFront와 Load Balancer에 함께 연결돼 있어요. CloudFront에 쓴 WAF는 다른 종류의 입구에 함께 쓸 수 없어요.',
+          action: 'CloudFront용 WAF와 Load Balancer용 WAF를 따로 두세요.',
+        });
+      });
+      // 입구 하나에 WAF가 둘 이상
+      ctx.ofType(...FRONTS).forEach(f => {
+        const wafs = ctx.neighborsOf(f, 'waf');
+        if (wafs.length > 1) issues.push({
+          nodeIds: [f.id, ...wafs.map(w => w.id)],
+          reason: `${ctx.nameOf(f)}에 WAF가 ${wafs.length}개 연결돼 있어요. 입구 하나에는 WAF를 하나만 붙일 수 있어요.`,
+          action: 'WAF 하나만 남기고 나머지 연결을 지우세요.',
+        });
+      });
+      return issues;
     },
   },
   {
@@ -324,3 +370,16 @@ function natCoverage(ctx) {
   return { azs, covered };
 }
 
+
+// 사용자에서 출발해 요청이 닿는 박스 id 집합 (Route 53·WAF는 길이 아니므로 거치지 않음)
+function requestReach(ctx) {
+  const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
+  const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
+  const queue = [...reached];
+  for (let i = 0; i < queue.length; i++) {
+    ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
+      if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
+    });
+  }
+  return reached;
+}

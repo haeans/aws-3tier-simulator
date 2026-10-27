@@ -416,3 +416,57 @@ test('NAT-02: NAT가 AZ 하나뿐이면 제안하고 AZ마다 두면 칭찬 / LB
   expect(r.sug).toContain(11);
   expect(r.praises).not.toContain('S11');
 });
+
+test('WAF-03: 입구(CloudFront·LB)마다 WAF가 있어야 제안이 사라진다 (하나만 있으면 없는 입구를 알려준다)', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('cloudfront', 120, 160); addNode('waf', 120, 440); addNode('waf', 120, 580); });
+  await connect(page, 'waf', 'lb', 0, 0);                    // WAF는 LB에만
+  let r = await verdict(page);
+  expect(r.sug).toContain(9);
+  expect(r.msgs.join(' ')).toContain('WAF가 없는 입구가 있어요(CloudFront)');
+  await connect(page, 'waf', 'cloudfront', 1, 0);            // CloudFront에도 WAF
+  r = await verdict(page);
+  expect(r.sug).not.toContain(9);
+  expect(r.praises).toContain('S9');
+});
+
+test('WAF-01·02: WAF를 EC2에 붙이거나, 입구 하나에 WAF 둘, 한 WAF를 CloudFront와 LB에 함께 붙이면 제거 제안', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('waf', 120, 440); addNode('waf', 120, 580); });
+  await connect(page, 'waf', 'ec2', 0, 0);
+  let r = await verdict(page);
+  expect(r.sug).toContain(13);
+  expect(r.msgs.join(' ')).toContain('WAF — EC2 연결');
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('waf', 120, 440); addNode('waf', 120, 580); });
+  await connect(page, 'waf', 'lb', 0, 0);
+  await connect(page, 'waf', 'lb', 1, 0);
+  r = await verdict(page);
+  expect(r.msgs.join(' ')).toContain('WAF가 2개 연결돼 있어요');
+  // 요청 경로(사용자 — CloudFront — IGW)에 놓인 CloudFront와 LB에 WAF 하나를 함께 연결
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('cloudfront', 120, 160); addNode('waf', 120, 440); });
+  await connect(page, 'pc', 'cloudfront');
+  await connect(page, 'cloudfront', 'igw');
+  await connect(page, 'waf', 'cloudfront');
+  await connect(page, 'waf', 'lb');
+  r = await verdict(page);
+  expect(r.sug).toContain(13);
+  expect(r.sug).not.toContain(10);                          // 길이 아니라는 제안(10)은 겹쳐 나오지 않음
+  expect(r.msgs.join(' ')).toContain('WAF 하나가 CloudFront와 Load Balancer에 함께 연결돼 있어요');
+});
+
+test('CF-01·R53-02: CloudFront—DB, Route 53—EC2는 제거 제안이 나오고, CloudFront가 DB에 이어지면 DB 칭찬이 사라진다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('cloudfront', 120, 160); addNode('route53', 120, 440); });
+  await connect(page, 'cloudfront', 'rds');
+  await connect(page, 'route53', 'ec2');
+  const r = await verdict(page);
+  expect(r.sug).toContain(7);
+  expect(r.msgs.join(' ')).toContain('CloudFront — RDS 연결');
+  expect(r.msgs.join(' ')).toContain('Route 53 — EC2 연결');
+  expect(r.praises).not.toContain('V4');
+});

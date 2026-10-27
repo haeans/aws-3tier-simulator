@@ -13,6 +13,18 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.31] 2026-10-27  판정 기준 정비 2차: 입구 묶음 (Route 53·CloudFront·WAF)
+  변경: 제안 규칙 12개 → 13개. 근거는 criteria/entry.md (WAF-01~03, CF-01, R53-02)
+  변경: 제안 9(웹 방화벽) — WAF가 하나라도 연결돼 있으면 통과하던 것을 입구(CloudFront·Load Balancer)마다 확인.
+        일부 입구에만 WAF가 있으면 "WAF가 없는 입구"를 알려줌 (WAF-03)
+  추가: 제안 13 잘못된 WAF 연결(제거) — WAF를 EC2·DB·NAT 등에 연결 / 입구 하나에 WAF 둘 / 한 WAF를 CloudFront와 Load Balancer에 함께 연결 (WAF-01·02)
+  추가: 제안 7(불필요한 연결)에 CloudFront—DB, Route 53—EC2·DB 연결 제거 (CF-01, R53-02)
+  변경: 칭찬 4(DB 보호)는 CloudFront·Route 53·WAF가 DB에 바로 이어져 있으면 나오지 않음
+  추가: 자동 테스트 3개
+  비고: 사용자 결정(2026-10-27) — WAF-03은 B등급 근거지만 제안으로 유지(경고로 올리면 WAF 없는 정상 구성이 "경고"가 됨),
+        WAF-02는 A등급 근거지만 WAF가 검증 대상(validated)이 아니라 제안(제거)으로 반영
+  비고: CF-02(CloudFront—EC2 직접 연결 제안)는 문서에 VPC origin으로 가능하다고 나와 있고 우선순위가 낮아 보류
+
 [1.30] 2026-10-27  판정 기준 정비 1차: 입구 묶음 (LB·IGW·NAT)
   변경: 판정 규칙 7개 → 10개, 제안 규칙 10개 → 12개. 근거는 criteria/entry.md (항목 ID를 규칙 코드 주석에 적음)
   추가: 판정 7(고가용성)에 "LB와 연결된 EC2가 AZ 2곳 이상" 검사 (LB-02, 경고). 연결이 한 AZ뿐이면 경고
