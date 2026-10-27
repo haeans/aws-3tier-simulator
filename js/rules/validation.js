@@ -1,5 +1,5 @@
 // @ts-check
-// js/rules/validation.js — 검증 규칙 7개 (정상/경고/오류) + 검증 실행
+// js/rules/validation.js — 검증 규칙 10개 (정상/경고/오류) + 검증 실행
 
 /* =========================================================
    검증 규칙
@@ -74,8 +74,14 @@ const VALIDATION_RULES = [
       }
       return [];
     },
-    praise: ctx => [{ nodeIds: ctx.ofType('igw', 'lb').map(n => n.id),
-      text: '인터넷 요청이 IGW를 지나 Load Balancer라는 한 입구로만 들어와요. 서버는 인터넷에 직접 드러나지 않아요.' }],
+    // 근거: LB-05(칭찬만 막음) — IGW와 이어지지 않은 LB가 하나라도 있거나, 서버(EC2)가 인터넷과 바로 이어져 있으면 칭찬하지 않는다
+    praise(ctx) {
+      const lbs = ctx.ofType('lb');
+      if (lbs.some(lb => !ctx.neighborsOf(lb, 'igw').length)) return [];
+      if (ctx.ofType('ec2').some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
+      return [{ nodeIds: ctx.ofType('igw', 'lb').map(n => n.id),
+        text: '인터넷 요청이 IGW를 지나 Load Balancer라는 한 입구로만 들어와요. 서버는 인터넷에 직접 드러나지 않아요.' }];
+    },
   },
   {
     id: 2, level: 'error', message: '계층 배치',
@@ -101,6 +107,8 @@ const VALIDATION_RULES = [
     praise(ctx) {
       const lbs = ctx.ofType('lb'), ec2s = ctx.ofType('ec2');
       if (!lbs.length || !ec2s.length) return [];
+      // 근거: IGW-03 — 서버가 인터넷과 바로 이어져 있으면 "숨겼다"고 칭찬하지 않는다
+      if (ec2s.some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
       return [{ nodeIds: [...lbs, ...ec2s].map(n => n.id),
         text: 'Load Balancer는 퍼블릭 서브넷, EC2는 프라이빗 서브넷에 나눠 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
     },
@@ -171,17 +179,22 @@ const VALIDATION_RULES = [
       const privateEc2 = ctx.ofType('ec2').filter(n => ctx.zoneOf(n) === 'private');
       if (!privateEc2.length) return [];
       const nats = ctx.ofType('nat');
-      if (nats.some(n => ctx.zoneOf(n) === 'public')) return [];
+      // 근거: NAT-01 — NAT는 모두 퍼블릭 서브넷에 있어야 한다 (하나만 맞아도 통과시키지 않음)
+      if (!nats.length) return [{
+        nodeIds: [],
+        message: 'NAT가 없어요. 프라이빗 서브넷의 EC2가 업데이트 등을 위해 인터넷으로 나갈 수 있도록 퍼블릭 서브넷에 NAT를 놓아주세요.',
+      }];
+      const misplaced = nats.filter(n => ctx.zoneOf(n) !== 'public');
+      if (!misplaced.length) return [];
       return [{
-        nodeIds: nats.map(n => n.id),
-        message: nats.length
-          ? 'NAT가 퍼블릭 서브넷에 있지 않아요. 프라이빗 서브넷의 EC2가 인터넷으로 나가려면(업데이트 등) NAT가 퍼블릭 서브넷에 있어야 해요.'
-          : 'NAT가 없어요. 프라이빗 서브넷의 EC2가 업데이트 등을 위해 인터넷으로 나갈 수 있도록 퍼블릭 서브넷에 NAT를 놓아주세요.',
+        nodeIds: misplaced.map(n => n.id),
+        message: 'NAT가 퍼블릭 서브넷에 있지 않아요. 프라이빗 서브넷의 EC2가 인터넷으로 나가려면(업데이트 등) NAT가 퍼블릭 서브넷에 있어야 해요.',
       }];
     },
     praise(ctx) {
-      const nats = ctx.ofType('nat').filter(n => ctx.zoneOf(n) === 'public');
-      if (!nats.length || !ctx.ofType('ec2').some(n => ctx.zoneOf(n) === 'private')) return [];
+      const all = ctx.ofType('nat');
+      const nats = all.filter(n => ctx.zoneOf(n) === 'public');
+      if (!nats.length || nats.length < all.length || !ctx.ofType('ec2').some(n => ctx.zoneOf(n) === 'private')) return [];
       return [{ nodeIds: nats.map(n => n.id),
         text: 'NAT를 퍼블릭 서브넷에 두었어요. 앱 서버는 숨긴 채로 업데이트처럼 밖으로 나가는 연결만 할 수 있어요.' }];
     },
@@ -202,6 +215,15 @@ const VALIDATION_RULES = [
           ? 'EC2가 AZ 안에 없어요. 서로 다른 AZ에 EC2를 2개 이상 두면 한 AZ에 장애가 나도 서비스가 계속돼요.'
           : 'EC2가 한 AZ에만 있어요. 다른 AZ에도 EC2를 두면 한 AZ에 장애가 나도 서비스가 계속돼요.',
       });
+      // 근거: LB-02 — Load Balancer와 연결된 EC2가 서로 다른 AZ 2곳 이상 (연결이 있는 LB만 본다. 연결이 없으면 규칙 3이 알림)
+      ctx.ofType('lb').forEach(lb => {
+        const targets = ctx.neighborsOf(lb, 'ec2');
+        if (!targets.length || new Set(targets.map(ctx.azOf).filter(Boolean)).size >= 2) return;
+        issues.push({
+          nodeIds: [lb.id, ...targets.map(n => n.id)],
+          message: 'Load Balancer와 연결된 EC2가 한 AZ에만 있어요. Load Balancer는 여러 AZ에 걸쳐 쓰는 것이니, 다른 AZ의 EC2도 같은 Load Balancer와 연결해주세요.',
+        });
+      });
       // RDS: RDS와 RDS Standby가 서로 다른 AZ
       const rdss = ctx.ofType('rds'), standbys = ctx.ofType('rds-standby');
       const paired = rdss.some(r => standbys.some(s => {
@@ -220,6 +242,48 @@ const VALIDATION_RULES = [
     },
     praise: ctx => [{ nodeIds: ctx.ofType('ec2', 'rds', 'rds-standby').map(n => n.id),
       text: 'EC2와 DB(RDS·Standby)를 두 AZ에 나눠 두었어요. 한 AZ에 장애가 나도 서비스가 이어져요.' }],
+  },
+  {
+    // 근거: IGW-02 (등급 A)
+    id: 8, level: 'error', message: '서버 경로',
+    pillars: ['security'],
+    basis: '프라이빗 서브넷에는 IGW로 가는 경로가 없어서, 서버(EC2)를 IGW에 바로 이을 수 없어요. 인터넷 요청은 퍼블릭 서브넷의 Load Balancer가 받아 서버로 넘겨요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('ec2').forEach(e => {
+        if (!['private', 'db'].includes(ctx.zoneOf(e))) return;   // 서브넷 밖·퍼블릭 위치는 규칙 2가 알림
+        ctx.neighborsOf(e, 'igw').forEach(igw => issues.push({ nodeIds: [e.id, igw.id],
+          message: 'EC2가 IGW에 바로 연결돼 있어요. 프라이빗 서브넷의 서버는 IGW로 인터넷과 통신할 수 없어요. 이 연결을 지우고 IGW → Load Balancer → EC2로 이어주세요.' }));
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: IGW-03 (등급 B)
+    id: 9, level: 'warn', message: '서버 노출',
+    pillars: ['security'],
+    basis: '서버(EC2)는 공개 IP 없이 Load Balancer 뒤에 두는 것이 안전해요. 사용자가 서버에 바로 닿으면 공격받을 곳이 늘어요.',
+    ref: 'https://docs.aws.amazon.com/securityhub/latest/userguide/ec2-controls.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('ec2').forEach(e => ctx.neighborsOf(e, ...USER_TYPES).forEach(u => issues.push({ nodeIds: [e.id, u.id],
+        message: `${ctx.nameOf(u)}가 EC2에 바로 연결돼 있어요. 서버가 인터넷에 드러나요. 이 연결을 지우고 사용자 → IGW → Load Balancer → EC2로 이어주세요.` })));
+      return issues;
+    },
+  },
+  {
+    // 근거: NAT-03 (등급 A)
+    id: 10, level: 'error', message: 'NAT 방향',
+    pillars: ['security'],
+    basis: 'NAT는 VPC 안에서 밖으로 나가는 연결만 도와요. 인터넷 쪽에서 먼저 NAT로 들어오는 연결은 만들 수 없어요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('nat').forEach(n => ctx.neighborsOf(n, ...USER_TYPES).forEach(u => issues.push({ nodeIds: [n.id, u.id],
+        message: `${ctx.nameOf(u)}가 NAT에 연결돼 있어요. 인터넷 쪽에서 먼저 NAT로 들어올 수는 없어요. 이 연결을 지우고 사용자 → IGW → Load Balancer로 들어오게 해주세요.` })));
+      return issues;
+    },
   },
 ];
 

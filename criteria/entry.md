@@ -22,8 +22,8 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 인용(보조): "each enabled Availability Zone has at least one registered target" (ELB 동작 원리)
 - 표현 방식: LB와 직접 연결된 EC2들의 AZ 종류 수 ≥ 2
 - 반례 구성: LB—EC2 연결이 한 AZ의 EC2에만 있음 (다른 AZ EC2는 LB와 연결 안 됨). 1a: `lb-ec2` 연결 하나 삭제해도 조용히 통과
-- 반영 규칙: (아직 없음) 규칙 3 보강 또는 규칙 7 확장 후보
-- 상태: 조사됨
+- 반영 규칙: VALIDATION #7 (고가용성)에 LB 연결 EC2 AZ 검사 추가
+- 상태: 반영됨 (v1.30)
 
 ### LB-03 · 등급 C
 - 요약: AZ마다 LB를 따로 두지 말고, LB 하나를 여러 AZ에 걸쳐 쓴다 (같은 EC2들을 가리키는 LB가 둘 이상이면 제안)
@@ -31,8 +31,8 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 인용: "We recommend enabling multiple Availability Zones for all load balancers." / "serves as the single point of contact for clients"
 - 주의: 문서는 LB 여러 개를 금지하지 않는다(내부+외부 LB 구성도 문서에 있음). 그래서 오류가 아니라 제안이고, 같은 EC2를 가리키는 공개 LB가 둘 이상일 때만 건다.
 - 반례 구성: A·B 퍼블릭에 LB를 하나씩 두고 같은 EC2들에 연결. 1a: 조용히 통과
-- 반영 규칙: (아직 없음) SUGGESTION 새 규칙 후보
-- 상태: 조사됨
+- 반영 규칙: SUGGESTION #11 Load Balancer 하나로
+- 상태: 반영됨 (v1.30)
 
 ### LB-04 · 등급 A
 - 요약: 인터넷에 공개하는 LB를 쓰려면 VPC에 IGW가 있어야 한다
@@ -48,16 +48,16 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 하지만 현재 규칙 1은 `gates.some`이라, IGW와 안 이어진 LB가 하나 더 있어도 칭찬 1을 낸다
 - 표현 방식: 칭찬 1은 "퍼블릭 서브넷의 LB가 모두 IGW와 이어졌을 때만" 낸다. 오류는 만들지 않음
 - 반례 구성: IGW와 이어진 LB + 이어지지 않은 LB 하나 더. 1a: 조용히 통과
-- 반영 규칙: (아직 없음) VALIDATION #1 praise 보강
-- 상태: 조사됨
+- 반영 규칙: VALIDATION #1 칭찬 보강
+- 상태: 반영됨 (v1.30)
 
 ### LB-06 · 등급 C (제거 제안)
 - 요약: LB와 NAT를 직접 이을 이유가 없다. LB는 서버(대상)의 사설 IP로 요청을 보내고, NAT는 안에서 밖으로 나가는 용도다
 - 근거: [ELB 동작 원리 - scheme](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html), [NAT 게이트웨이](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
 - 인용: "route requests to your targets using private IP addresses" / "Connections must always be initiated from within the VPC"
 - 반례 구성: LB—NAT 연결. 1a: 조용히 통과
-- 반영 규칙: (아직 없음) SUGGESTION #7 '불필요한 연결'에 LB—NAT 추가 후보
-- 상태: 조사됨
+- 반영 규칙: SUGGESTION #7 불필요한 연결에 LB—NAT 추가
+- 상태: 반영됨 (v1.30)
 
 ### LB-07 · 등급 X (보류)
 - 요약: LB—RDS 직접 연결이 잘못이라는 문장은 이번 문서에서 못 찾음 (NLB는 IP 대상으로 DB를 둘 수도 있어 단정 불가)
@@ -79,8 +79,8 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 인용: "instances in the private subnet can't communicate with the internet, even if they have public IP addresses"
 - 표현 방식: IGW와 직접 연결된 박스 중 프라이빗·DB 서브넷 안의 EC2/RDS 계열이 있으면 오류
 - 반례 구성: IGW—EC2 직접 연결. 1a: 조용히 통과 (IGW—RDS는 이미 잡힘)
-- 반영 규칙: (아직 없음) VALIDATION 규칙 4(DB 보호)와 같은 방식으로 EC2 추가 후보
-- 상태: 조사됨
+- 반영 규칙: VALIDATION #8 서버 경로
+- 상태: 반영됨 (v1.30)
 
 ### IGW-03 · 등급 B
 - 요약: 사용자(인터넷)가 EC2에 직접 닿으면 안 된다 (EC2는 공개 IP 없이 LB 뒤에 둔다)
@@ -88,8 +88,8 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 인용: "Amazon EC2 instances should not have a public IPv4 address" (EC2.9, 심각도 High) / "your targets do not need public IP addresses to receive requests"
 - 표현 방식: 사용자(PC·스마트폰·태블릿) — EC2 직접 연결 → 경고
 - 반례 구성: PC—EC2. 1a: 조용히 통과하고 칭찬 1("서버는 인터넷에 직접 드러나지 않아요")·칭찬 2도 그대로 남음
-- 반영 규칙: (아직 없음) 규칙 1 칭찬 보강 + 새 경고 후보
-- 상태: 조사됨
+- 반영 규칙: VALIDATION #9 서버 노출, 칭찬 1·2 보강
+- 상태: 반영됨 (v1.30)
 
 ### IGW-04 · 등급 X
 - 요약: IGW—NAT 연결은 올바른 구성이다 ("NAT에서 IGW로 경로를 둔다"). 문제로 보면 안 됨
@@ -105,8 +105,8 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 주의: Private NAT는 온프레미스·다른 VPC 연결용이라 다르다. 앱의 NAT 박스는 public NAT로 간주(GUIDE에 적을 것)
 - 표현 방식: 모든 NAT가 퍼블릭 서브넷에 있어야 함 (지금은 하나라도 있으면 통과)
 - 반례 구성: 퍼블릭 NAT 하나 + 프라이빗·DB 서브넷 NAT 추가. 1a: 조용히 통과
-- 반영 규칙: VALIDATION #6 (수정 후보: `some` → 모든 NAT)
-- 상태: 조사됨
+- 반영 규칙: VALIDATION #6 (모든 NAT가 퍼블릭), 칭찬 6 보강
+- 상태: 반영됨 (v1.30)
 
 ### NAT-02 · 등급 C
 - 요약: NAT를 AZ마다 하나씩 둔다. NAT 하나를 여러 AZ가 같이 쓰면 그 AZ가 멈출 때 다른 AZ도 인터넷이 끊긴다
@@ -114,9 +114,9 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 인용: "create a NAT gateway in each Availability Zone" (같은 문장 앞에 "To improve resiliency")
 - 표현 방식: 프라이빗 EC2가 있는 AZ마다 그 AZ 퍼블릭 서브넷에 NAT가 있는가
 - 반례 구성: NAT가 AZ 하나뿐인데 칭찬 6("NAT를 퍼블릭 서브넷에 두었어요")이 그대로 나옴. 기본 정상 구성 자체가 NAT 1개
-- 반영 규칙: (아직 없음) SUGGESTION 새 규칙 후보. 판정 쪽은 바꾸지 않음
+- 반영 규칙: SUGGESTION #12 NAT를 AZ마다
 - 주의: 기본 정상 구성(tests/helpers.js buildValidArch)이 NAT 1개이므로 제안이 뜨게 됨 → 테스트 기대값 확인 필요
-- 상태: 조사됨
+- 상태: 반영됨 (v1.30)
 
 ### NAT-03 · 등급 A
 - 요약: 인터넷(사용자)이 NAT로 먼저 연결할 수 없다. 사용자—NAT 연결은 틀린 구성
@@ -124,8 +124,8 @@ Route 53 · CloudFront · WAF는 2c에서 이어서 쓴다.
 - 인용: "Connections must always be initiated from within the VPC containing the NAT gateway."
 - 표현 방식: 사용자(PC·스마트폰·태블릿)와 NAT가 직접 연결되면 오류
 - 반례 구성: PC—NAT. 1a: 조용히 통과
-- 반영 규칙: (아직 없음) VALIDATION 새 규칙 또는 규칙 6 확장 후보
-- 상태: 조사됨
+- 반영 규칙: VALIDATION #10 NAT 방향
+- 상태: 반영됨 (v1.30)
 
 ### NAT-04 · 등급 C
 - 요약: 퍼블릭 NAT는 IGW로 나가는 경로가 있어야 인터넷에 닿는다 (NAT—IGW 연결이 없으면 제안)

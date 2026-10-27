@@ -173,6 +173,10 @@ const SUGGESTION_RULES = [
         ['elasticache', RDS_TYPES,
           'ElastiCache는 RDS 앞에서 요청을 대신 전달하지 않아요. 앱(EC2)이 캐시와 DB에 각각 접속해요.',
           '이 연결을 지우고 EC2 — ElastiCache, EC2 — RDS로 각각 연결하세요.'],
+        // 근거: LB-06 (등급 C)
+        ['lb', ['nat'],
+          'Load Balancer는 서버의 사설 IP로 요청을 보내요. NAT는 안에서 밖으로 나가는 연결만 도와서 둘 사이에는 오가는 요청이 없어요.',
+          '이 연결을 지우세요. NAT는 EC2 — NAT — IGW로 이어요.'],
       ];
       const issues = [];
       PAIRS.forEach(([type, others, reason, action]) => {
@@ -266,5 +270,57 @@ const SUGGESTION_RULES = [
       });
     },
   },
+  {
+    // 근거: LB-03 (등급 C) — 문서가 LB 여러 개를 금지하지는 않으므로 오류가 아니라 제안
+    id: 11, kind: 'improve', title: 'Load Balancer 하나로',
+    pillars: ['reliability', 'cost'],
+    basis: 'Load Balancer는 하나를 만들어 여러 AZ에 걸쳐 쓰는 것이 기본이에요. AZ마다 따로 두면 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지도 못해요.',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
+    praise(ctx) {
+      const lbs = ctx.ofType('lb').filter(lb => new Set(ctx.neighborsOf(lb, 'ec2').map(ctx.azOf).filter(Boolean)).size > 1);
+      if (!lbs.length) return [];
+      return [{ nodeIds: lbs.map(n => n.id),
+        text: 'Load Balancer 하나가 여러 AZ의 EC2에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
+    },
+    check(ctx) {
+      const lbs = ctx.ofType('lb').filter(lb => ctx.azOf(lb));
+      if (new Set(lbs.map(ctx.azOf)).size < 2) return [];
+      return [{
+        nodeIds: lbs.map(n => n.id),
+        reason: 'Load Balancer가 AZ마다 따로 있어요. 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지 못해요.',
+        action: 'Load Balancer를 하나만 두고, 두 AZ의 EC2를 모두 그 Load Balancer와 연결하세요.',
+      }];
+    },
+  },
+  {
+    // 근거: NAT-02 (등급 C)
+    id: 12, kind: 'improve', title: 'NAT를 AZ마다',
+    pillars: ['reliability'],
+    basis: 'NAT 하나를 여러 AZ가 같이 쓰면, 그 NAT가 있는 AZ에 장애가 날 때 다른 AZ의 서버도 인터넷으로 나갈 수 없어요. AZ마다 NAT를 두면 버텨요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html',
+    praise(ctx) {
+      const { azs, covered } = natCoverage(ctx);
+      if (azs.length < 2 || covered.length < azs.length) return [];
+      return [{ nodeIds: ctx.ofType('nat').map(n => n.id),
+        text: 'NAT를 AZ마다 두었어요. 한 AZ에 장애가 나도 다른 AZ의 서버는 인터넷으로 나갈 수 있어요.' }];
+    },
+    check(ctx) {
+      const { azs, covered } = natCoverage(ctx);
+      const missing = azs.filter(a => !covered.includes(a));
+      if (!azs.length || !covered.length || !missing.length) return [];   // NAT가 아예 없으면 판정 6이 알림
+      return [{
+        nodeIds: ctx.ofType('nat').map(n => n.id),
+        reason: `${missing.map(a => a.label).join(', ')}의 서버는 다른 AZ의 NAT를 같이 써요. 그 NAT가 있는 AZ에 장애가 나면 인터넷으로 나갈 수 없어요.`,
+        action: `${missing.map(a => a.label).join(', ')}의 퍼블릭 서브넷에도 NAT를 두세요.`,
+      }];
+    },
+  },
 ];
+
+// 프라이빗 서브넷에 EC2가 있는 AZ 목록과, 그중 같은 AZ의 퍼블릭 서브넷에 NAT가 있는 AZ 목록
+function natCoverage(ctx) {
+  const azs = [...new Set(ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').map(ctx.azOf).filter(Boolean))];
+  const covered = azs.filter(a => ctx.ofType('nat').some(n => ctx.zoneOf(n) === 'public' && ctx.azOf(n) === a));
+  return { azs, covered };
+}
 

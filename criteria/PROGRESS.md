@@ -9,7 +9,7 @@
 | 1a | 변이 테스트 | 정상 구성을 자동 변이시켜 칭찬·통과가 남는 경우 수집 (scratchpad) | 우선순위 목록 → PROGRESS.md 하단 | ☑ |
 | 1b | 변이 테스트 | 위 결과 정리, 묶음 순서 재조정 | 같음 | ☐ |
 | 2a | 조사 | 입구: LB, IGW, NAT | entry.md | ☑ |
-| 2b | 반영 | 입구: LB·IGW·NAT 규칙 + 테스트 | 규칙, tests/, CHANGELOG | ☐ |
+| 2b | 반영 | 입구: LB·IGW·NAT 규칙 + 테스트 | 규칙, tests/, CHANGELOG | ☑ v1.30 (4단계로 나눠 진행) |
 | 2c | 조사 | 입구: Route 53, CloudFront, WAF | entry.md | ☐ |
 | 2d | 반영 | 입구: Route 53·CloudFront·WAF 규칙 + 테스트 | 규칙, tests/, CHANGELOG | ☐ |
 | 3a | 조사 | 서버: EC2, Auto Scaling, 서브넷·AZ | server.md | ☐ |

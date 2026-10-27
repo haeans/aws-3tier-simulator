@@ -29,7 +29,7 @@
   - 사용자 확인은 0단계 승인, 규칙 반영 때 테스트 확인만
 - 단계:
   - 0. 설계 (세션 1개): 판정 기준표(오류/경고/제안/제외), 저장 위치·양식, 진행표 — 사용자 승인
-    - **완료 (2026-10-27)**: criteria/README.md(기준표·양식), criteria/PROGRESS.md(진행표). 다음은 PROGRESS.md의 1a
+    - **완료 (2026-10-27)**: criteria/README.md(기준표·양식), criteria/PROGRESS.md(진행표). 1a(변이 테스트)·2a(입구 조사)·2b(입구 규칙 반영, v1.30)까지 끝. 다음은 PROGRESS.md의 2c
     - 기준표 초안: 문서에 "필수·안 됨" 명시 → 오류 / Security Hub·Config·Well-Architected → 경고 또는 제안 / 문서에 없음 → 넣지 않음(칭찬만 막음)
     - 저장 위치 초안: criteria/ 폴더에 묶음별 md, 항목마다 ID(예: LB-01), 규칙 코드에서 ID로 근거를 가리킴. 앱(index.html)에는 넣지 않음
     - 웹 문서 조사용 WebSearch·WebFetch 사용 승인 받기

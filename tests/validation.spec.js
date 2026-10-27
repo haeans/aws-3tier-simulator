@@ -14,8 +14,8 @@ test('정상 구성은 "정상"으로 판정되고 개선 제안이 함께 표�
   await page.click('#btn-validate');
   await expect(page.locator('#result .status')).toHaveText('정상');
   const ids = await page.evaluate(() => validation.suggestions.map(s => s.rule.id));
-  expect(ids).toEqual([1, 2, 4, 5, 8, 9]);                   // DB 캐싱, CDN 사용, 자동 확장(EC2 2대), 모니터링·감사, DNS, 웹 방화벽
-  await expect(page.locator('.issue.improve')).toHaveCount(6);
+  expect(ids).toEqual([1, 2, 4, 5, 8, 9, 12]);               // DB 캐싱, CDN 사용, 자동 확장(EC2 2대), 모니터링·감사, DNS, 웹 방화벽, NAT를 AZ마다(NAT 1개)
+  await expect(page.locator('.issue.improve')).toHaveCount(7);
 });
 
 test('Route 53·WAF는 놓기만 하면 연결하라고 제안하고, 연결하면 제안이 사라진다', async ({ page }) => {
@@ -110,8 +110,8 @@ test('잘한 점: 좋은 구성이 실제로 있을 때만 칭찬하고, 문제�
   await buildValidArch(page);
   await page.click('#btn-validate');
   const praised = () => page.evaluate(() => validation.praises.map(p => (p.rule.level ? '판정' : '제안') + p.rule.id));
-  expect(await praised()).toEqual(['판정1', '판정2', '판정4', '판정6', '판정7']);
-  await expect(page.locator('#result .msg')).toContainText('잘한 점 5개');
+  expect(await praised()).toEqual(['판정1', '판정2', '판정4', '판정6', '판정7', '제안11']);
+  await expect(page.locator('#result .msg')).toContainText('잘한 점 6개');
   // 순서: 문제 → 잘한 점 → 제안
   const titles = await page.locator('#result .suggest-title').allTextContents();
   expect(titles).toEqual(['잘한 점', '더 나은 설계를 위한 제안']);
@@ -129,7 +129,7 @@ test('잘한 점: 좋은 구성이 실제로 있을 때만 칭찬하고, 문제�
   });
   await page.click('#btn-validate');
   await expect(page.locator('#result .status')).toHaveText('오류');
-  expect(await praised()).toEqual(['판정1', '판정2', '판정6', '판정7', '제안8', '제안9']);
+  expect(await praised()).toEqual(['판정1', '판정2', '판정6', '판정7', '제안8', '제안9', '제안11']);
 });
 
 test('DB가 사용자와 직접 연결되면 "오류"와 빨간 강조가 표시된다', async ({ page }) => {
@@ -318,4 +318,101 @@ test('모든 서비스와 규칙에 AWS 공식 문서 출처가 있다', async (
     ];
   });
   expect(missing).toEqual([]);
+});
+
+// ----- 판정 기준 정비 (criteria/entry.md, ROADMAP 14번) -----
+// 박스 종류로 연결선 하나 더하기 (i, j = 같은 종류 중 몇 번째)
+const connect = (page, a, b, i = 0, j = 0) => page.evaluate(([a, b, i, j]) => {
+  const T = (t, k) => state.nodes.filter(n => n.type === t)[k];
+  state.edges.push({ id: newId('e'), from: T(a, i).id, to: T(b, j).id, fromSide: null, toSide: null, mid: null });
+  render();
+}, [a, b, i, j]);
+// 검증을 새로 돌려 결과 요약을 돌려준다 (이미 결과가 떠 있으면 한 번 종료했다가 다시 검증)
+const verdict = async page => {
+  if (await page.locator('#btn-validate').textContent() === '검증 종료') await page.click('#btn-validate');
+  await page.click('#btn-validate');
+  return page.evaluate(() => ({
+    status: validation.status,
+    issues: validation.issues.map(i => i.rule.id),
+    praises: validation.praises.map(p => (p.rule.level ? 'V' : 'S') + p.rule.id),
+    sug: validation.suggestions.map(s => s.rule.id),
+    msgs: [...validation.issues.map(i => i.message), ...validation.suggestions.map(s => s.reason)],
+  }));
+};
+
+test('LB-02: LB와 연결된 EC2가 한 AZ에만 있으면 경고한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  // LB — 두 번째 EC2(AZ B) 연결을 지움 → 한 AZ의 EC2만 연결
+  await page.evaluate(() => {
+    const lb = state.nodes.find(n => n.type === 'lb'), ec2b = state.nodes.filter(n => n.type === 'ec2')[1];
+    state.edges = state.edges.filter(e => !(e.from === lb.id && e.to === ec2b.id));
+    render();
+  });
+  const r = await verdict(page);
+  expect(r.issues).toContain(7);
+  expect(r.status).toBe('warn');
+  expect(r.praises).not.toContain('V7');
+  expect(r.msgs.join(' ')).toContain('Load Balancer와 연결된 EC2가 한 AZ에만 있어요');
+});
+
+test('LB-05: IGW와 이어지지 않은 LB가 하나 더 있으면 "한 입구" 칭찬이 사라진다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('lb', 640, 330); });   // IGW와 이어지지 않은 LB
+  expect((await verdict(page)).praises).not.toContain('V1');
+});
+
+test('IGW-02: IGW와 EC2를 바로 이으면 오류 / IGW-03: 사용자와 EC2를 바로 이으면 경고 (칭찬도 사라짐)', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await connect(page, 'igw', 'ec2');
+  let r = await verdict(page);
+  expect(r.status).toBe('error');
+  expect(r.issues).toContain(8);
+  expect(r.praises).not.toContain('V1');
+  expect(r.praises).not.toContain('V2');
+  await buildValidArch(page);
+  await connect(page, 'pc', 'ec2');
+  r = await verdict(page);
+  expect(r.issues).toContain(9);
+  expect(r.issues).not.toContain(8);
+  expect(r.status).toBe('warn');
+  expect(r.praises).not.toContain('V1');
+  expect(r.praises).not.toContain('V2');
+});
+
+test('NAT-01: 퍼블릭이 아닌 NAT가 하나라도 있으면 경고 / NAT-03: 사용자와 NAT를 이으면 오류', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('nat', 560, 430); });   // 프라이빗 서브넷(AZ A)에 NAT 추가. 퍼블릭 NAT는 그대로 있음
+  let r = await verdict(page);
+  expect(r.issues).toContain(6);
+  expect(r.praises).not.toContain('V6');
+  await buildValidArch(page);
+  await connect(page, 'pc', 'nat');
+  r = await verdict(page);
+  expect(r.status).toBe('error');
+  expect(r.issues).toContain(10);
+});
+
+test('NAT-02: NAT가 AZ 하나뿐이면 제안하고 AZ마다 두면 칭찬 / LB-06: LB—NAT 제거 제안 / LB-03: LB가 AZ마다 있으면 제안', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);   // NAT는 AZ A에만 있음 (EC2는 AZ A·B)
+  let r = await verdict(page);
+  expect(r.sug).toContain(12);
+  expect(r.sug).not.toContain(11);
+  await page.evaluate(() => { addNode('nat', 880, 270); });   // AZ B 퍼블릭에도 NAT
+  r = await verdict(page);
+  expect(r.sug).not.toContain(12);
+  expect(r.praises).toContain('S12');
+  expect(r.status).toBe('ok');
+  await connect(page, 'lb', 'nat');
+  r = await verdict(page);
+  expect(r.sug).toContain(7);
+  expect(r.msgs.join(' ')).toContain('Load Balancer — NAT 연결');
+  await page.evaluate(() => { addNode('lb', 1040, 270); });   // AZ B 퍼블릭에도 LB
+  r = await verdict(page);
+  expect(r.sug).toContain(11);
+  expect(r.praises).not.toContain('S11');
 });

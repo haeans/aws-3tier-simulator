@@ -71,7 +71,10 @@ const SERVICE_GUIDE = {
       { to: ['ec2'], text: '프라이빗 서브넷의 EC2가 업데이트 등으로 밖에 연결할 때 거쳐요. 밖에서 먼저 연결을 시작할 수는 없어요.' },
       { to: ['igw'], text: '퍼블릭 NAT는 퍼블릭 서브넷에 두고, 나가는 요청을 IGW로 보내 인터넷에 내보내요.' },
     ],
-    avoid: [],
+    avoid: [
+      { to: GUIDE_USERS, text: '인터넷 쪽에서 먼저 NAT로 들어올 수는 없어요. 사용자는 IGW → Load Balancer로 들어와요.' },
+      { to: ['lb'], text: 'Load Balancer와 NAT 사이에는 오가는 요청이 없어요. 연결하지 마세요.' },
+    ],
   },
   lb: {
     links: [
@@ -81,6 +84,7 @@ const SERVICE_GUIDE = {
     ],
     avoid: [
       { to: GUIDE_DBS, text: 'Load Balancer는 앱 서버 앞에 둬요. DB에는 EC2가 접속해요.' },
+      { to: ['nat'], text: 'Load Balancer와 NAT 사이에는 오가는 요청이 없어요. 연결하지 마세요.' },
     ],
   },
   vpce: {
