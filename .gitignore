@@ -5,3 +5,72 @@ node_modules/
 test-results/
 playwright-report/
 blob-report/
+# 메모장 제외
+memo.txt
+
+# ===== 보안 파일 (절대 커밋하지 않는다) =====
+
+# 환경 변수·비밀 설정
+.env
+.env.*
+!.env.example
+!.env.sample
+*.env
+.envrc
+secrets.*
+secret.*
+credentials
+credentials.*
+*.secret
+*.secrets
+
+# 개인 키·인증서
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.ppk
+*.crt
+*.cer
+*.csr
+*.der
+*.p8
+
+# SSH 키
+*.ssh
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+known_hosts
+authorized_keys
+.ssh/
+
+# AWS·클라우드 자격 증명
+.aws/
+aws-credentials*
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example
+service-account*.json
+gcp-key*.json
+
+# 기타 자격 증명 파일
+.npmrc
+.netrc
+.htpasswd
+*.gpg
+*.asc
+*.kdbx
+
+# 운영체제·편집기 잡파일
+.DS_Store
+Thumbs.db
