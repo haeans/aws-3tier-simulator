@@ -71,7 +71,10 @@ const SERVICE_GUIDE = {
       { to: ['ec2'], text: '프라이빗 서브넷의 EC2가 업데이트 등으로 밖에 연결할 때 거쳐요. 밖에서 먼저 연결을 시작할 수는 없어요.' },
       { to: ['igw'], text: '퍼블릭 NAT는 퍼블릭 서브넷에 두고, 나가는 요청을 IGW로 보내 인터넷에 내보내요.' },
     ],
-    avoid: [],
+    avoid: [
+      { to: GUIDE_USERS, text: '인터넷 쪽에서 먼저 NAT로 들어올 수는 없어요. 사용자는 IGW → Load Balancer로 들어와요.' },
+      { to: ['lb'], text: 'Load Balancer와 NAT 사이에는 오가는 요청이 없어요. 연결하지 마세요.' },
+    ],
   },
   lb: {
     links: [
@@ -81,13 +84,14 @@ const SERVICE_GUIDE = {
     ],
     avoid: [
       { to: GUIDE_DBS, text: 'Load Balancer는 앱 서버 앞에 둬요. DB에는 EC2가 접속해요.' },
+      { to: ['nat'], text: 'Load Balancer와 NAT 사이에는 오가는 요청이 없어요. 연결하지 마세요.' },
     ],
   },
   vpce: {
     links: [
       { to: ['ec2'], text: 'EC2가 IGW나 NAT 없이 S3·DynamoDB에 가는 통로(게이트웨이 엔드포인트)예요.' },
       { to: ['s3', 'dynamodb'], text: 'VPC에서 S3·DynamoDB로 바로 이어 줘요. 게이트웨이 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금을 줄여요.' },
-      { to: ['ecr', 'cloudwatch', 'sessionmanager'], text: '인터페이스 엔드포인트는 프라이빗 서브넷 안에 만들어져요. NAT 없이 ECR·CloudWatch 같은 AWS 서비스에 비공개로 접속해요. 두 AZ 이상에 두는 것을 권장해요.' },
+      { to: ['ecr', 'cloudwatch', 'sessionmanager'], text: '인터페이스 엔드포인트는 고른 서브넷마다 만들어져요(보통 프라이빗 서브넷). NAT 없이 ECR·CloudWatch 같은 AWS 서비스에 비공개로 접속해요. 두 AZ 이상에 두는 것을 권장해요.' },
     ],
     avoid: [],
   },

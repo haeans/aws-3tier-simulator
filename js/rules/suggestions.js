@@ -65,9 +65,9 @@ const SUGGESTION_RULES = [
     },
   },
   {
-    id: 3, kind: 'improve', title: 'S3 전용 통로',
+    id: 3, kind: 'improve', title: 'S3·DynamoDB 전용 통로',
     pillars: ['security', 'cost'],
-    basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
+    basis: '게이트웨이 엔드포인트를 쓰면 IGW나 NAT 없이 S3·DynamoDB에 접속해요. 엔드포인트는 추가 요금이 없어서 NAT 데이터 처리 요금도 줄어요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html',
     praise(ctx) {
       const eps = ctx.ofType('vpce').filter(v => ctx.neighborsOf(v, 's3', 'dynamodb').length);
@@ -76,14 +76,19 @@ const SUGGESTION_RULES = [
         text: 'VPC Endpoints로 NAT 없이 S3·DynamoDB에 비공개로 접속해요. NAT 데이터 처리 요금도 줄어요.' }];
     },
     check(ctx) {
-      if (ctx.ofType('vpce').length) return [];
-      const ec2s = ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private' && ctx.neighborsOf(e, 's3').length);
-      if (!ec2s.length) return [];
-      return [{
-        nodeIds: ec2s.flatMap(e => [e.id, ...ctx.neighborsOf(e, 's3').map(n => n.id)]),
-        reason: '프라이빗 서브넷의 EC2가 S3에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.',
-        action: 'VPC Endpoints를 VPC 안(서브넷 밖)에 두고 EC2와 S3 사이를 연결하세요.',
-      }];
+      // 근거: DDB-S-01 — S3·DynamoDB는 서비스마다 게이트웨이 엔드포인트가 따로 필요하다 (VPC Endpoints가 하나라도 있으면 통과시키지 않음)
+      const issues = [];
+      ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').forEach(e => {
+        const bare = ctx.neighborsOf(e, 's3', 'dynamodb').filter(sv => !ctx.neighborsOf(sv, 'vpce').length);
+        if (!bare.length) return;
+        const names = [...new Set(bare.map(ctx.nameOf))].join('·');
+        issues.push({
+          nodeIds: [e.id, ...bare.map(n => n.id)],
+          reason: `프라이빗 서브넷의 EC2가 ${names}에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.`,
+          action: `VPC Endpoints를 VPC 안(서브넷 밖)에 두고 ${names}와 연결하세요. (엔드포인트는 서비스마다 따로 필요해요)`,
+        });
+      });
+      return issues;
     },
   },
   {
@@ -126,17 +131,27 @@ const SUGGESTION_RULES = [
     basis: '작업 기록(CloudTrail)과 상태 지표·로그(CloudWatch)를 남겨야 문제를 빨리 알아채고 원인을 찾을 수 있어요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_detect_investigate_events_app_service_logging.html',
     praise(ctx) {
-      const tools = ctx.ofType('cloudwatch', 'cloudtrail');
-      if (!ctx.ofType('ec2').length || tools.length < 2) return [];
-      return [{ nodeIds: tools.map(n => n.id),
-        text: 'CloudWatch(상태·경보)와 CloudTrail(작업 기록)을 두었어요. 문제를 빨리 알아채고 원인을 찾을 수 있어요.' }];
+      // 근거: CT-02 — 둘이 이어졌을 때만 칭찬 (CloudTrail 로그가 CloudWatch Logs로 가야 이상한 작업을 바로 알림받음)
+      const pairs = ctx.ofType('cloudtrail').flatMap(t => ctx.neighborsOf(t, 'cloudwatch').map(w => [t, w]));
+      if (!ctx.ofType('ec2').length || !pairs.length) return [];
+      return [{ nodeIds: [...new Set(pairs.flat().map(n => n.id))],
+        text: 'CloudTrail(작업 기록)을 CloudWatch(상태·경보)와 이었어요. 문제를 빨리 알아채고 원인을 찾을 수 있어요.' }];
     },
     check(ctx) {
       if (!ctx.ofType('ec2').length) return [];
       const missing = [];
       if (!ctx.ofType('cloudwatch').length) missing.push('CloudWatch(상태 모니터링·알림)');
       if (!ctx.ofType('cloudtrail').length) missing.push('CloudTrail(작업 기록)');
-      if (!missing.length) return [];
+      if (!missing.length) {
+        // 근거: CT-02 (CloudTrail.5) — 둘 다 있는데 이어지지 않은 경우
+        const traces = ctx.ofType('cloudtrail');
+        if (traces.some(t => ctx.neighborsOf(t, 'cloudwatch').length)) return [];
+        return [{
+          nodeIds: [...traces, ...ctx.ofType('cloudwatch')].map(n => n.id),
+          reason: 'CloudTrail과 CloudWatch가 따로 있어요. 누가 무엇을 바꿨는지 기록만 쌓이고, 이상한 작업이 있어도 바로 알림받지 못해요.',
+          action: 'CloudTrail — CloudWatch를 연결하세요. 기록을 CloudWatch로 보내면 경보를 걸 수 있어요.',
+        }];
+      }
       return [{
         nodeIds: [],
         reason: '서버 상태나 누가 무엇을 바꿨는지 볼 수단이 없어요. 문제가 생겨도 원인을 찾기 어려워요.',
@@ -173,6 +188,22 @@ const SUGGESTION_RULES = [
         ['elasticache', RDS_TYPES,
           'ElastiCache는 RDS 앞에서 요청을 대신 전달하지 않아요. 앱(EC2)이 캐시와 DB에 각각 접속해요.',
           '이 연결을 지우고 EC2 — ElastiCache, EC2 — RDS로 각각 연결하세요.'],
+        // 근거: CF-01 (등급 C)
+        ['cloudfront', RDS_TYPES,
+          'CloudFront의 원본은 S3나 웹 서버(Load Balancer)예요. DB는 CloudFront가 아니라 앱 서버(EC2)가 조회해요.',
+          '이 연결을 지우고 EC2 — RDS로 연결하세요.'],
+        // 근거: R53-02 (등급 C)
+        ['route53', ['ec2', ...RDS_TYPES],
+          'Route 53은 도메인을 CloudFront나 Load Balancer 같은 공개 입구로 이어 줘요. 프라이빗 서브넷의 서버·DB는 공개 IP가 있어도 인터넷과 통신할 수 없어요.',
+          '이 연결을 지우고 사용자 — Route 53 — CloudFront(또는 Load Balancer)로 연결하세요.'],
+        // 근거: VPCE-02 (등급 C)
+        ['vpce', ['igw', 'nat'],
+          'VPC Endpoints는 IGW·NAT 없이 AWS 서비스로 가는 길이에요. 둘을 서로 이을 필요가 없어요.',
+          '이 연결을 지우세요. VPC Endpoints는 접속할 서비스(S3·DynamoDB 등)와 이어요.'],
+        // 근거: LB-06 (등급 C)
+        ['lb', ['nat'],
+          'Load Balancer는 서버의 사설 IP로 요청을 보내요. NAT는 안에서 밖으로 나가는 연결만 도와서 둘 사이에는 오가는 요청이 없어요.',
+          '이 연결을 지우세요. NAT는 EC2 — NAT — IGW로 이어요.'],
       ];
       const issues = [];
       PAIRS.forEach(([type, others, reason, action]) => {
@@ -224,13 +255,20 @@ const SUGGESTION_RULES = [
     check(ctx) {
       const fronts = ctx.ofType('cloudfront', 'lb');
       if (!fronts.length || !ctx.ofType(...USER_TYPES).length) return [];
-      if (fronts.some(f => ctx.neighborsOf(f, 'waf').length)) return [];
+      // 근거: WAF-03 — 입구(CloudFront·Load Balancer)마다 WAF가 있어야 한다 (하나라도 있으면 통과시키지 않음)
+      const bare = fronts.filter(f => !ctx.neighborsOf(f, 'waf').length);
+      if (!bare.length) return [];
+      const names = [...new Set(bare.map(ctx.nameOf))].join('·');
       return [{
-        nodeIds: fronts.map(f => f.id),
-        reason: '인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요.',
-        action: ctx.ofType('waf').length
-          ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
-          : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
+        nodeIds: bare.map(f => f.id),
+        reason: bare.length < fronts.length
+          ? `WAF가 없는 입구가 있어요(${names}). 그곳으로 들어오는 요청은 검사 없이 그대로 받아요.`
+          : '인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요.',
+        action: bare.length < fronts.length
+          ? `${names}에도 WAF를 연결하세요. (WAF는 입구 하나에 하나씩 연결해요)`
+          : ctx.ofType('waf').length
+            ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
+            : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
       }];
     },
   },
@@ -240,15 +278,7 @@ const SUGGESTION_RULES = [
     basis: 'WAF는 요청이 지나가는 길이 아니라 CloudFront·Load Balancer(ALB)에 붙이는 검사 규칙이에요. WAF로 이어도 두 곳 사이에 요청이 오가지 않아요.',
     ref: 'https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html',
     check(ctx) {
-      // 사용자에서 출발해 요청이 닿는 박스 (Route 53·WAF는 길이 아니므로 거치지 않음)
-      const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
-      const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
-      const queue = [...reached];
-      for (let i = 0; i < queue.length; i++) {
-        ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
-          if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
-        });
-      }
+      const reached = requestReach(ctx);
       const HOW = {
         cloudfront: 'CloudFront는 사용자와 IGW 사이에 두세요. (사용자 — CloudFront — IGW)',
         lb: 'Load Balancer는 IGW와 EC2 사이에 두세요. (IGW — Load Balancer — EC2)',
@@ -266,5 +296,169 @@ const SUGGESTION_RULES = [
       });
     },
   },
+  {
+    // 근거: WAF-01 (등급 C), WAF-02 (등급 A이나 WAF는 검증 대상이 아니라 제안으로 반영 — 사용자 결정 2026-10-27)
+    id: 13, kind: 'remove', title: '잘못된 WAF 연결',
+    pillars: [],
+    basis: 'WAF는 CloudFront나 Application Load Balancer에 붙이는 검사 규칙이에요. 입구 하나에는 WAF를 하나만 붙일 수 있고, 한 WAF를 CloudFront와 Load Balancer에 함께 붙일 수도 없어요.',
+    ref: 'https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-associating-aws-resource.html',
+    check(ctx) {
+      const issues = [];
+      const FRONTS = ['cloudfront', 'lb'];
+      ctx.ofType('waf').forEach(w => {
+        // 붙일 수 없는 곳(EC2·DB·NAT 등)과 연결
+        ctx.neighborsOf(w, ...SERVICES.map(v => v.type).filter(t => !FRONTS.includes(t))).forEach(m => issues.push({
+          nodeIds: [w.id, m.id],
+          reason: `WAF — ${ctx.nameOf(m)} 연결: WAF는 ${ctx.nameOf(m)}에 붙일 수 없어요. CloudFront나 Load Balancer(ALB)에만 붙여요.`,
+          action: '이 연결을 지우고 WAF를 CloudFront나 Load Balancer와 연결하세요.',
+        }));
+        // 한 WAF가 CloudFront와 Load Balancer에 함께 연결
+        const fronts = ctx.neighborsOf(w, ...FRONTS);
+        // (요청 경로에 안 놓인 입구가 있으면 '길이 아니다' 제안(10)이 이미 알리므로 겹쳐 알리지 않는다)
+        const reached = requestReach(ctx);
+        if (fronts.every(f => reached.has(f.id)) &&
+            fronts.some(f => f.type === 'cloudfront') && fronts.some(f => f.type === 'lb')) issues.push({
+          nodeIds: [w.id, ...fronts.map(f => f.id)],
+          reason: 'WAF 하나가 CloudFront와 Load Balancer에 함께 연결돼 있어요. CloudFront에 쓴 WAF는 다른 종류의 입구에 함께 쓸 수 없어요.',
+          action: 'CloudFront용 WAF와 Load Balancer용 WAF를 따로 두세요.',
+        });
+      });
+      // 입구 하나에 WAF가 둘 이상
+      ctx.ofType(...FRONTS).forEach(f => {
+        const wafs = ctx.neighborsOf(f, 'waf');
+        if (wafs.length > 1) issues.push({
+          nodeIds: [f.id, ...wafs.map(w => w.id)],
+          reason: `${ctx.nameOf(f)}에 WAF가 ${wafs.length}개 연결돼 있어요. 입구 하나에는 WAF를 하나만 붙일 수 있어요.`,
+          action: 'WAF 하나만 남기고 나머지 연결을 지우세요.',
+        });
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: LB-03 (등급 C) — 문서가 LB 여러 개를 금지하지는 않으므로 오류가 아니라 제안
+    id: 11, kind: 'improve', title: 'Load Balancer 하나로',
+    pillars: ['reliability', 'cost'],
+    basis: 'Load Balancer는 하나를 만들어 여러 AZ에 걸쳐 쓰는 것이 기본이에요. AZ마다 따로 두면 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지도 못해요.',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
+    praise(ctx) {
+      const lbs = ctx.ofType('lb').filter(lb => new Set(ctx.neighborsOf(lb, 'ec2').map(ctx.azOf).filter(Boolean)).size > 1);
+      if (!lbs.length) return [];
+      return [{ nodeIds: lbs.map(n => n.id),
+        text: 'Load Balancer 하나가 여러 AZ의 EC2에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
+    },
+    check(ctx) {
+      const lbs = ctx.ofType('lb').filter(lb => ctx.azOf(lb));
+      if (new Set(lbs.map(ctx.azOf)).size < 2) return [];
+      return [{
+        nodeIds: lbs.map(n => n.id),
+        reason: 'Load Balancer가 AZ마다 따로 있어요. 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지 못해요.',
+        action: 'Load Balancer를 하나만 두고, 두 AZ의 EC2를 모두 그 Load Balancer와 연결하세요.',
+      }];
+    },
+  },
+  {
+    // 근거: NAT-02 (등급 C)
+    id: 12, kind: 'improve', title: 'NAT를 AZ마다',
+    pillars: ['reliability'],
+    basis: 'NAT 하나를 여러 AZ가 같이 쓰면, 그 NAT가 있는 AZ에 장애가 날 때 다른 AZ의 서버도 인터넷으로 나갈 수 없어요. AZ마다 NAT를 두면 버텨요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-basics.html',
+    praise(ctx) {
+      const { azs, covered } = natCoverage(ctx);
+      if (azs.length < 2 || covered.length < azs.length) return [];
+      return [{ nodeIds: ctx.ofType('nat').map(n => n.id),
+        text: 'NAT를 AZ마다 두었어요. 한 AZ에 장애가 나도 다른 AZ의 서버는 인터넷으로 나갈 수 있어요.' }];
+    },
+    check(ctx) {
+      const { azs, covered } = natCoverage(ctx);
+      const missing = azs.filter(a => !covered.includes(a));
+      if (!azs.length || !covered.length || !missing.length) return [];   // NAT가 아예 없으면 판정 6이 알림
+      return [{
+        nodeIds: ctx.ofType('nat').map(n => n.id),
+        reason: `${missing.map(a => a.label).join(', ')}의 서버는 다른 AZ의 NAT를 같이 써요. 그 NAT가 있는 AZ에 장애가 나면 인터넷으로 나갈 수 없어요.`,
+        action: `${missing.map(a => a.label).join(', ')}의 퍼블릭 서브넷에도 NAT를 두세요.`,
+      }];
+    },
+  },
+  {
+    // 근거: DB-05 (등급 C) — 프라이빗 서브넷의 DB는 오류가 아니지만, 앱 서버와 계층을 나누면 더 안전
+    id: 14, kind: 'improve', title: 'DB 서브넷 분리',
+    pillars: ['security'],
+    basis: 'DB를 앱 서버와 다른 서브넷(DB 서브넷)에 두면, 서브넷 단위로 접근을 더 좁게 막을 수 있어요. 프라이빗 서브넷의 DB도 동작은 하지만 계층이 섞여요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_layered.html',
+    check(ctx) {
+      const dbs = ctx.ofType(...RDS_TYPES).filter(db => ctx.zoneOf(db) === 'private');
+      if (!dbs.length) return [];
+      return [{
+        nodeIds: dbs.map(n => n.id),
+        reason: 'DB가 앱 서버(EC2)와 같은 프라이빗 서브넷에 있어요. 서브넷 단위로 접근을 따로 좁히기 어려워요.',
+        action: 'DB 서브넷을 만들어 DB를 옮기세요. 앱 서버가 있는 서브넷과 계층이 나뉘어요.',
+      }];
+    },
+  },
 ];
 
+// 근거: SSM-03 (Security Hub SSM.1은 B, 정상의 의미를 흔들지 않도록 제안)
+SUGGESTION_RULES.push({
+  id: 15, kind: 'improve', title: 'Session Manager로 서버 관리',
+  pillars: ['security', 'operations'],
+  basis: 'Session Manager로 서버를 관리하면 열린 접속 포트·Bastion·SSH 키가 필요 없어요. 모든 EC2를 Systems Manager로 관리하는 것이 권장이에요.',
+  ref: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html',
+  praise(ctx) {
+    const ec2s = ctx.ofType('ec2');
+    if (!ec2s.length || ec2s.some(e => !ec2HasSessionManager(e))) return [];
+    return [{ nodeIds: ec2s.map(n => n.id),
+      text: '모든 EC2를 Session Manager로 관리해요. 열린 접속 포트나 SSH 키 없이 안전하게 접속해요.' }];
+  },
+  check(ctx) {
+    const bare = ctx.ofType('ec2').filter(e => !ec2HasSessionManager(e));
+    if (!bare.length) return [];
+    return [{
+      nodeIds: bare.map(n => n.id),
+      reason: 'Session Manager와 이어지지 않은 EC2가 있어요. 서버에 들어가려면 SSH 포트를 열고 키를 관리해야 해요.',
+      action: 'Session Manager를 VPC 밖에 두고 EC2와 연결하세요. (프라이빗 서브넷이면 NAT나 VPC Endpoints도 필요해요)',
+    }];
+  },
+});
+
+// 근거: CTR-04 (등급 C)
+SUGGESTION_RULES.push({
+  id: 16, kind: 'improve', title: 'Fargate 짝',
+  pillars: ['operations'],
+  basis: 'Fargate는 ECS나 EKS가 컨테이너를 서버 관리 없이 실행하는 방식이에요. 혼자서는 컨테이너를 실행하지 않아요.',
+  ref: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html',
+  check(ctx) {
+    const lone = ctx.ofType('fargate').filter(f => !ctx.neighborsOf(f, 'ecs', 'eks').length);
+    if (!lone.length) return [];
+    return [{
+      nodeIds: lone.map(n => n.id),
+      reason: 'ECS나 EKS와 이어지지 않은 Fargate가 있어요. Fargate는 ECS 작업이나 EKS Pod를 실행해 주는 방식이에요.',
+      action: 'Fargate를 ECS(또는 EKS)와 연결하세요.',
+    }];
+  },
+});
+
+function ec2HasSessionManager(e) {
+  return linkedNodes(e, 'sessionmanager').length > 0;
+}
+
+// 프라이빗 서브넷에 EC2가 있는 AZ 목록과, 그중 같은 AZ의 퍼블릭 서브넷에 NAT가 있는 AZ 목록
+function natCoverage(ctx) {
+  const azs = [...new Set(ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').map(ctx.azOf).filter(Boolean))];
+  const covered = azs.filter(a => ctx.ofType('nat').some(n => ctx.zoneOf(n) === 'public' && ctx.azOf(n) === a));
+  return { azs, covered };
+}
+
+
+// 사용자에서 출발해 요청이 닿는 박스 id 집합 (Route 53·WAF는 길이 아니므로 거치지 않음)
+function requestReach(ctx) {
+  const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
+  const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
+  const queue = [...reached];
+  for (let i = 0; i < queue.length; i++) {
+    ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
+      if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
+    });
+  }
+  return reached;
+}

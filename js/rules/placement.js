@@ -37,18 +37,29 @@ const PLACEMENT_RULES = {
     test: zone => zone === 'outside' || zone === 'vpc',
     message: name => `${eunNeun(name)} 서브넷 안에는 놓을 수 없어요. VPC 바깥이나 서브넷 밖의 VPC 영역에 놓아주세요.`,
   },
-  // VPC Endpoints: 게이트웨이 엔드포인트는 VPC 경계, 인터페이스 엔드포인트는 서브넷 안(프라이빗 서브넷 권장)
+  // VPC Endpoints: 게이트웨이 엔드포인트는 VPC 경계, 인터페이스 엔드포인트는 고른 서브넷마다 생긴다.
+  // 문서는 서브넷 종류를 제한하지 않는다 (criteria/ops.md VPCE-03). 프라이빗 서브넷은 안내문에서만 권장
   endpoint: {
-    test: zone => zone === 'outside' || zone === 'vpc' || zone === 'private',
-    message: name => `${eunNeun(name)} VPC 경계나 VPC 안, 또는 프라이빗 서브넷 안에 놓아주세요.`,
+    test: () => true,
+    message: () => '',
   },
   private: {
     test: zone => zone === 'private',
     message: name => `${eunNeun(name)} 프라이빗 서브넷 안에만 놓을 수 있어요.`,
   },
+  // ECS·EKS·Fargate: 문서는 퍼블릭·프라이빗 서브넷 모두 허용 (criteria/container.md CTR-01). 퍼블릭은 판정 17이 경고
+  appSubnet: {
+    test: zone => zone === 'private' || zone === 'public',
+    message: name => `${eunNeun(name)} 프라이빗 서브넷(또는 퍼블릭 서브넷) 안에 놓아주세요.`,
+  },
   db: {
     test: zone => zone === 'db',
     message: name => `${eunNeun(name)} DB 서브넷 안에만 놓을 수 있어요.`,
+  },
+  // ElastiCache: 문서는 VPC 안의 서브넷 그룹이라고만 한다 (criteria/data.md CACHE-01). DB 서브넷이 권장, 프라이빗 서브넷도 가능
+  dataSubnet: {
+    test: zone => zone === 'db' || zone === 'private',
+    message: name => `${eunNeun(name)} DB 서브넷이나 프라이빗 서브넷 안에만 놓을 수 있어요.`,
   },
   any: {
     test: () => true,

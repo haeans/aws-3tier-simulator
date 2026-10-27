@@ -41,16 +41,16 @@ const SERVICES = [
   { type: 'ec2',            name: 'EC2',              category: 'compute',   allowedZone: 'any',     validated: true  },
   // 컨테이너/도커
   { type: 'ecr',            name: 'ECR',              category: 'container', allowedZone: 'outside', validated: false },
-  { type: 'ecs',            name: 'ECS',              category: 'container', allowedZone: 'private', validated: false },
-  { type: 'eks',            name: 'EKS',              category: 'container', allowedZone: 'private', validated: false },
-  { type: 'fargate',        name: 'Fargate',          category: 'container', allowedZone: 'private', validated: false },
+  { type: 'ecs',            name: 'ECS',              category: 'container', allowedZone: 'appSubnet', validated: false },
+  { type: 'eks',            name: 'EKS',              category: 'container', allowedZone: 'appSubnet', validated: false },
+  { type: 'fargate',        name: 'Fargate',          category: 'container', allowedZone: 'appSubnet', validated: false },
   // 데이터
   { type: 's3',             name: 'S3',               category: 'data',      allowedZone: 'outside', validated: false },
   { type: 'dynamodb',       name: 'DynamoDB',         category: 'data',      allowedZone: 'outside', validated: false },
   { type: 'rds',            name: 'RDS',              category: 'data',      allowedZone: 'any',     validated: true  },
   { type: 'rds-replica',    name: 'RDS Read Replica', category: 'data',      allowedZone: 'any',     validated: true  },
   { type: 'rds-standby',    name: 'RDS Standby',      category: 'data',      allowedZone: 'any',     validated: true  },
-  { type: 'elasticache',    name: 'ElastiCache',      category: 'data',      allowedZone: 'db',      validated: false },
+  { type: 'elasticache',    name: 'ElastiCache',      category: 'data',      allowedZone: 'dataSubnet', validated: false },
   // CI/CD
   { type: 'codecommit',     name: 'CodeCommit',       category: 'cicd',      allowedZone: 'outside', validated: false },
   { type: 'codebuild',      name: 'CodeBuild',        category: 'cicd',      allowedZone: 'outside', validated: false },
@@ -106,16 +106,18 @@ SERVICES.forEach(s => { s.desc = SERVICE_DESC[s.type] || ''; });
 
 // 위치 제한 없는(any) 서비스 중 검증 규칙상 권장 위치
 const RECOMMENDED_ZONE = {
-  igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '퍼블릭 서브넷', ec2: '프라이빗 서브넷',
-  rds: 'DB 서브넷', 'rds-replica': 'DB 서브넷', 'rds-standby': 'DB 서브넷',
+  igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '퍼블릭 서브넷', ec2: '프라이빗 서브넷', ecs: '프라이빗 서브넷', eks: '프라이빗 서브넷', fargate: '프라이빗 서브넷',
+  rds: 'DB 서브넷', 'rds-replica': 'DB 서브넷', 'rds-standby': 'DB 서브넷', elasticache: 'DB 서브넷',
 };
 // allowedZone을 쉬운 말로
 const ZONE_TEXT = {
   outside: 'VPC 밖',
   vpcEdge: 'VPC 안팎 모두 가능 (서브넷 안은 불가)',
-  endpoint: 'VPC 경계·VPC 안, 또는 프라이빗 서브넷 안',
+  endpoint: 'VPC 경계·VPC 안, 또는 서브넷 안 (인터페이스 엔드포인트는 보통 프라이빗 서브넷)',
   private: '프라이빗 서브넷만',
+  appSubnet: '프라이빗 서브넷 (퍼블릭 서브넷은 경고)',
   db:      'DB 서브넷만',
+  dataSubnet: 'DB 서브넷 또는 프라이빗 서브넷',
   any:     '위치 제한 없음',
 };
 const SVC_MAP = Object.fromEntries(SERVICES.map(s => [s.type, s]));
