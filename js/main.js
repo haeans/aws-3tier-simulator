@@ -34,33 +34,42 @@ function loadTemplate() {
 }
 
 // ----- 이벤트 바인딩 -----
-// 빈 캔버스 클릭 → 선택 해제 / 연결 대기 취소
+// 빈 캔버스 클릭 → 선택 해제. 흰 배경(영역 밖)을 끌면 화면 이동
 $world.addEventListener('pointerdown', e => {
-  cancelPendingConnect();
-  if (e.shiftKey && e.button === 0 && !connectMode) { startMarquee(e); return; }   // Shift+드래그: 범위 선택
+  if (e.shiftKey && e.button === 0) { startMarquee(e); return; }   // Shift+드래그: 범위 선택
   select(null);
+  if (e.button === 0 && e.target === $world) startPan(e);
 });
+// 줌을 줄여 캔버스 바깥 여백이 보일 때도 그 여백을 끌면 화면 이동
+$wrap.addEventListener('pointerdown', e => {
+  if (e.button === 0 && (e.target === $wrap || e.target === $sizer)) { select(null); startPan(e); }
+});
+// 스페이스바를 누른 채 끌면 박스·영역 위에서도 화면 이동 (다른 동작보다 먼저 가로챔)
+$wrap.addEventListener('pointerdown', e => {
+  if (!spaceHeld || e.button !== 0) return;
+  e.stopPropagation();
+  startPan(e);
+}, true);
+const isTyping = t => /** @type {Element} */ (t).closest('input, textarea, select');
+document.addEventListener('keydown', e => {
+  if (e.code !== 'Space' || isTyping(e.target)) return;
+  e.preventDefault();   // 페이지 스크롤·눌려 있던 버튼이 다시 눌리는 것 막기
+  if (!spaceHeld) { spaceHeld = true; document.body.classList.add('space-pan'); hideTooltip(); }
+});
+document.addEventListener('keyup', e => {
+  if (e.code !== 'Space') return;
+  if (!isTyping(e.target)) e.preventDefault();
+  spaceHeld = false;
+  document.body.classList.remove('space-pan');
+});
+window.addEventListener('blur', () => { spaceHeld = false; document.body.classList.remove('space-pan'); });
 
 // 연결선 위가 아니면 강조 해제 (선이 다시 그려져 pointerleave를 놓친 경우 대비)
 $world.addEventListener('pointermove', e => {
   if (hoverEdgeId && !/** @type {Element} */ (e.target).closest('.edge-hit, .edge-handle')) setHoverEdge(null);
 });
 
-// 연결 대기 중이면 포인터까지 점선 표시
-$world.addEventListener('pointermove', e => {
-  if (!connectMode || !connectFrom) return;
-  const from = findNode(connectFrom);
-  if (!from) return;
-  const c = connectFromSide ? anchorPoint(from, connectFromSide) : centerOf(from);
-  const p = clientToWorld(e.clientX, e.clientY);
-  $tempEdge.setAttribute('x1', String(c.x));
-  $tempEdge.setAttribute('y1', String(c.y));
-  $tempEdge.setAttribute('x2', String(p.x));
-  $tempEdge.setAttribute('y2', String(p.y));
-  $tempEdge.setAttribute('visibility', 'visible');
-});
-
-// Delete / Backspace → 선택 항목 삭제, Esc → 연결 대기 취소 → 연결 모드 끄기 → 선택 해제
+// Delete / Backspace → 선택 항목 삭제, Esc → 끌던 연결 취소 → 선택 해제
 document.addEventListener('keydown', e => {
   if (/** @type {Element} */ (e.target).closest('input, textarea')) return;
   // Ctrl+Z → 되돌리기, Ctrl+Y / Ctrl+Shift+Z → 다시 실행 (한글 입력 상태에서도 되도록 키 위치로 판단)
@@ -79,12 +88,10 @@ document.addEventListener('keydown', e => {
     deleteSelected();
   } else if (e.key === 'Escape') {
     if (connectFrom) cancelPendingConnect();
-    else if (connectMode) setConnectMode(false);
     else select(null);
   }
 });
 
-$btnConnect.addEventListener('click', () => setConnectMode(!connectMode));
 document.getElementById('btn-template').addEventListener('click', loadTemplate);
 document.getElementById('btn-validate').addEventListener('click', runValidation);
 document.getElementById('btn-undo').addEventListener('click', undo);

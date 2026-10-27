@@ -82,11 +82,11 @@ function hideTooltip() {
 $wrap.addEventListener('scroll', hideTooltip);
 $palette.addEventListener('scroll', hideTooltip);
 
-// 요소에 마우스를 잠시 올리면 설명 표시. 드래그 중·연결 모드에서는 표시하지 않음.
+// 요소에 마우스를 잠시 올리면 설명 표시. 드래그 중·연결 중에는 표시하지 않음.
 function attachTooltip(el, getHtml) {
   el.addEventListener('pointerenter', e => {
     hideTooltip();
-    if (e.buttons || connectMode) return;
+    if (e.buttons || connectFrom) return;
     tooltipPos = { x: e.clientX, y: e.clientY };
     tooltipTimer = setTimeout(() => {
       $tooltip.innerHTML = getHtml();
