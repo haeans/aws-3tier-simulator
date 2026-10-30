@@ -152,6 +152,74 @@ test('가운데 손잡이로 경로를 옮기고, 더블클릭하면 자동으�
   expect([reset.mid, reset.fromSide, reset.toSide]).toEqual([null, null, null]);
 });
 
+// 경로의 모든 구간이 가로 또는 세로인지
+const allOrthogonal = pts => pts.slice(1).every((q, i) => q.x === pts[i].x || q.y === pts[i].y);
+
+test('가운데 손잡이를 아무 방향으로 끌면 선이 그 점을 지나가고 (아래로 끌면 U자), 직각은 유지된다', async ({ page }) => {
+  await openApp(page);
+  await place(page, [['s3', 200, 300], ['iam', 700, 300]]);
+  await page.evaluate(() => {
+    state.edges.push({ id: newId('e'), from: state.nodes[0].id, to: state.nodes[1].id, fromSide: null, toSide: null, mid: null });
+    render();
+    select(state.edges[0].id);
+  });
+  const r = await page.evaluate(() => edgeRoute(state.edges[0]));
+  const from = await toScreen(page, r.handle.x, r.handle.y);
+  await drag(page, from, await toScreen(page, r.handle.x + 40, r.handle.y + 200));   // 대각선 아래로
+  const ed = (await edges(page))[0];
+  expect(ed.mid).toEqual({ x: r.handle.x + 40, y: r.handle.y + 200 });
+  const r2 = await page.evaluate(() => edgeRoute(state.edges[0]));
+  expect(r2.handle).toEqual(ed.mid);                                                     // 손잡이는 놓은 자리
+  expect(allOrthogonal(r2.points)).toBe(true);
+  expect(Math.max(...r2.points.map(p => p.y))).toBe(ed.mid.y);                          // 박스 아래로 돌아감 (U자)
+  const onPath = r2.points.slice(1).some((q, i) => {                                     // 선이 그 점을 지남
+    const p = r2.points[i];
+    return (p.x === q.x && p.x === ed.mid.x && ed.mid.y >= Math.min(p.y, q.y) && ed.mid.y <= Math.max(p.y, q.y)) ||
+           (p.y === q.y && p.y === ed.mid.y && ed.mid.x >= Math.min(p.x, q.x) && ed.mid.x <= Math.max(p.x, q.x));
+  });
+  expect(onPath).toBe(true);
+});
+
+test('두 박스 사이에서 옆으로만 끌면 예전처럼 가운데 세로 구간 하나만 옮겨진다', async ({ page }) => {
+  await openApp(page);
+  await place(page, [['s3', 200, 300], ['iam', 700, 400]]);
+  await page.evaluate(() => {
+    state.edges.push({ id: newId('e'), from: state.nodes[0].id, to: state.nodes[1].id, fromSide: null, toSide: null, mid: null });
+    render();
+    select(state.edges[0].id);
+  });
+  const r = await page.evaluate(() => edgeRoute(state.edges[0]));
+  await drag(page, await toScreen(page, r.handle.x, r.handle.y), await toScreen(page, r.handle.x + 60, r.handle.y));
+  const r2 = await page.evaluate(() => edgeRoute(state.edges[0]));
+  expect(r2.points).toHaveLength(4);                                                     // 가로 → 세로 → 가로 (꺾임 2번)
+  expect(r2.points[1].x).toBe(r.handle.x + 60);
+});
+
+test('양 끝 박스를 함께 옮기면 손잡이를 놓은 점도 끄는 동안부터 같이 옮겨져 모양이 유지된다', async ({ page }) => {
+  await openApp(page);
+  await place(page, [['s3', 200, 300], ['iam', 700, 300]]);
+  await page.evaluate(() => {
+    const [a, b] = state.nodes;
+    state.edges.push({ id: newId('e'), from: a.id, to: b.id, fromSide: null, toSide: null, mid: { x: 460, y: 500 } });
+    select(null);
+    render();
+  });
+  const c0 = await center(page, 0), c1 = await center(page, 1);
+  const p0 = await toScreen(page, c0.x, c0.y), p1 = await toScreen(page, c1.x, c1.y);
+  await page.keyboard.down('Shift');                         // Shift+클릭으로 두 박스 선택
+  await page.mouse.click(p0.x, p0.y);
+  await page.mouse.click(p1.x, p1.y);
+  await page.keyboard.up('Shift');
+  const t = await toScreen(page, c0.x + 40, c0.y + 60);
+  await page.mouse.move(p0.x, p0.y);
+  await page.mouse.down();
+  await page.mouse.move(t.x, t.y, { steps: 6 });
+  const during = await page.evaluate(() => edgeRoute(state.edges[0]).handle);   // 놓기 전
+  expect(during).toEqual({ x: 500, y: 560 });
+  await page.mouse.up();
+  expect((await edges(page))[0].mid).toEqual({ x: 500, y: 560 });               // 놓은 뒤
+});
+
 test('자동 경로는 사이에 있는 박스를 피해 간다', async ({ page }) => {
   await openApp(page);
   await place(page, [['s3', 200, 300], ['iam', 500, 300], ['dynamodb', 800, 300]]);

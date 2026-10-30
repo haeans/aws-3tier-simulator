@@ -449,8 +449,7 @@ body {
 /* 선택한 연결선의 조절 손잡이 (끝점: 연결 변 바꾸기 / 가운데: 경로 옮기기) */
 #handle-layer { z-index: 20; }
 .edge-handle { cursor: move; }
-.edge-handle.mid-x { cursor: ew-resize; }
-.edge-handle.mid-y { cursor: ns-resize; }
+.edge-handle.mid-free { cursor: move; }   /* 가운데 손잡이: 아무 방향으로 끌기 */
 .edge-handle .handle-hit { fill: transparent; pointer-events: all; }   /* 잡기 쉽게 넓은 투명 영역 */
 .edge-handle .handle-shape { fill: #fff; stroke: var(--select); stroke-width: 2; pointer-events: all; }
 .edge-handle:hover .handle-shape { fill: #dcecf9; }

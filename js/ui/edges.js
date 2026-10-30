@@ -109,7 +109,10 @@ function startConnectDrag(e, id, side) {
 }
 
 // ----- 연결선 경로 (직각) -----
-// 연결선 데이터: fromSide/toSide = 연결 변(null이면 자동), mid = 가운데 구간 위치 { axis, value } (null이면 자동)
+// 연결선 데이터: fromSide/toSide = 연결 변(null이면 자동), mid = 사용자가 옮긴 경로 (null이면 자동)
+//   mid = { x, y }: 가운데 손잡이를 놓은 점. 선이 이 점을 지나가도록 직각으로 꺾는다 (v1.41~)
+//   mid = { axis, value }: 예전 저장 형식 (가운데 구간 위치만). 그대로 읽어 그린다
+const isViaMid = mid => !!mid && typeof mid.x === 'number' && typeof mid.y === 'number';
 const SIDES = ['top', 'right', 'bottom', 'left'];
 const SIDE_DIR = { top: { x: 0, y: -1 }, right: { x: 1, y: 0 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
 const STUB = 20;      // 박스 변에서 수직으로 먼저 나가는 길이
@@ -163,6 +166,18 @@ function simplifyPoints(pts) {
 function edgeRoute(ed) {
   const a = findNode(ed.from), b = findNode(ed.to);
   const [autoA, autoB] = autoSides(a, b);
+  // 손잡이를 놓은 점(via)이 있으면, 사용자가 정하지 않은 연결 변은 네 변 중 가장 자연스러운 것을 고른다
+  // (박스를 가로지르지 않고, 되돌아가지 않고, 짧고 덜 꺾이는 경로)
+  if (isViaMid(ed.mid)) {
+    let best = null;
+    for (const sa of ed.fromSide ? [ed.fromSide] : SIDES) {
+      for (const sb of ed.toSide ? [ed.toSide] : SIDES) {
+        const r = routeFor(a, b, sa, sb, ed.mid);
+        if (!best || r.score < best.score) best = r;
+      }
+    }
+    return best;
+  }
   if (ed.fromSide || ed.toSide || ed.mid) {
     return routeFor(a, b, ed.fromSide || autoA, ed.toSide || autoB, ed.mid);
   }
@@ -187,6 +202,7 @@ function routeFor(a, b, sa, sb, mid, offA = 0, offB = 0) {
   const P = { x: S.x + da.x * STUB, y: S.y + da.y * STUB };
   const Q = { x: E.x + db.x * STUB, y: E.y + db.y * STUB };
   const ha = isHorizSide(sa), hb = isHorizSide(sb);
+  if (isViaMid(mid)) return viaRoute(a, b, sa, sb, { S, P, Q, E, da, db, ha, hb }, mid, offA, offB);
 
   // axis: 가운데 구간이 세로선이면 'x'(x 위치로 조절), 가로선이면 'y'
   let axis, m;
@@ -230,6 +246,40 @@ function routeFor(a, b, sa, sb, mid, offA = 0, offB = 0) {
     free: !fixed && !same(mids[0], P) && !same(mids[1], Q),
   };
   return { points: simplifyPoints(pts), axis, m, handle, sa, sb, offA, offB, seg, crossings: crossingCount(pts, skip) };
+}
+
+// 사용자가 놓은 점 W를 지나가는 직각 경로. 후보 중 박스를 덜 가로지르고, 되돌아가지 않고, 덜 꺾이는 것을 고른다.
+// - 한 줄: W가 두 끝 사이에 있으면 가운데 구간 하나가 W를 지남 (지금까지의 모양과 같음)
+// - 모서리: W에서 꺾임. 가로로 들어와 세로로 나가거나, 세로로 들어와 가로로 나감 (박스 아래로 돌아가는 U자 등)
+function viaRoute(a, b, sa, sb, g, W, offA, offB) {
+  const { S, P, Q, E, da, db, ha, hb } = g;
+  const cands = [
+    [P, { x: P.x, y: W.y }, W, { x: W.x, y: Q.y }, Q],   // 세로 → W → 세로 (W에서 가로 구간)
+    [P, { x: W.x, y: P.y }, W, { x: Q.x, y: W.y }, Q],   // 가로 → W → 가로 (W에서 세로 구간)
+  ];
+  const between = (v, p, q) => v >= Math.min(p, q) && v <= Math.max(p, q);
+  if (ha && hb && between(W.y, P.y, Q.y)) cands.unshift([P, { x: W.x, y: P.y }, { x: W.x, y: Q.y }, Q]);
+  if (!ha && !hb && between(W.x, P.x, Q.x)) cands.unshift([P, { x: P.x, y: W.y }, { x: Q.x, y: W.y }, Q]);
+  const dir = (p, q) => ({ x: Math.sign(q.x - p.x), y: Math.sign(q.y - p.y) });
+  const score = inner => {
+    // 시작 짧은 선 다음 구간이 박스 쪽으로 되돌아가거나, 도착 짧은 선으로 반대쪽에서 들어오면 선이 겹쳐 보여 감점
+    const nextOfP = inner.find(p => p.x !== P.x || p.y !== P.y);
+    const prevOfQ = [...inner].reverse().find(p => p.x !== Q.x || p.y !== Q.y);
+    const first = nextOfP ? dir(P, nextOfP) : { x: 0, y: 0 };
+    const last = prevOfQ ? dir(prevOfQ, Q) : { x: 0, y: 0 };
+    const back = (first.x === -da.x && first.y === -da.y ? 1 : 0) + (last.x === db.x && last.y === db.y ? 1 : 0);
+    const all = simplifyPoints([S, ...inner, E]);
+    const len = all.slice(1).reduce((sum, q, i) => sum + Math.abs(q.x - all[i].x) + Math.abs(q.y - all[i].y), 0);
+    // 양 끝 박스까지 포함해 가로지르는 박스 수 > 되돌아감 > 꺾이는 수 > 길이 순으로 중요
+    return crossingCount(simplifyPoints(inner), []) * 1000 + back * 300 + all.length * 20 + len / 20;
+  };
+  let best = cands[0], bestScore = score(best);
+  cands.slice(1).forEach(c => { const s = score(c); if (s < bestScore) { best = c; bestScore = s; } });
+  const pts = simplifyPoints([S, ...best, E]);
+  const skip = [a.id, b.id];
+  return { points: pts, axis: 'free', m: 0, handle: { x: W.x, y: W.y }, sa, sb, offA, offB,
+    seg: { lo: 0, hi: 0, free: false },   // 사용자가 옮긴 선은 겹침 벌리기에서 움직이지 않음
+    crossings: crossingCount(pts, skip), score: bestScore };
 }
 
 // 경로가 다른 서비스 박스를 몇 번 가로지르는지 (박스 둘레 여백 포함)
@@ -402,18 +452,20 @@ function startEndpointDrag(e, ed, end) {
 }
 
 // 가운데 손잡이를 끌어 경로(가운데 구간)를 평행 이동
-function startMidDrag(e, ed, axis) {
+// 가운데 손잡이를 아무 방향으로 끌면 선이 그 점을 지나가도록 직각으로 다시 그린다
+function startMidDrag(e, ed) {
   e.preventDefault();
   e.stopPropagation();
   let changed = false;
-  const cur = edgeRoute(ed);   // 지금 보이는 연결 변을 고정해야 옮긴 경로가 유지됨
+  const sx = e.clientX, sy = e.clientY;
+  // 연결 변은 고정하지 않는다: 사용자가 정하지 않은 변은 놓은 점에 맞춰 자동으로 고른다 (edgeRoute)
   const move = ev => {
+    if (!changed && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 3) return;   // 클릭만(더블클릭 포함)이면 그대로
     const p = clientToWorld(ev.clientX, ev.clientY);
-    const value = Math.round(p[axis] / (GRID / 2)) * (GRID / 2);
-    if (ed.mid && ed.mid.axis === axis && ed.mid.value === value) return;
-    if (!ed.fromSide) ed.fromSide = cur.sa;
-    if (!ed.toSide) ed.toSide = cur.sb;
-    ed.mid = { axis, value };
+    const half = GRID / 2;
+    const w = { x: Math.round(p.x / half) * half, y: Math.round(p.y / half) * half };
+    if (isViaMid(ed.mid) && ed.mid.x === w.x && ed.mid.y === w.y) return;
+    ed.mid = w;
     changed = true;
     renderEdges();
   };
@@ -506,10 +558,10 @@ function renderEdges() {
       $handleG.appendChild(h);
     });
     const { x: hx, y: hy } = route.handle;
-    const mh = svgEl('g', { class: `edge-handle mid-${route.axis}` });
+    const mh = svgEl('g', { class: 'edge-handle mid-free' });
     mh.append(svgEl('circle', { cx: hx, cy: hy, r: 11, class: 'handle-hit' }),
               svgEl('rect', { x: hx - 5, y: hy - 5, width: 10, height: 10, rx: 2, class: 'handle-shape' }));
-    mh.addEventListener('pointerdown', ev => startMidDrag(ev, ed, route.axis));
+    mh.addEventListener('pointerdown', ev => startMidDrag(ev, ed));
     mh.addEventListener('dblclick', () => { ed.mid = null; ed.fromSide = null; ed.toSide = null; render(); });   // 완전 자동으로
     $handleG.appendChild(mh);
   });

@@ -104,13 +104,13 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
 - 커밋 메시지는 한국어로 쓴다. 커밋할 때 CHANGELOG.md도 함께 맞춘다.
 - 커밋·푸시는 사용자 승인 후에만 한다.
 
-## 세션 인계 (2026-10-30 기준, v1.40, 새 세션은 여기부터 읽는다)
+## 세션 인계 (2026-10-30 기준, v1.41, 새 세션은 여기부터 읽는다)
 
-- **현재 상태:** v1.40, 브랜치 `feat/palette` (main e9e08b9 = PR #4 17번 병합 후 분기). **18번 변경은 아직 커밋 안 함**
-  - 작업 계획 4차(사용자 메모 리뷰): 15·16·17번 완료. 18번(C1) 팔레트 추천 묶음 구현, 사용자 테스트 확인 대기. 다음 순서 B1 → D2 → D1 (사용자 결정)
+- **현재 상태:** v1.41, 브랜치 `feat/edge-path` (main 12ab067 = PR #5 18번 병합 후 분기). **19번 변경은 아직 커밋 안 함**
+  - 작업 계획 4차(사용자 메모 리뷰): 15~18번 완료. 19번(B1) 연결선 가운데 손잡이 자유 이동 구현, 사용자 테스트 확인 대기. 다음 순서 D2 → D1 (사용자 결정)
   - 작업 방식: 번호마다 새 브랜치 → 사용자 테스트 → 커밋·푸시(사용자 요청 시) → 사용자가 PR 병합 → main pull 후 다음 브랜치
   - 번호 규칙(2026-10-27 사용자 결정): ROADMAP 번호를 1~14에 이어 붙이고, 브랜치·커밋도 이 번호를 쓴다 (예: "feat: #16 ...")
-  - 나머지 메모 항목은 ROADMAP.md [후보] "사용자 메모 2026-10-27" (B1·D2·D1)
+  - 나머지 메모 항목은 ROADMAP.md [후보] "사용자 메모 2026-10-27" (D2·D1)
   - 작업 계획 3차·14번 [판정 기준 정비]는 완료 (판정 19개·제안 16개)
 - **보류:** ROADMAP.md 13번 [C. 마이그레이션 설계 + 성능 시뮬레이션] (기본 사용성이 먼저, 사용자 결정). 다시 시작하면 설계안부터 보여주고 승인받는다
   - 먼저 풀 것: 판정이 앱 서버를 EC2로만 봐서 컨테이너 구성이 오류가 난다 (criteria/container.md CTR-05)
@@ -136,6 +136,7 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
   - 화면 확인: scratchpad에 Playwright 설정(testDir = scratchpad, `require('C:/mzc/ai-foundation/aws-3tier-simulator/node_modules/@playwright/test')`)과 spec을 두고 `npx playwright test --config=<그 설정>`으로 스크린샷
   - 결과 영역(아래 패널) 높이가 바뀌면 캔버스가 줄어 기존 테스트의 클릭 좌표가 패널에 가려진다 (탭 높이 24px 유지 이유)
   - 사용자 전역 git 설정: `core.autocrlf = true`. 프로젝트는 .gitattributes로 LF 고정이라 영향 없음
+  - gh(GitHub CLI)는 `C:\Program Files\GitHub CLI`에 있다. bash에서 못 찾으면 `export PATH="/c/Program Files/GitHub CLI:$PATH"`
   - 이 PC에는 파이썬이 없다 (문서·파일 일괄 수정은 node 스크립트로). 승인된 uv 설치는 아직 안 했고 필요 없었다
   - scratchpad에서 playwright 설정을 만들 때 `testDir`을 `process.env.TEMP`로 두면 EPERM(WinSAT)이 난다 → scratchpad 경로를 `__dirname`으로
   - 규칙 반영 요령: 판정 규칙은 js/rules/validation.js(맨 끝에 추가), 제안은 js/rules/suggestions.js, 배치는 js/rules/placement.js. 규칙 코드 주석에 `// 근거: LB-02`처럼 criteria ID를 적는다. 검증 대상이 아닌 서비스(route53·waf 등)는 판정 ctx에 없어 `state.edges`로 직접 찾는다
