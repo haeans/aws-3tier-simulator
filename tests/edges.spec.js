@@ -311,3 +311,21 @@ test('줄 맞춰 놓인 박스 사이에서 다른 선끼리 겹치지 않게 �
   await link(page, [[0, 1], [2, 3]]);
   expect(await overlapCount(page)).toBe(0);
 });
+
+test('가까이 붙은 두 박스(마주 보는 변 사이가 좁음)는 빙 돌지 않고 바로 이어진다', async ({ page }) => {
+  await openApp(page);
+  for (const dy of [0, 30]) {                                 // 같은 높이 → 일직선, 조금 어긋남 → 작은 Z자
+    const r = await page.evaluate(dy => {
+      state.nodes = []; state.edges = [];
+      addNode('s3', 200, 300); addNode('iam', 320, 300 + dy); // 두 박스 사이 20px
+      state.edges.push({ id: newId('e'), from: state.nodes[0].id, to: state.nodes[1].id, fromSide: null, toSide: null, mid: null });
+      render();
+      const [a, b] = state.nodes;
+      return { pts: edgeRoute(state.edges[0]).points, lo: a.x + NODE_W, hi: b.x };   // 두 박스 사이 (격자에 맞춰진 실제 위치)
+    }, dy);
+    expect(r.pts.length).toBeLessThanOrEqual(4);
+    expect(r.hi - r.lo).toBe(20);
+    expect(Math.min(...r.pts.map(p => p.x))).toBeGreaterThanOrEqual(r.lo);   // 두 박스 사이에서만 (바깥으로 돌아 나가지 않음)
+    expect(Math.max(...r.pts.map(p => p.x))).toBeLessThanOrEqual(r.hi);
+  }
+});

@@ -77,6 +77,17 @@ body {
 .btn:disabled { color: #a9b2bc; cursor: not-allowed; background: #fafbfc; }
 .btn.active { background: #fff3e0; border-color: var(--accent); color: #c45500; }
 .btn.active:hover { background: #ffe8c7; }
+/* [불러오기 ▾] 메뉴 */
+.load-wrap { position: relative; }
+.load-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 4000; min-width: 280px; padding: 4px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.14); }
+.load-menu[hidden] { display: none; }
+.load-item { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 6px;
+  font: inherit; color: var(--text); cursor: pointer; }
+.load-item:hover { background: #f2f6fa; }
+.load-item b { display: block; font-size: 13px; }
+.load-item span { font-size: 11.5px; color: var(--muted); }
+.load-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 .btn.primary { background: var(--accent); border-color: #ec7211; color: #fff; }
 .btn.primary:hover:not(:disabled) { background: #ec7211; }
 .btn.primary:disabled { background: #ffd9a3; border-color: #ffd9a3; color: #fff; }
