@@ -76,7 +76,7 @@ test('[성능 시뮬레이션] 탭: 트래픽을 올리면 박스 사용률 막�
 
 test('검증 오류가 있으면 시뮬레이션을 실행하지 않고 안내한다', async ({ page }) => {
   await openApp(page);
-  await page.evaluate(() => { loadTemplate(); addNode('pc', 120, 300); });
+  await page.evaluate(() => { loadTemplate({ x: 280, y: 80 }); addNode('pc', 120, 300); });
   await page.locator('#result .tab[data-tab="sim"]').click();
   await expect(page.locator('#result')).toContainText('검증 오류가 있어 요청이 끝까지 가지 못해요');
   await expect(page.locator('#sim-rps')).toHaveCount(0);

@@ -1,6 +1,6 @@
 // 배치·영역·겹침·스냅·크기 조절·저장 테스트
 const { test, expect } = require('@playwright/test');
-const { openApp, toScreen, dragWorld, paletteDrop, nodesOf, areasOf } = require('./helpers');
+const { openApp, loadTemplateAt, toScreen, dragWorld, paletteDrop, nodesOf, areasOf } = require('./helpers');
 
 test('앱이 오류 없이 열리고 팔레트가 채워진다', async ({ page }) => {
   const errors = await openApp(page);
@@ -11,7 +11,7 @@ test('앱이 오류 없이 열리고 팔레트가 채워진다', async ({ page }
 
 test('팔레트에서 끌어 놓으면 배치되고, 허용되지 않는 위치는 거부된다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);                 // 프라이빗 서브넷 A
   expect(await nodesOf(page, 'ec2')).toHaveLength(1);
   await paletteDrop(page, 'S3', 540, 590);                  // DB 서브넷 → S3는 VPC 밖 전용
@@ -21,7 +21,7 @@ test('팔레트에서 끌어 놓으면 배치되고, 허용되지 않는 위치�
 
 test('VPC Endpoints는 VPC 안과 모든 서브넷(퍼블릭·프라이빗·DB)에 놓을 수 있다 (VPCE-03)', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'VPC Endpoints', 540, 430);       // 프라이빗 서브넷 A (인터페이스 엔드포인트)
   await paletteDrop(page, 'VPC Endpoints', 1200, 110);      // VPC 안, AZ 밖 (게이트웨이 엔드포인트)
   expect(await nodesOf(page, 'vpce')).toHaveLength(2);
@@ -32,7 +32,7 @@ test('VPC Endpoints는 VPC 안과 모든 서브넷(퍼블릭·프라이빗·DB)�
 
 test('영역 중첩 규칙: AZ는 VPC 밖에 놓을 수 없다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'AZ \\(가용 영역\\)', 200, 900);
   expect(await areasOf(page, 'az')).toHaveLength(2);
   await expect(page.locator('#toast')).toContainText('VPC 안에 놓아야');
@@ -40,7 +40,7 @@ test('영역 중첩 규칙: AZ는 VPC 밖에 놓을 수 없다', async ({ page }
 
 test('서비스 박스끼리 겹치면 거부된다 (원래 박스 우선)', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);
   await paletteDrop(page, 'NAT', 560, 440);
   expect(await nodesOf(page, 'nat')).toHaveLength(0);
@@ -49,7 +49,7 @@ test('서비스 박스끼리 겹치면 거부된다 (원래 박스 우선)', asy
 
 test('IGW를 VPC 경계선 근처에 놓으면 경계선에 붙는다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'IGW', 320, 610);                 // VPC 왼쪽 경계(x=280)에서 40px 안쪽
   const [igw] = await nodesOf(page, 'igw');
   expect(igw.x + 50).toBe(280);
@@ -57,7 +57,7 @@ test('IGW를 VPC 경계선 근처에 놓으면 경계선에 붙는다', async ({
 
 test('서브넷끼리 겹치게 옮기면 원래 자리로 돌아가고, 안의 박스 소속이 유지된다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);
   const [pv] = await areasOf(page, 'private');
   await dragWorld(page, { x: pv.x + 300, y: pv.y + 120 }, { x: pv.x + 300, y: pv.y + 60 });
@@ -70,7 +70,7 @@ test('서브넷끼리 겹치게 옮기면 원래 자리로 돌아가고, 안의 
 
 test('영역을 옮기면 안의 박스도 함께 움직인다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 1000, 430);                // 프라이빗 서브넷 B
   const [ec2] = await nodesOf(page, 'ec2');
   const az = (await areasOf(page, 'az'))[1];
@@ -81,7 +81,7 @@ test('영역을 옮기면 안의 박스도 함께 움직인다', async ({ page }
 
 test('좌상단 손잡이로 크기를 늘릴 수 있고, 안의 박스보다 작게 줄일 수 없다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 1000, 430);
   const pv = (await areasOf(page, 'private'))[1];
   const pick = await toScreen(page, pv.x + 200, pv.y + 120);
@@ -98,7 +98,7 @@ test('좌상단 손잡이로 크기를 늘릴 수 있고, 안의 박스보다 �
 
 test('새로고침해도 배치와 줌이 유지된다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);
   await page.click('#zoom-out');
   await page.reload();
@@ -109,7 +109,7 @@ test('새로고침해도 배치와 줌이 유지된다', async ({ page }) => {
 
 test('영역 삭제 시 안의 항목도 함께 지워진다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);
   await page.evaluate(() => deleteContainer(state.containers.find(c => c.type === 'az').id));
   expect(await nodesOf(page, 'ec2')).toHaveLength(0);
@@ -118,7 +118,7 @@ test('영역 삭제 시 안의 항목도 함께 지워진다', async ({ page }) 
 
 test('Ctrl+Z로 이동·배치를 되돌리고, [다시 실행]으로 되살린다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await expect(page.locator('#btn-redo')).toBeDisabled();
   await paletteDrop(page, 'EC2', 540, 430);
   const [ec2] = await nodesOf(page, 'ec2');
@@ -139,7 +139,7 @@ test('Ctrl+Z로 이동·배치를 되돌리고, [다시 실행]으로 되살린�
 
 test('거부된 동작은 되돌리기 목록에 쌓이지 않는다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);
   const count = await page.evaluate(() => undoStack.length);
   await paletteDrop(page, 'NAT', 560, 440);                 // 겹쳐서 거부
@@ -150,7 +150,7 @@ test('거부된 동작은 되돌리기 목록에 쌓이지 않는다', async ({ 
 
 test('초기화도 되돌릴 수 있고, 새 동작을 하면 다시 실행 목록은 비워진다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 540, 430);
   await page.click('#btn-reset');                           // 확인 창은 자동 승인
   expect(await areasOf(page, 'vpc')).toHaveLength(0);
@@ -164,7 +164,7 @@ test('초기화도 되돌릴 수 있고, 새 동작을 하면 다시 실행 목�
 
 test('Auto Scaling 그룹은 AZ 경계를 넘어 놓을 수 있고, 안의 EC2 소속은 서브넷 그대로다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'Auto Scaling 그룹', 780, 430);   // 두 AZ의 프라이빗 서브넷에 걸침
   const [asg] = await areasOf(page, 'asg');
   const [vpc] = await areasOf(page, 'vpc');
@@ -188,7 +188,7 @@ test('Auto Scaling 그룹은 AZ 경계를 넘어 놓을 수 있고, 안의 EC2 �
 
 test('Auto Scaling 그룹은 VPC 밖이나 VPC 테두리에 걸치게 놓을 수 없다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await paletteDrop(page, 'Auto Scaling 그룹', 300, 900);
   expect(await areasOf(page, 'asg')).toHaveLength(0);
   await paletteDrop(page, 'Auto Scaling 그룹', 1200, 430);  // 오른쪽이 VPC 밖으로 삐져나감
@@ -211,7 +211,7 @@ test('예전 Auto Scaling 박스가 저장되어 있으면 지우고 안내한�
 
 test('Auto Scaling 그룹은 점선 테두리를 잡아 옮길 수 있다 (안쪽은 아래로 지나감)', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await page.evaluate(() => addContainer('asg', 780, 430));   // x 540~1020, y 360~520
   const [asg] = await areasOf(page, 'asg');
   const [pv] = await areasOf(page, 'private');
@@ -225,7 +225,7 @@ test('Auto Scaling 그룹은 점선 테두리를 잡아 옮길 수 있다 (안�
 
 test('Shift+클릭으로 여러 박스를 골라 함께 옮기고, 연결선을 다시 정리한다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await page.evaluate(() => {
     addNode('ec2', 540, 430); addNode('ec2', 1020, 430); addNode('rds', 540, 590);
     const [a, b, r] = state.nodes;
@@ -253,7 +253,7 @@ test('Shift+클릭으로 여러 박스를 골라 함께 옮기고, 연결선을 
 
 test('Shift+드래그로 범위 안의 박스를 고르고 Delete로 함께 지운 뒤 되돌린다', async ({ page }) => {
   await openApp(page);
-  await page.click('#btn-template');
+  await loadTemplateAt(page);
   await page.evaluate(() => { addNode('ec2', 540, 430); addNode('ec2', 1020, 430); addNode('rds', 540, 590); select(null); });
   const s = await toScreen(page, 330, 380), e = await toScreen(page, 1250, 500);   // 프라이빗 서브넷 줄만 감쌈
   await page.keyboard.down('Shift');
@@ -277,7 +277,7 @@ test('흰 배경을 끌면 화면이 움직이고, 스페이스바를 누른 채
   await dragWorld(page, { x: 600, y: 500 }, { x: 400, y: 350 });   // 빈 캔버스(흰 배경) 끌기
   expect(await scroll()).toEqual({ x: 200, y: 150 });
 
-  await page.click('#btn-template');                               // 화면을 맨 위로 되돌리고 영역을 채움
+  await loadTemplateAt(page);                               // 화면을 맨 위로 되돌리고 영역을 채움
   const sub = await page.evaluate(() => { const c = state.containers.find(c => c.type === 'public'); return { x: c.x + 50, y: c.y + 50 }; });
   const before = await page.evaluate(() => state.containers.map(c => [c.x, c.y]));
   const s = await toScreen(page, sub.x, sub.y);
@@ -289,4 +289,22 @@ test('흰 배경을 끌면 화면이 움직이고, 스페이스바를 누른 채
   await page.keyboard.up('Space');
   expect(await scroll()).toEqual({ x: 150, y: 100 });
   expect(await page.evaluate(() => state.containers.map(c => [c.x, c.y]))).toEqual(before);   // 영역은 그대로
+});
+
+test('[기본 틀 불러오기]는 캔버스 한가운데에 만들고, 화면도 그 가운데로 옮긴다', async ({ page }) => {
+  await openApp(page);
+  await page.click('#btn-template');
+  const r = await page.evaluate(() => {
+    const vpc = state.containers.find(c => c.type === 'vpc');
+    const world = { w: $world.offsetWidth, h: $world.offsetHeight };
+    const el = elMap.get(vpc.id).getBoundingClientRect(), stage = $wrap.getBoundingClientRect();
+    return { vpc, world, vcx: el.left + el.width / 2, scx: stage.left + stage.width / 2,
+             vcy: el.top + el.height / 2, scy: stage.top + stage.height / 2 };
+  });
+  expect(r.vpc.x).toBeGreaterThan(800);                                       // 왼쪽·위에 여백
+  expect(r.vpc.y).toBeGreaterThan(500);
+  expect(r.world.w - (r.vpc.x + r.vpc.width)).toBeGreaterThan(700);          // 오른쪽·아래에도 여백
+  expect(r.world.h - (r.vpc.y + r.vpc.height)).toBeGreaterThan(500);
+  expect(Math.abs((r.vcx - 100) - r.scx)).toBeLessThanOrEqual(25);            // 사용자 자리(왼쪽 200)까지 포함해 화면 가운데
+  expect(Math.abs(r.vcy - r.scy)).toBeLessThanOrEqual(25);
 });

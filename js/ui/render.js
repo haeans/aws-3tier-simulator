@@ -224,6 +224,23 @@ function saveState() {
   } catch (e) { /* 저장소를 쓸 수 없는 환경이면 저장 생략 */ }
 }
 
+// 화면 설정 (결과 패널 접힘·높이, 설명 패널 접힘). 배치와 따로 저장하고 되돌리기 기록에는 넣지 않는다.
+const UI_PREFS_KEY = 'aws-3tier-simulator:ui';
+const uiPrefs = { resultFolded: false, resultHeight: 0, infoFolded: false };   // resultHeight 0 = 내용만큼(기본)
+
+function saveUiPrefs() {
+  try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(uiPrefs)); } catch (e) { /* 저장소를 쓸 수 없으면 생략 */ }
+}
+
+function loadUiPrefs() {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(UI_PREFS_KEY)); } catch (e) { /* 없으면 기본값 */ }
+  if (!data) return;
+  uiPrefs.resultFolded = data.resultFolded === true;
+  uiPrefs.resultHeight = Number(data.resultHeight) > 0 ? Number(data.resultHeight) : 0;
+  uiPrefs.infoFolded = data.infoFolded === true;
+}
+
 // 저장된 배치를 불러온다. 알 수 없는 항목은 버리고, 불러온 항목 수를 돌려준다.
 function loadSaved() {
   let data;

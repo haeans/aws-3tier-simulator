@@ -102,7 +102,7 @@ test('LB — WAF — CloudFront처럼 WAF를 사이에 두면 제거 제안이 �
 test('잘한 점: 좋은 구성이 실제로 있을 때만 칭찬하고, 문제가 있는 규칙은 칭찬하지 않는다', async ({ page }) => {
   await openApp(page);
   // 빈 VPC 틀만 있으면 (문제는 있어도) 칭찬할 것이 없다
-  await page.evaluate(() => { loadTemplate(); addNode('pc', 120, 300); });
+  await page.evaluate(() => { loadTemplate({ x: 280, y: 80 }); addNode('pc', 120, 300); });
   await page.click('#btn-validate');
   expect(await page.evaluate(() => validation.praises.length)).toBe(0);
   await expect(page.locator('.issue.good')).toHaveCount(0);
@@ -706,4 +706,51 @@ test('LB-07: LB—RDS 연결은 오류·경고는 아니지만 "DB를 숨겼다"
   r = await verdict(page);
   expect(r.status).toBe('ok');                               // 판정은 그대로 (근거 없음)
   expect(r.praises).not.toContain('V4');
+});
+
+test('결과 패널: 접으면 머리 줄만 남고, 경계선을 끌면 높이가 바뀌며, 새로 열어도 기억한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.click('#btn-validate');
+  const result = page.locator('#result');
+  const stageH = () => page.evaluate(() => document.querySelector('.stage').getBoundingClientRect().height);
+  const openStage = await stageH();
+  await page.click('.result-fold');                                  // 접기
+  await expect(page.locator('#result .issue').first()).toBeHidden();
+  expect(await result.evaluate(el => el.offsetHeight)).toBeLessThanOrEqual(46);
+  expect(await stageH()).toBeGreaterThan(openStage + 100);           // 캔버스가 넓어짐
+  await expect(page.locator('.result-fold')).toHaveText('▲펼치기');
+
+  const grip = await page.locator('#result-grip > div').boundingBox();   // 경계선을 위로 끌면 펼치면서 높이 조절
+  const gy = grip.y + grip.height / 2;
+  await page.mouse.move(800, gy);
+  await page.mouse.down();
+  await page.mouse.move(800, gy - 300, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.locator('.result-fold')).toHaveText('▼접기');
+  const h = await result.evaluate(el => el.offsetHeight);
+  expect(h).toBeGreaterThan(300);
+
+  await page.reload();                                               // 새로 열어도 높이 유지
+  await page.click('#btn-validate');
+  expect(Math.abs(await result.evaluate(el => el.offsetHeight) - h)).toBeLessThanOrEqual(2);
+  await page.locator('#result-grip > div').dblclick();               // 두 번 누르면 내용만큼(기본)
+  expect(await result.evaluate(el => el.style.height)).toBe('');
+});
+
+test('설명 패널: 접으면 제목 줄만 남고, 다른 박스를 골라도 접힌 채로 유지된다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => select(state.nodes.find(n => n.type === 'ec2').id));
+  const panel = page.locator('#info-panel');
+  const full = await panel.evaluate(el => el.offsetHeight);
+  await page.click('#info-panel .ip-fold');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('.ip-desc')).toBeHidden();
+  expect(await panel.evaluate(el => el.offsetHeight)).toBeLessThan(Math.min(full, 50));
+  await page.evaluate(() => select(state.nodes.find(n => n.type === 'rds').id));
+  await expect(panel.locator('.ip-name')).toHaveText('RDS');
+  await expect(panel.locator('.ip-desc')).toBeHidden();             // 접힌 채로 유지
+  await page.click('#info-panel .ip-fold');                          // 다시 펼치기
+  await expect(panel.locator('.ip-desc')).toBeVisible();
 });

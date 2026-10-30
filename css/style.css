@@ -219,6 +219,20 @@ body {
   cursor: pointer;
 }
 .ip-close:hover { color: var(--text); }
+.ip-fold {
+  margin-left: auto;
+  border: none; background: none;
+  font-size: 18px; line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.ip-fold:hover { color: var(--text); }
+.ip-fold + .ip-close { margin-left: 0; }
+/* 접힌 설명 패널: 제목 줄만 */
+.info-panel.folded > :not(.ip-head) { display: none; }
+.info-panel.folded .ip-head { margin-bottom: 0; }
+.info-panel.folded { padding: 8px 12px; }
 .ip-desc { color: var(--text); margin-bottom: 8px; }
 .ip-note { padding: 6px 8px; background: #f5f7fa; border-radius: 4px; color: var(--muted); }
 .ip-doc { display: inline-block; margin-bottom: 6px; font-size: 12px; color: var(--select); text-decoration: none; }
@@ -490,6 +504,19 @@ body.panning, body.panning * { cursor: grabbing !important; }
   overflow-y: auto;
 }
 .result-head { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+/* 접기 버튼: 머리 줄 맨 오른쪽 (높이 24px 안에) */
+.result-fold { order: 99; margin-left: auto; flex-shrink: 0; border: 1px solid var(--line); background: #fff; color: var(--muted);
+  font: inherit; font-size: 12px; line-height: 18px; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
+.result-fold b { font-size: 9px; font-weight: 400; vertical-align: 1px; margin-right: 4px; }
+.result-fold:hover { color: var(--text); background: #f7f9fb; }
+/* 접힌 결과 패널: 머리 줄만 */
+.result.folded > :not(.result-head) { display: none; }
+.result.folded { overflow: hidden; }
+/* 결과 패널 위 경계선 손잡이: 높이 0이라 레이아웃은 그대로, 잡는 곳만 위아래 4px */
+.result-grip { position: relative; height: 0; z-index: 30; }
+.result-grip > div { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; }
+.result-grip > div:hover, body.result-resizing .result-grip > div { background: rgba(0,115,187,.25); }
+body.result-resizing, body.result-resizing * { cursor: ns-resize !important; user-select: none; }
 /* 결과 영역 탭: 검증 결과 / 성능 시뮬레이션 */
 .tabs { display: flex; gap: 2px; flex-shrink: 0; }
 .tab { border: 1px solid var(--line, #d5dbe1); background: #f7f9fb; color: var(--muted); font: inherit; font-weight: 700;
