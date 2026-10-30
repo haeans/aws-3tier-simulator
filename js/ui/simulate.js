@@ -44,7 +44,7 @@ let simScenario = 'steady';
 let simPlaying = true;        // 탭을 열면 바로 재생
 let simSpeed = 1;             // 배속
 let simT = 0;                 // 시뮬레이션 경과 시간(초)
-let simHistory = [];          // [{ t, rps, success, latency }]
+let simHistory = [];          // [{ t, rps, success, latency, util: { 박스 id: 사용률 } }]
 let simClockRaf = null, simAcc = 0, simLast = 0;
 
 const simNowRps = () => SIM_SCENARIOS[simScenario].rps(simRps, simT);
@@ -216,7 +216,9 @@ function simStep() {
   computeSim();
   // 이번 초에 사건이 있었으면 그래프에 세로선
   const mark = simFaults.log.length > logged;
-  simHistory.push({ t: simT, rps: simResult.rps, attack: simResult.attack, success: simResult.successRate, latency: simResult.latency, mark });
+  const util = {};   // 처리량 제한이 있는 박스의 사용률 (설명 패널의 박스별 그래프용)
+  simResult.nodes.forEach((s, id) => { if (s.capacity) util[id] = s.util; });
+  simHistory.push({ t: simT, rps: simResult.rps, attack: simResult.attack, success: simResult.successRate, latency: simResult.latency, mark, util });
   if (simHistory.length > SIM_HISTORY) simHistory.shift();
   syncSimControls();
   drawSimCharts();
@@ -254,6 +256,7 @@ function computeSim() {
     }
   }
   applySimMarks();
+  updateInfoSim();
 }
 
 // ----- 지금 문제와 해결 방법 (기존 판정·제안 규칙과 연결) -----

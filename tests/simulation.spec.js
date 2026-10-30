@@ -566,3 +566,35 @@ test('RDS Standby는 장애 조치 전에는 RDS와 연결돼 있어도 "예비�
   await page.evaluate(() => { for (let i = 0; i < 100; i++) simStep(); });   // 100초: 장애 조치 완료
   await expect(page.locator('.node .sim-bar', { hasText: '새 본체' })).toHaveText('새 본체 · 33%');
 });
+
+test('시뮬레이션 중 박스를 클릭하면 설명 패널 맨 위에 지금 상태와 최근 사용률 그래프가 나오고, 계산할 때마다 바뀐다', async ({ page }) => {
+  await openApp(page);
+  await buildSimArch(page);
+  await page.locator('#result .tab[data-tab="sim"]').click();
+  await page.locator('#sim-rps').fill('100');
+  const ec2 = await page.evaluate(() => centerOf(state.nodes.find(n => n.type === 'ec2')));
+  const p = await page.evaluate(([x, y]) => worldToClient(x, y), [ec2.x, ec2.y]);
+  await page.mouse.click(p.x, p.y);                                       // 박스 클릭 → 설명 패널
+  const sim = page.locator('#ip-sim');
+  await expect(sim).toBeVisible();
+  await expect(sim).toContainText('지금 상태');
+  await expect(sim).toContainText('사용률 50%');
+  await expect(sim.locator('.ip-sim-chart')).toHaveCount(1);
+
+  await page.locator('#sim-rps').fill('300');                             // 트래픽을 바꾸면 그 자리에서 바뀜
+  await expect(sim).toContainText('사용률 150%');
+  await page.evaluate(() => { simPlaying = false; for (let i = 0; i < 5; i++) simStep(); });   // 5초 진행 → 그래프 선
+  await expect(sim.locator('.ip-sim-chart polyline')).toHaveCount(1);
+
+  await page.click('#info-panel .ip-fold');                                // 설명 패널을 접어도 지금 상태는 남음
+  await expect(sim).toBeVisible();
+  await expect(page.locator('#info-panel .ip-desc')).toBeHidden();
+  await page.click('#info-panel .ip-fold');
+
+  await page.evaluate(() => select(state.nodes.find(n => n.type === 'lb').id));   // 처리량 제한 없는 박스는 그래프 없이 안내
+  await expect(sim).toContainText('처리량 제한이 없어요');
+  await expect(sim.locator('.ip-sim-chart')).toHaveCount(0);
+
+  await page.locator('#result .tab[data-tab="validate"]').click();         // 검증 탭에서는 지금 상태 칸 없음
+  await expect(sim).toBeHidden();
+});
