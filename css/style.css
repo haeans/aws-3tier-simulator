@@ -237,8 +237,17 @@ body {
 }
 .ip-fold:hover { color: var(--text); }
 .ip-fold + .ip-close { margin-left: 0; }
-/* 접힌 설명 패널: 제목 줄만 */
-.info-panel.folded > :not(.ip-head) { display: none; }
+/* 접힌 설명 패널: 제목 줄만 (성능 시뮬레이션 중이면 지금 상태 칸은 남김) */
+.info-panel.folded > :not(.ip-head):not(.ip-sim) { display: none; }
+.info-panel.folded .ip-sim { margin: 6px 0 0; }
+/* 설명 패널 맨 위: 성능 시뮬레이션 중 고른 박스의 지금 상태 */
+.ip-sim { margin: 0 0 10px; padding: 7px 9px; background: #f4f7fa; border-left: 3px solid var(--select); border-radius: 3px; font-size: 11.5px; }
+.ip-sim[hidden] { display: none; }
+.ip-sim-head { font-weight: 700; margin-bottom: 3px; }
+.ip-sim-head span { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.ip-sim .tt-sim { margin: 0; padding: 0; background: none; border: 0; }
+.ip-sim-cap { margin: 6px 0 2px; color: var(--muted); }
+.ip-sim-chart { width: 100%; height: auto; display: block; background: #fff; border: 1px solid var(--line); border-radius: 4px; }
 .info-panel.folded .ip-head { margin-bottom: 0; }
 .info-panel.folded { padding: 8px 12px; }
 .ip-desc { color: var(--text); margin-bottom: 8px; }
@@ -542,10 +551,10 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .sim-charts figure { margin: 0; }
 .sim-charts figcaption { font-size: 11.5px; color: var(--muted); font-weight: 700; }
 .sim-charts svg { width: 300px; height: 70px; display: block; background: #fbfcfd; border: 1px solid var(--line); border-radius: 4px; }
-.sim-charts .axis { stroke: #dfe5eb; stroke-width: 1; }
-.sim-charts text { font-size: 9px; fill: var(--muted); }
-.sim-charts .surge { fill: rgba(209, 50, 18, .10); }
-.sim-charts .mark { stroke: #7d6b9e; stroke-width: 1; stroke-dasharray: 2 2; }
+.sim-charts .axis, .ip-sim-chart .axis { stroke: #dfe5eb; stroke-width: 1; }
+.sim-charts text, .ip-sim-chart text { font-size: 9px; fill: var(--muted); }
+.sim-charts .surge, .ip-sim-chart .surge { fill: rgba(209, 50, 18, .10); }
+.sim-charts .mark, .ip-sim-chart .mark { stroke: #7d6b9e; stroke-width: 1; stroke-dasharray: 2 2; }
 .sim-log-box { min-width: 280px; flex: 1; }
 .sim-log { margin: 0; padding: 4px 8px; list-style: none; height: 62px; overflow-y: auto; background: #fbfcfd;
   border: 1px solid var(--line); border-radius: 4px; font-size: 11.5px; display: grid; gap: 2px; align-content: start; }

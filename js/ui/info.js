@@ -44,6 +44,7 @@ function renderInfo() {
     `<span class="tt-cat"><span class="cat-dot" style="background:${cat.color}"></span>${cat.label}</span>` +
     `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
     '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
+    '<div class="ip-sim" id="ip-sim" hidden></div>' +
     `<div class="ip-desc">${svc.desc}</div>` +
     (SERVICE_DOCS[n.type] ? `<a class="ip-doc" href="${SERVICE_DOCS[n.type]}" target="_blank" rel="noopener">AWS 공식 문서 열기 ↗</a>` : '') +
     (g.note ? `<div class="ip-note">${g.note}</div>` : '') +
@@ -54,4 +55,28 @@ function renderInfo() {
   $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
   $info.classList.toggle('folded', uiPrefs.infoFolded);
   $info.hidden = false;
+  updateInfoSim();
+}
+
+// 성능 시뮬레이션 중이면 설명 패널 맨 위에 고른 박스의 "지금 상태" (계산할 때마다 이 칸만 다시 그림)
+// 내용: 박스에 마우스를 올릴 때 나오는 설명과 같은 것 + 처리량 제한이 있는 박스는 최근 5분 사용률 그래프
+function updateInfoSim() {
+  const box = document.getElementById('ip-sim');
+  if (!box) return;
+  const n = selectedId && !$info.hidden ? findNode(selectedId) : null;
+  const on = !!n && resultTab === 'sim' && !!simResult;
+  box.hidden = !on;
+  if (!on) { box.innerHTML = ''; return; }
+  const s = simResult.nodes.get(n.id);
+  const detail = simTooltip(n.id) ||
+    (s && s.load ? `<div class="tt-sim"><b>요청 ${fmt(s.load)}/초가 지나가요</b><div>AWS가 알아서 늘려서 처리량 제한이 없어요</div></div>`
+      : '<div class="tt-sim"><b>요청이 지나가지 않아요</b><div>사용자 요청 흐름과 이어져 있지 않거나, 요청을 받지 않는 서비스예요</div></div>');
+  const hasChart = !!(s && s.capacity);
+  box.innerHTML = `<div class="ip-sim-head">지금 상태 <span>${clockText(simT)} · ${simPlaying ? '재생 중' : '멈춤'}</span></div>` + detail +
+    (hasChart ? '<div class="ip-sim-cap">사용률 (최근 5분)</div><svg class="ip-sim-chart" viewBox="0 0 300 70"></svg>' : '');
+  if (hasChart) {
+    const values = simHistory.map(h => (h.util && h.util[n.id] || 0) * 100);
+    const top = Math.max(100, Math.ceil(Math.max(0, ...values) / 50) * 50);
+    drawSimChart(/** @type {SVGElement} */ (box.querySelector('.ip-sim-chart')), values, { max: top, unit: '%', color: '#d97a00' });
+  }
 }
