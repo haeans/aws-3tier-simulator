@@ -102,13 +102,14 @@ const SERVICE_GUIDE = {
   ec2: {
     links: [
       { to: ['lb'], text: '사용자 요청은 Load Balancer를 거쳐 받아요.' },
-      { to: RDS_TYPES, text: '앱이 DB(RDS)에 데이터를 읽고 써요.' },
+      { to: ['rds', 'rds-replica'], text: '앱이 DB(RDS)에 데이터를 읽고 써요. 읽기만 하는 요청은 Read Replica로 보낼 수 있어요.' },
       { to: ['elasticache'], text: '자주 읽는 데이터는 캐시에서 먼저 찾고, 없으면 DB에서 읽어 캐시에 넣어요.' },
       { to: ['nat'], text: '업데이트 등 밖으로 나가는 요청은 NAT를 거쳐요.' },
       { to: ['s3', 'vpce'], text: '파일은 S3에 저장해요. 게이트웨이 엔드포인트(VPC Endpoints)를 거치면 NAT 없이 S3에 가요.' },
     ],
     avoid: [
       { to: USER_TYPES, text: '사용자에게 바로 노출하지 마세요. IGW → Load Balancer를 거치게 하세요.' },
+      { to: ['rds-standby'], text: 'Standby(예비본)는 읽기·쓰기를 받지 않아요. 앱은 RDS(본체)나 Read Replica에 접속해요.' },   // 근거: DB-02
     ],
   },
   rds: {
@@ -175,7 +176,7 @@ const SERVICE_GUIDE = {
       { to: ['ecr'], text: '실행할 컨테이너 이미지를 가져와요.' },
       { to: ['lb'], text: 'Load Balancer가 서비스의 작업(task)들에 요청을 나눠 줘요.' },
       { to: ['fargate'], text: '서버를 관리하지 않고 컨테이너를 실행하려면 Fargate를 함께 써요.' },
-      { to: RDS_TYPES, text: '컨테이너의 앱이 DB에 접속해요.' },
+      { to: ['rds', 'rds-replica'], text: '컨테이너의 앱이 DB(RDS 본체나 Read Replica)에 접속해요.' },
     ],
     avoid: [],
   },
@@ -184,7 +185,7 @@ const SERVICE_GUIDE = {
       { to: ['ecr'], text: '실행할 컨테이너 이미지를 가져와요.' },
       { to: ['lb'], text: 'Load Balancer로부터 요청을 받아 Pod에 전달해요.' },
       { to: ['fargate'], text: 'Pod를 서버(노드) 관리 없이 실행하려면 Fargate를 함께 써요.' },
-      { to: RDS_TYPES, text: '컨테이너의 앱이 DB에 접속해요.' },
+      { to: ['rds', 'rds-replica'], text: '컨테이너의 앱이 DB(RDS 본체나 Read Replica)에 접속해요.' },
     ],
     avoid: [],
   },

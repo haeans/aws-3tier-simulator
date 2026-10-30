@@ -104,6 +104,14 @@ body {
 }
 .cat-dot { width: 9px; height: 9px; border-radius: 2px; }
 .cat-items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* 추천 묶음: 박스를 선택하면 팔레트 맨 위에 */
+.palette-rec { margin: 6px -4px 4px; padding: 8px 8px 10px; background: #eef6fc; border: 1px solid #b9d9f0; border-radius: 8px; }
+.palette-rec[hidden] { display: none; }
+.rec-title { font-size: 12px; font-weight: 700; color: var(--select); }
+.rec-hint { font-size: 11px; color: var(--muted); margin: 1px 0 7px; }
+.palette-rec .cat-items { min-height: calc(var(--rec-rows, 1) * 50px - 6px); align-content: start; }   /* 항목 44px + 간격 6px */
+.palette .svc.rec-done { position: relative; opacity: .7; }
+.rec-check { position: absolute; top: 2px; right: 5px; font-size: 11px; font-weight: 700; color: #1d8102; }
 
 /* ----- 서비스 박스 공통 모양 (팔레트·캔버스·고스트) ----- */
 .svc {

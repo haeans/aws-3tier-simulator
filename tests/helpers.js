@@ -33,9 +33,10 @@ async function dragWorld(page, a, b) {
   await drag(page, await toScreen(page, a.x, a.y), await toScreen(page, b.x, b.y));
 }
 
-// 팔레트 항목(이름이 정확히 같은 것)을 캔버스의 (wx, wy)에 놓기
+// 팔레트 항목(이름이 정확히 같은 것)을 캔버스의 (wx, wy)에 놓기 (맨 위 추천 묶음이 아니라 일반 묶음에서)
 async function paletteDrop(page, name, wx, wy) {
-  const item = page.locator('.palette .svc, .palette .area-chip').filter({ hasText: new RegExp(`^${name}$`) }).first();
+  const item = page.locator('#palette > .cat-items .svc, #palette > .cat-items .area-chip').filter({ hasText: new RegExp(`^${name}$`) }).first();
+  await item.scrollIntoViewIfNeeded();   // 추천 묶음이 생기면 팔레트 항목이 아래로 밀릴 수 있음
   const box = await item.boundingBox();
   await drag(page, { x: box.x + box.width / 2, y: box.y + box.height / 2 }, await toScreen(page, wx, wy), 12);
 }

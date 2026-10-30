@@ -7,13 +7,19 @@
 
 // ----- 추가 / 삭제 / 선택 -----
 // (cx, cy) = 놓은 위치(박스 중심)
-function addNode(type, cx, cy) {
+// linkTo: 팔레트 추천 묶음에서 끌어 놓았을 때 연결할 박스 id. 연결하면 선택은 그 박스에 그대로 둔다 (이어서 추천을 더 놓기 쉽게)
+function addNode(type, cx, cy, linkTo) {
   const before = takeSnapshot();
   const pos = fitRect(cx - NODE_W / 2, cy - NODE_H / 2, NODE_W, NODE_H);
   const node = { id: newId('n'), type, x: pos.x, y: pos.y, parentContainer: null };
   state.nodes.push(node);
   snapToVpcEdge(node);
-  if (commit(before, node.id, [node.id])) select(node.id);
+  const link = linkTo ? findNode(linkTo) : null;
+  if (link) state.edges.push({ id: newId('e'), from: link.id, to: node.id, fromSide: null, toSide: null, mid: null });
+  if (!commit(before, node.id, [node.id])) return;
+  if (!link) { select(node.id); return; }
+  select(link.id);
+  showToast(`${SVC_MAP[link.type].name} — ${SVC_MAP[type].name} 연결을 만들었어요.`);
 }
 
 // ----- VPC 경계선 스냅 (IGW 등) -----
@@ -118,6 +124,7 @@ function refreshSelection() {
   elMap.forEach((el, key) => el.classList.toggle('selected', isSelected(key)));
   renderEdges();
   renderInfo();
+  renderPaletteRec();
 }
 // Shift+클릭: 박스를 여러 개 선택에 넣거나 뺀다
 function toggleMulti(id) {
