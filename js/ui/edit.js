@@ -202,11 +202,17 @@ function startMoveDrag(e, item, el) {
     ny = clamp(ny, rangeY[0], rangeY[1]);
     return { dx: nx - r.x, dy: ny - r.y };
   };
+  const movedIds = group.filter(g => !isContainer(g)).map(g => g.id);
+  // 여러 박스·영역을 함께 옮길 때 양 끝이 모두 옮겨지는 선은 경로(mid)도 끄는 동안 같이 옮겨 모양 유지
+  const movedSet = new Set(movedIds);
+  const carried = multi || isContainer(item)
+    ? state.edges.filter(ed => ed.mid && movedSet.has(ed.from) && movedSet.has(ed.to)).map(ed => ({ ed, mid: ed.mid }))
+    : [];
   const apply = ({ dx, dy }) => {
     starts.forEach(s => { s.g.x = s.x + dx; s.g.y = s.y + dy; });
+    carried.forEach(c => { c.ed.mid = shiftMid(c.mid, dx, dy); });
     if (!isContainer(item) && !multi) snapToVpcEdge(item);   // 경계선 근처면 바로 붙어 보이게 (여러 개일 땐 간격 유지)
   };
-  const movedIds = group.filter(g => !isContainer(g)).map(g => g.id);
 
   let moved = false;
   el.setPointerCapture(e.pointerId);
@@ -224,7 +230,7 @@ function startMoveDrag(e, item, el) {
     if (ev.type === 'pointerup' && moved) {
       const d = delta(ev, true);
       apply(d);
-      if (multi) realignEdges(new Set(movedIds), d);
+      if (multi) realignEdges(movedSet);
       commit(before, item.id, movedIds);
     } else if (moved) {
       restoreSnapshot(before);
@@ -317,15 +323,20 @@ function startResize(e, c, handle, corner) {
 }
 
 
+// 사용자가 옮긴 경로(mid)를 (dx, dy)만큼 옮긴 값
+function shiftMid(mid, dx, dy) {
+  if (isViaMid(mid)) return { x: mid.x + dx, y: mid.y + dy };
+  if (mid) return { axis: mid.axis, value: mid.value + (mid.axis === 'x' ? dx : dy) };
+  return mid;
+}
+
 // 여러 개를 함께 옮긴 뒤 연결선 정리 ("화살표 자동 정렬")
-// - 양 끝이 모두 옮겨진 선: 사용자가 옮긴 경로(mid)도 같은 만큼 옮겨 모양 유지
+// - 양 끝이 모두 옮겨진 선: 끄는 동안 경로(mid)를 같은 만큼 옮겨 모양 유지 (startMoveDrag의 carried)
 // - 한쪽 끝만 옮겨진 선: 연결 변과 경로를 자동으로 되돌려 새 위치에 맞게 다시 그림
-function realignEdges(movedSet, { dx, dy }) {
+function realignEdges(movedSet) {
   state.edges.forEach(ed => {
     const a = movedSet.has(ed.from), b = movedSet.has(ed.to);
-    if (a && b) {
-      if (ed.mid) ed.mid = { axis: ed.mid.axis, value: ed.mid.value + (ed.mid.axis === 'x' ? dx : dy) };
-    } else if (a || b) {
+    if (a !== b) {
       ed.fromSide = null;
       ed.toSide = null;
       ed.mid = null;
