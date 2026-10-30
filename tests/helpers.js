@@ -41,9 +41,13 @@ async function paletteDrop(page, name, wx, wy) {
 }
 
 // 기본 틀 + 정상 3-Tier 구성 (사용자→IGW→LB→EC2 2대→RDS, NAT, RDS Standby)
+// 기본 틀을 예전 위치(VPC 왼쪽 위 280, 80)에 만든다. 기존 테스트의 캔버스 좌표가 이 위치 기준이다
+// (실제 버튼은 캔버스 한가운데에 만든다: placement.spec.js의 기본 틀 위치 테스트)
+const loadTemplateAt = page => page.evaluate(() => loadTemplate({ x: 280, y: 80 }));
+
 async function buildValidArch(page) {
   await page.evaluate(() => {
-    loadTemplate();
+    loadTemplate({ x: 280, y: 80 });
     addNode('pc', 120, 300); addNode('igw', 290, 300); addNode('lb', 400, 270); addNode('nat', 650, 270);
     addNode('ec2', 400, 430); addNode('ec2', 880, 430); addNode('rds', 400, 590); addNode('rds-standby', 880, 590);
     const T = t => state.nodes.filter(n => n.type === t);
@@ -84,4 +88,4 @@ const moveNode = (page, type, x, y, idx = 0) => page.evaluate(([type, x, y, idx]
   recomputeParents(); render();
 }, [type, x, y, idx]);
 
-module.exports = { APP_URL, openApp, toScreen, drag, dragWorld, paletteDrop, buildValidArch, nodesOf, areasOf, connect, verdict, moveNode };
+module.exports = { APP_URL, openApp, loadTemplateAt, toScreen, drag, dragWorld, paletteDrop, buildValidArch, nodesOf, areasOf, connect, verdict, moveNode };

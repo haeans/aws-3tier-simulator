@@ -6,7 +6,11 @@
    --------------------------------------------------------- */
 
 // ----- 기본 틀 (VPC 1개 + AZ 2개 + AZ별 퍼블릭/프라이빗/DB 서브넷) -----
-function loadTemplate() {
+const TEMPLATE_VPC = { w: 1000, h: 660 };   // 기본 틀 VPC 크기
+const TEMPLATE_USER_GAP = 200;              // VPC 왼쪽에 사용자 박스를 놓을 자리
+
+// origin: VPC 왼쪽 위 위치. 없으면 캔버스 한가운데 (사방에 여백이 있어 배치하기 편함)
+function loadTemplate(origin) {
   const hasContent = state.nodes.length + state.containers.length > 0;
   if (hasContent && !confirm('캔버스의 기존 내용을 모두 지우고 기본 틀을 만들까요?')) return;
 
@@ -20,16 +24,22 @@ function loadTemplate() {
     id: newId('c'), type, x, y, width, height, parentContainer: null,
     label: label || AREA_MAP[type].name,
   });
-  make('vpc', 280, 80, 1000, 660);
-  [{ letter: 'A', x: 320 }, { letter: 'B', x: 800 }].forEach(({ letter, x }) => {
-    make('az', x, 140, 440, 560, '가용 영역 ' + letter);
-    make('public',  x + 20, 200, 400, 140);
-    make('private', x + 20, 360, 400, 140);
-    make('db',      x + 20, 520, 400, 140);
+  const o = origin || {
+    x: snap((($world.offsetWidth - TEMPLATE_VPC.w) + TEMPLATE_USER_GAP) / 2),
+    y: snap(($world.offsetHeight - TEMPLATE_VPC.h) / 2),
+  };
+  make('vpc', o.x, o.y, TEMPLATE_VPC.w, TEMPLATE_VPC.h);
+  [{ letter: 'A', x: o.x + 40 }, { letter: 'B', x: o.x + 520 }].forEach(({ letter, x }) => {
+    make('az', x, o.y + 60, 440, 560, '가용 영역 ' + letter);
+    make('public',  x + 20, o.y + 120, 400, 140);
+    make('private', x + 20, o.y + 280, 400, 140);
+    make('db',      x + 20, o.y + 440, 400, 140);
   });
   recomputeParents();
   render();
-  $wrap.scrollTo(0, 0);
+  // 사용자 자리까지 포함한 기본 틀의 가운데가 화면 가운데에 오도록 이동
+  const cx = o.x - TEMPLATE_USER_GAP / 2 + TEMPLATE_VPC.w / 2, cy = o.y + TEMPLATE_VPC.h / 2;
+  $wrap.scrollTo(cx * zoom - $wrap.clientWidth / 2, cy * zoom - $wrap.clientHeight / 2);
   showToast('기본 틀을 만들었어요. 사용자는 VPC 왼쪽 바깥에 놓아보세요.');
 }
 
@@ -92,7 +102,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
-document.getElementById('btn-template').addEventListener('click', loadTemplate);
+document.getElementById('btn-template').addEventListener('click', () => loadTemplate());
 document.getElementById('btn-validate').addEventListener('click', runValidation);
 document.getElementById('btn-undo').addEventListener('click', undo);
 document.getElementById('btn-redo').addEventListener('click', redo);
@@ -124,6 +134,11 @@ document.querySelectorAll('.autohide-scroll').forEach(el => {
   }, { passive: true });
 });
 
+// 결과 패널 위 경계선: 끌면 높이 조절, 두 번 누르면 내용만큼(기본)으로
+const $resultGrip = /** @type {HTMLElement} */ (document.querySelector('#result-grip > div'));
+$resultGrip.addEventListener('pointerdown', e => { if (e.button === 0) startResultResize(e); });
+$resultGrip.addEventListener('dblclick', () => { uiPrefs.resultHeight = 0; saveUiPrefs(); applyResultSize(); });
+
 // 줌: 버튼 / Ctrl+휠
 document.getElementById('zoom-in').addEventListener('click', () => stepZoom(1));
 document.getElementById('zoom-out').addEventListener('click', () => stepZoom(-1));
@@ -140,6 +155,7 @@ $wrap.addEventListener('wheel', e => {
 
 // ----- 시작 -----
 buildPalette();
+loadUiPrefs();
 const restored = loadSaved();
 applyZoom();
 if (savedScroll) {   // render()가 저장하기 전에 시점부터 복원

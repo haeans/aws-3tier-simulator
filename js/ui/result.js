@@ -185,6 +185,36 @@ function applyValidationMarks() {
   });
 }
 
+// 결과 패널 크기: 접힘이면 한 줄, 높이를 정했으면 그 높이, 아니면 내용만큼(CSS 기본, 최대 34vh)
+function applyResultSize() {
+  $result.classList.toggle('folded', uiPrefs.resultFolded);
+  const h = uiPrefs.resultFolded ? 0 : uiPrefs.resultHeight;
+  $result.style.height = h ? h + 'px' : '';
+  $result.style.maxHeight = h ? 'none' : '';
+}
+
+// 경계선을 끌어 결과 패널 높이 조절 (접혀 있으면 펼치면서 시작)
+function startResultResize(e) {
+  e.preventDefault();
+  if (uiPrefs.resultFolded) { uiPrefs.resultFolded = false; renderResult(); }
+  const sy = e.clientY, start = $result.offsetHeight;
+  document.body.classList.add('result-resizing');
+  const move = ev => {
+    uiPrefs.resultHeight = Math.round(clamp(start - (ev.clientY - sy), 44, window.innerHeight * 0.7));
+    applyResultSize();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    document.body.classList.remove('result-resizing');
+    saveUiPrefs();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+}
+
 function renderResult() {
   $validateBtn.textContent = validation ? '검증 종료' : '검증하기';
   $validateBtn.title = validation ? '검증 결과(강조·화살표·흐르는 점)를 지우고 검증 전 화면으로 돌아가요' : '';
@@ -199,6 +229,12 @@ function renderResult() {
     b.classList.toggle('active', tab === resultTab);
     b.addEventListener('click', () => { if (tab !== resultTab) { resultTab = tab; render(); } });
   });
+  const fold = document.createElement('button');   // 접기: 탭·판정 한 줄만 남김 (CSS order로 맨 오른쪽)
+  fold.className = 'result-fold';
+  fold.innerHTML = uiPrefs.resultFolded ? '<b>▲</b>펼치기' : '<b>▼</b>접기';
+  fold.addEventListener('click', () => { uiPrefs.resultFolded = !uiPrefs.resultFolded; saveUiPrefs(); renderResult(); });
+  head.appendChild(fold);
+  applyResultSize();
   $result.appendChild(head);
   if (resultTab === 'sim') { renderSimPanel(head); return; }
   stopSimAll();

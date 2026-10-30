@@ -41,7 +41,7 @@ function collect() {
   const ref = (key) => { const [t, i] = key.split('#'); return state.nodes.filter(n => n.type === t)[+(i || 0)]; };
   function build(def) {
     state.nodes = []; state.edges = []; state.containers = [];
-    loadTemplate();
+    loadTemplate({ x: 280, y: 80 });
     def.nodes.forEach(([t, x, y]) => state.nodes.push({ id: newId('n'), type: t, ...C(x, y), parentContainer: null }));
     state.nodes.forEach(snapToVpcEdge);
     def.edges.forEach(([a, b]) => state.edges.push({ id: newId('e'), from: ref(a).id, to: ref(b).id, fromSide: null, toSide: null, mid: null }));

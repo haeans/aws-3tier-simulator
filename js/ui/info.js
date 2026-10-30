@@ -42,6 +42,7 @@ function renderInfo() {
   $info.innerHTML =
     `<div class="ip-head"><span class="ip-name">${svc.name}</span>` +
     `<span class="tt-cat"><span class="cat-dot" style="background:${cat.color}"></span>${cat.label}</span>` +
+    `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
     '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
     `<div class="ip-desc">${svc.desc}</div>` +
     (SERVICE_DOCS[n.type] ? `<a class="ip-doc" href="${SERVICE_DOCS[n.type]}" target="_blank" rel="noopener">AWS 공식 문서 열기 ↗</a>` : '') +
@@ -49,5 +50,8 @@ function renderInfo() {
     (linkRows ? `<div class="ip-sec">이렇게 연결해요</div><ul class="ip-list">${linkRows}</ul>` : '') +
     (avoidRows ? `<div class="ip-sec avoid">이렇게 연결하지 마세요</div><ul class="ip-list">${avoidRows}</ul>` : '');
   $info.querySelector('.ip-close').addEventListener('click', () => select(null));
+  // 접기: 제목 줄만 남겨 캔버스를 덜 가림. 다른 박스를 골라도 접힌 채로 유지
+  $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
+  $info.classList.toggle('folded', uiPrefs.infoFolded);
   $info.hidden = false;
 }
