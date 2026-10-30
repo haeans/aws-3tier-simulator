@@ -10,9 +10,10 @@ const TEMPLATE_VPC = { w: 1000, h: 660 };   // 기본 틀 VPC 크기
 const TEMPLATE_USER_GAP = 200;              // VPC 왼쪽에 사용자 박스를 놓을 자리
 
 // origin: VPC 왼쪽 위 위치. 없으면 캔버스 한가운데 (사방에 여백이 있어 배치하기 편함)
+// 만든 VPC 왼쪽 위 위치를 돌려준다 (예시 구성이 이 위치 기준으로 놓임). 묻는 창에서 취소하면 null
 function loadTemplate(origin) {
   const hasContent = state.nodes.length + state.containers.length > 0;
-  if (hasContent && !confirm('캔버스의 기존 내용을 모두 지우고 기본 틀을 만들까요?')) return;
+  if (hasContent && !confirm('캔버스의 기존 내용을 모두 지우고 기본 틀을 만들까요?')) return null;
 
   state.nodes = [];
   state.edges = [];
@@ -41,6 +42,7 @@ function loadTemplate(origin) {
   const cx = o.x - TEMPLATE_USER_GAP / 2 + TEMPLATE_VPC.w / 2, cy = o.y + TEMPLATE_VPC.h / 2;
   $wrap.scrollTo(cx * zoom - $wrap.clientWidth / 2, cy * zoom - $wrap.clientHeight / 2);
   showToast('기본 틀을 만들었어요. 사용자는 VPC 왼쪽 바깥에 놓아보세요.');
+  return o;
 }
 
 // ----- 이벤트 바인딩 -----
@@ -102,7 +104,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-document.getElementById('btn-template').addEventListener('click', () => loadTemplate());
 document.getElementById('btn-validate').addEventListener('click', runValidation);
 document.getElementById('btn-undo').addEventListener('click', undo);
 document.getElementById('btn-redo').addEventListener('click', redo);
@@ -155,6 +156,7 @@ $wrap.addEventListener('wheel', e => {
 
 // ----- 시작 -----
 buildPalette();
+buildLoadMenu();
 loadUiPrefs();
 const restored = loadSaved();
 applyZoom();

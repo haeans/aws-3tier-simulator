@@ -199,8 +199,15 @@ function edgeRoute(ed) {
 function routeFor(a, b, sa, sb, mid, offA = 0, offB = 0) {
   const da = SIDE_DIR[sa], db = SIDE_DIR[sb];
   const S = anchorPoint(a, sa, EDGE_GAP, offA), E = anchorPoint(b, sb, EDGE_GAP, offB);
-  const P = { x: S.x + da.x * STUB, y: S.y + da.y * STUB };
-  const Q = { x: E.x + db.x * STUB, y: E.y + db.y * STUB };
+  // 마주 보는 두 변 사이가 짧은 선 두 개보다 좁으면(예: VPC 경계의 IGW 바로 옆 LB) 짧은 선을 틈의 절반으로 줄인다.
+  // 그대로 두면 두 짧은 선이 서로 지나쳐 경로가 빙 돌아간다
+  let stub = STUB;
+  if (da.x === -db.x && da.y === -db.y) {
+    const gap = da.x ? (E.x - S.x) * da.x : (E.y - S.y) * da.y;
+    if (gap > 0 && gap < 2 * STUB) stub = gap / 2;
+  }
+  const P = { x: S.x + da.x * stub, y: S.y + da.y * stub };
+  const Q = { x: E.x + db.x * stub, y: E.y + db.y * stub };
   const ha = isHorizSide(sa), hb = isHorizSide(sb);
   if (isViaMid(mid)) return viaRoute(a, b, sa, sb, { S, P, Q, E, da, db, ha, hb }, mid, offA, offB);
 

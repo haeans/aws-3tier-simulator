@@ -754,3 +754,39 @@ test('설명 패널: 접으면 제목 줄만 남고, 다른 박스를 골라도 
   await page.click('#info-panel .ip-fold');                          // 다시 펼치기
   await expect(panel.locator('.ip-desc')).toBeVisible();
 });
+
+test('[불러오기 ▾] 메뉴: 예시 "기본 3-Tier"는 정상, "고가용성"은 정상에 제안이 하나도 없다', async ({ page }) => {
+  await openApp(page);
+  await page.click('#btn-load');
+  await expect(page.locator('#load-menu .load-item')).toHaveCount(4);
+  await page.click('#load-menu .load-item[data-key="basic"]');
+  await expect(page.locator('#load-menu')).toBeHidden();
+  await expect(page.locator('#toast')).toContainText('기본 3-Tier');
+  let v = await verdict(page);
+  expect(v.status).toBe('ok');
+  expect(await page.evaluate(() => state.nodes.length)).toBe(8);
+
+  await page.click('#btn-load');
+  await page.click('#load-menu .load-item[data-key="ha"]');                 // 기존 내용을 지울지 묻는 창은 자동 승인
+  v = await verdict(page);
+  expect(v.status).toBe('ok');
+  expect(v.sug).toEqual([]);
+  expect(await page.evaluate(() => state.containers.some(c => c.type === 'asg'))).toBe(true);
+});
+
+test('예시 "고쳐 보세요": 실수마다 판정 문제가 생기고, 어떤 두 개를 골라도 문제가 2개 이상이다', async ({ page }) => {
+  await openApp(page);
+  const count = picks => page.evaluate(picks => {
+    loadExample('fix', picks);
+    return validateArchitecture().issues.length;
+  }, picks);
+  const keys = await page.evaluate(() => EXAMPLE_MISTAKES.map(m => m.key));
+  for (const k of keys) expect(await count([k]), k).toBeGreaterThan(0);
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) expect(await count([keys[i], keys[j]]), keys[i] + '+' + keys[j]).toBeGreaterThanOrEqual(2);
+  }
+  await page.click('#btn-load');                                            // 메뉴에서 고르면 랜덤으로 2개
+  await page.click('#load-menu .load-item[data-key="fix"]');
+  await expect(page.locator('#toast')).toContainText('문제 2개');
+  expect((await verdict(page)).issues.length).toBeGreaterThanOrEqual(2);
+});

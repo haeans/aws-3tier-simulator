@@ -293,6 +293,7 @@ test('흰 배경을 끌면 화면이 움직이고, 스페이스바를 누른 채
 
 test('[기본 틀 불러오기]는 캔버스 한가운데에 만들고, 화면도 그 가운데로 옮긴다', async ({ page }) => {
   await openApp(page);
+  await page.click('#btn-load');
   await page.click('#btn-template');
   const r = await page.evaluate(() => {
     const vpc = state.containers.find(c => c.type === 'vpc');
