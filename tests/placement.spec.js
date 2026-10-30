@@ -1,6 +1,6 @@
 // 배치·영역·겹침·스냅·크기 조절·저장 테스트
 const { test, expect } = require('@playwright/test');
-const { openApp, loadTemplateAt, toScreen, dragWorld, paletteDrop, nodesOf, areasOf } = require('./helpers');
+const { openApp, loadTemplateAt, toScreen, drag, dragWorld, paletteDrop, nodesOf, areasOf } = require('./helpers');
 
 test('앱이 오류 없이 열리고 팔레트가 채워진다', async ({ page }) => {
   const errors = await openApp(page);
@@ -307,4 +307,39 @@ test('[기본 틀 불러오기]는 캔버스 한가운데에 만들고, 화면�
   expect(r.world.h - (r.vpc.y + r.vpc.height)).toBeGreaterThan(500);
   expect(Math.abs((r.vcx - 100) - r.scx)).toBeLessThanOrEqual(25);            // 사용자 자리(왼쪽 200)까지 포함해 화면 가운데
   expect(Math.abs(r.vcy - r.scy)).toBeLessThanOrEqual(25);
+});
+
+test('박스를 고르면 팔레트 맨 위에 추천 묶음이 뜨고, 거기서 끌어 놓으면 선택한 박스와 연결된다', async ({ page }) => {
+  await openApp(page);
+  await loadTemplateAt(page);
+  await paletteDrop(page, 'EC2', 400, 430);
+  await paletteDrop(page, 'Load Balancer', 400, 270);
+  const ec2 = (await nodesOf(page, 'ec2'))[0];
+  const lb = (await nodesOf(page, 'lb'))[0];
+  await page.evaluate(([a, b]) => { state.edges.push({ id: newId('e'), from: a, to: b, fromSide: null, toSide: null, mid: null }); render(); select(a); }, [ec2.id, lb.id]);
+
+  const rec = page.locator('#palette-rec');
+  await expect(rec).toBeVisible();
+  await expect(rec.locator('.rec-title')).toHaveText('★ EC2에 연결하기 좋아요');
+  await expect(rec.locator('.svc', { hasText: 'Load Balancer' })).toHaveClass(/rec-done/);   // 이미 연결됨 ✓
+  await expect(rec.locator('.svc', { hasText: /^RDS✓?$/ })).not.toHaveClass(/rec-done/);
+  await expect(rec.locator('.svc', { hasText: 'RDS Standby' })).toHaveCount(0);   // Standby는 앱이 접속하지 않음 (DB-02)
+
+  const item = await rec.locator('.svc', { hasText: /^RDS✓?$/ }).boundingBox();     // 추천에서 RDS를 DB 서브넷에 놓기
+  await drag(page, { x: item.x + item.width / 2, y: item.y + item.height / 2 }, await toScreen(page, 400, 590), 12);
+  const rds = await nodesOf(page, 'rds');
+  expect(rds).toHaveLength(1);
+  const linked = await page.evaluate(([a, b]) => state.edges.some(e => (e.from === a && e.to === b) || (e.from === b && e.to === a)), [ec2.id, rds[0].id]);
+  expect(linked).toBe(true);
+  expect(await page.evaluate(() => selectedId)).toBe(ec2.id);                       // 선택은 EC2 그대로
+  await expect(rec.locator('.svc', { hasText: /^RDS✓?$/ })).toHaveClass(/rec-done/);
+
+  const edgesBefore = await page.evaluate(() => state.edges.length);                // 놓을 수 없는 곳(다른 박스와 겹침)은 박스·연결 모두 취소
+  const item2 = await rec.locator('.svc', { hasText: /^RDS✓?$/ }).boundingBox();
+  await drag(page, { x: item2.x + item2.width / 2, y: item2.y + item2.height / 2 }, await toScreen(page, 400, 430), 12);   // EC2와 겹치는 자리
+  expect(await nodesOf(page, 'rds')).toHaveLength(1);
+  expect(await page.evaluate(() => state.edges.length)).toBe(edgesBefore);
+
+  await page.keyboard.press('Escape');                                              // 선택을 풀면 추천 묶음도 사라짐
+  await expect(rec).toBeHidden();
 });

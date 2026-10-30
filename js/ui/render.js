@@ -145,6 +145,7 @@ function render() {
   syncFlow();
   saveState();
   renderInfo();
+  renderPaletteRec();
   recordHistory();
 }
 

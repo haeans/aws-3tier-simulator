@@ -17,7 +17,47 @@ function addPaletteSection(title, color, items) {
   $palette.appendChild(grid);
 }
 
+// 박스를 선택하면 팔레트 맨 위에 "연결하기 좋은 서비스" 묶음을 보여준다 (기준: 설명 패널의 "이렇게 연결해요")
+const $paletteRec = document.createElement('div');
+$paletteRec.className = 'palette-rec';
+$paletteRec.id = 'palette-rec';
+$paletteRec.hidden = true;
+
+// 추천 종류 목록 (설명 패널의 "이렇게 연결해요"에 나온 서비스)
+const recTypes = type => SERVICE_GUIDE[type] ? [...new Set(SERVICE_GUIDE[type].links.flatMap(l => l.to))].filter(t => SVC_MAP[t]) : [];
+
+function renderPaletteRec() {
+  const n = selectedId && multiSel.size <= 1 ? findNode(selectedId) : null;
+  const types = n ? recTypes(n.type) : [];
+  $paletteRec.innerHTML = '';
+  $paletteRec.hidden = !types.length;
+  if (!types.length) return;
+  const near = neighborTypes(n.id);
+  $paletteRec.innerHTML = `<div class="rec-title">★ ${SVC_MAP[n.type].name}에 연결하기 좋아요</div>` +
+    '<div class="rec-hint">끌어 놓으면 바로 연결돼요</div>';
+  const grid = document.createElement('div');
+  grid.className = 'cat-items';
+  types.forEach(t => {
+    const svc = SVC_MAP[t];
+    const el = document.createElement('div');
+    styleServiceBox(el, svc);
+    el.textContent = svc.name;
+    if (near.includes(t)) {   // 이미 연결된 종류
+      el.classList.add('rec-done');
+      el.insertAdjacentHTML('beforeend', '<span class="rec-check">✓</span>');
+    }
+    attachTooltip(el, () => serviceTooltip(svc));
+    el.addEventListener('pointerdown', e => startPaletteDrag(e, 'node', svc, n.id));
+    grid.appendChild(el);
+  });
+  $paletteRec.appendChild(grid);
+}
+
 function buildPalette() {
+  // 추천 묶음 높이는 가장 많은 경우(줄 수)에 맞춰 고정: 박스를 바꿔 골라도 아래 팔레트 항목이 들쭉날쭉 밀리지 않게
+  const maxRows = Math.max(1, ...SERVICES.map(s => Math.ceil(recTypes(s.type).length / 2)));
+  $paletteRec.style.setProperty('--rec-rows', String(maxRows));
+  $palette.appendChild($paletteRec);
   // 영역 (구조를 먼저 만들도록 맨 위에 배치)
   addPaletteSection('영역', 'var(--vpc)', AREAS.map(area => {
     const el = document.createElement('div');
@@ -113,7 +153,8 @@ function styleServiceBox(el, svc) {
 }
 
 // ----- 팔레트 → 캔버스 드래그 -----
-function startPaletteDrag(e, kind, def) {
+// linkTo: 추천 묶음에서 끌었을 때 놓은 뒤 연결할 박스 id
+function startPaletteDrag(e, kind, def, linkTo) {
   if (e.button !== 0) return;
   e.preventDefault();
 
@@ -159,7 +200,7 @@ function startPaletteDrag(e, kind, def) {
     if (ev.type === 'pointerup' && isOverCanvas(ev.clientX, ev.clientY)) {
       const p = clientToWorld(ev.clientX, ev.clientY);
       if (kind === 'area') addContainer(def.type, p.x, p.y);
-      else addNode(def.type, p.x, p.y);
+      else addNode(def.type, p.x, p.y, linkTo);
     }
   };
   move(e);
