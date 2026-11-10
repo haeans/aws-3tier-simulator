@@ -22,7 +22,7 @@
 const state = {
   nodes: [],       // { id, type, x, y, parentContainer }
   containers: [],  // { id, type, x, y, width, height, parentContainer, label }
-  edges: [],       // { id, from, to, fromSide, toSide, mid } - 연결 변·경로는 null이면 자동 (UI-5 참고)
+  edges: [],       // { id, from, to, fromSide, toSide, mid, kind? } - 연결 변·경로는 null이면 자동 (UI-5 참고). kind: 사용자가 고른 선 종류 (26번, 없으면 자동)
 };
 let idSeq = 1;
 const newId = prefix => `${prefix}${idSeq++}`;   // n=서비스, c=영역, e=연결선

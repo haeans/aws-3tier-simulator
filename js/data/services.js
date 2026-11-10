@@ -164,8 +164,34 @@ const EDGE_RULES = [
   [['nat'], ['igw'], 'egress'],
   [['vpce'], ['s3', 'dynamodb'], 'egress'],
 ];
+// 실제로 두 가지가 다 가능한 짝 (26번): 선을 골라 설명 패널에서 종류를 바꿀 수 있다. 첫 번째가 자동(기본) 종류
+// 서버가 시작한 통신일 때 화살표는 서버 → 상대
+const EDGE_CHOICES = [
+  { servers: EDGE_SERVERS, others: ['s3', 'dynamodb'], kinds: {
+    request: '사용자 요청을 처리하면서 읽고 써요. (예: 상품 이미지·주문 정보 읽기)',
+    egress:  '사용자 요청과 상관없이 서버가 스스로 보내요. (예: 백업·배치 작업으로 올리기)',
+  } },
+  { servers: EDGE_SERVERS, others: ['cloudwatch'], kinds: {
+    replication: '기본 지표(CPU 사용률 등)는 AWS가 알아서 모아 보내요.',
+    egress:      '서버 안의 CloudWatch 에이전트가 로그·추가 지표를 보내요. (프라이빗 서브넷이면 NAT나 VPC Endpoints가 필요해요)',
+  } },
+];
+// 두 박스 종류로 바꿀 수 있는 종류 목록. 없으면 null. serverIsA: A 쪽이 서버인지 (화살표 방향용)
+function edgeChoices(typeA, typeB) {
+  for (const c of EDGE_CHOICES) {
+    if (c.servers.includes(typeA) && c.others.includes(typeB)) return { kinds: c.kinds, serverIsA: true };
+    if (c.servers.includes(typeB) && c.others.includes(typeA)) return { kinds: c.kinds, serverIsA: false };
+  }
+  return null;
+}
 // 두 박스 종류로 연결선 종류와 방향을 정한다. dir: 1 = A→B, -1 = B→A, 0 = 방향 없음(요청은 흐름으로 정함, 설정 관계는 화살표 없음)
-function edgeInfo(typeA, typeB) {
+// chosen: 사용자가 고른 종류 (바꿀 수 있는 짝이고 그 종류가 목록에 있을 때만 쓴다. 아니면 자동 종류)
+function edgeInfo(typeA, typeB, chosen = null) {
+  const choice = chosen ? edgeChoices(typeA, typeB) : null;
+  if (choice && choice.kinds[chosen]) {
+    const one = chosen === 'request' || chosen === 'relation' ? 0 : 1;
+    return { kind: chosen, dir: choice.serverIsA ? one : -one };
+  }
   const hit = (list, t) => !list || list.includes(t);
   for (const [from, to, kind] of EDGE_RULES) {
     const one = kind === 'relation' || kind === 'request' ? 0 : 1;

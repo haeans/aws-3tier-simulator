@@ -422,6 +422,11 @@ function spreadOverlaps(routes) {
 
 const pathD = pts =>pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
 
+// 연결선 하나의 종류와 방향 (25번 자동 + 26번 사용자가 고른 종류 ed.kind)
+function edgeInfoOf(ed) {
+  return edgeInfo(findNode(ed.from).type, findNode(ed.to).type, ed.kind || null);
+}
+
 // 꺾이는 곳을 둥글게 그린 경로 (23번). 반지름은 앞뒤 선분 길이의 절반을 넘지 않게 줄인다 (짧은 꺾임도 모양 유지)
 const EDGE_CORNER_R = 6;
 function roundedPathD(pts) {
@@ -543,7 +548,7 @@ function renderEdges() {
     const d = roundedPathD(route.points);
     const sel = ed.id === selectedId;
     // 연결선 종류 (25번): 요청은 흐름 방향(검증 후) 또는 양쪽, 서버 통신·복제는 정해진 한 방향, 설정 관계는 화살표 없음
-    const info = edgeInfo(findNode(ed.from).type, findNode(ed.to).type);
+    const info = edgeInfoOf(ed);
     const marker = `url(#${sel ? 'arrow-sel' : info.kind === 'request' ? 'arrow' : 'arrow-' + info.kind})`;
     let dir = flowDir && flowDir.has(ed.id) ? flowDir.get(ed.id) : null;   // null = 양쪽 화살표, false = to 쪽, true = from 쪽
     if (info.kind !== 'request') dir = info.dir === 1 ? false : true;     // 한 방향 (from→to면 to 쪽에 화살표)

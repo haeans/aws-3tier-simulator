@@ -370,3 +370,42 @@ test('25번: 예시 고가용성 — 종류별로 그려지고(한 방향 화살
   for (const good of ['igw-lb', 'ec2-lb', 'ec2-rds', 'pc-route53', 'lb-waf']) expect(flowTypes).toContain(good);
   await expect(page.locator('.flow-legend')).toContainText('서버가 시작한 통신');
 });
+
+test('26번: 선을 고르면 설명 패널에 선 종류, 서버—S3는 요청 ↔ 서버가 시작한 통신으로 바꿀 수 있다 (되돌리기·저장 유지)', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    loadTemplate({ x: 280, y: 80 });
+    addNode('ec2', 400, 430); addNode('s3', 1400, 430); addNode('igw', 290, 300);
+    const T = t => state.nodes.find(n => n.type === t);
+    state.edges.push({ id: 'e900', from: T('ec2').id, to: T('s3').id, fromSide: null, toSide: null, mid: null });
+    state.edges.push({ id: 'e901', from: T('igw').id, to: T('ec2').id, fromSide: null, toSide: null, mid: null });
+    render(); select('e900');
+  });
+  const panel = page.locator('#info-panel');
+  await expect(panel).toContainText('EC2 — S3');
+  await expect(panel.locator('input[name="edge-kind"]')).toHaveCount(2);
+  await expect(page.locator('#edge-g .edge[data-id="e900"]')).toHaveClass(/k-request/);
+  // 실제 마우스로 "서버가 시작한 통신" 고르기
+  const box = await panel.locator('.ek-opt:has(input[value="egress"])').boundingBox();
+  await page.mouse.click(box.x + 20, box.y + box.height / 2);
+  await expect(page.locator('#edge-g .edge[data-id="e900"]')).toHaveClass(/k-egress/);
+  expect(await page.evaluate(() => state.edges.find(e => e.id === 'e900').kind)).toBe('egress');
+  // 화살표는 서버(EC2) → S3 쪽 끝 하나 (from = EC2)
+  const line = page.locator('#edge-g .edge[data-id="e900"]');
+  expect([await line.getAttribute('marker-start'), await line.getAttribute('marker-end')]).toEqual([null, 'url(#arrow-sel)']);   // 선택 중이라 파란 화살표
+  // 저장 후 다시 열어도 유지
+  await page.evaluate(() => saveState());
+  await page.reload();
+  expect(await page.evaluate(() => state.edges.find(e => e.id === 'e900').kind)).toBe('egress');
+  // 되돌리기 → 자동(요청)으로
+  await page.evaluate(() => { select('e900'); });
+  const back = await page.locator('#info-panel .ek-opt:has(input[value="request"])').boundingBox();
+  await page.mouse.click(back.x + 20, back.y + back.height / 2);
+  expect(await page.evaluate(() => state.edges.find(e => e.id === 'e900').kind)).toBeUndefined();
+  await page.evaluate(() => undo());
+  expect(await page.evaluate(() => state.edges.find(e => e.id === 'e900').kind)).toBe('egress');
+  // 바꿀 수 없는 선(IGW—EC2)은 설명만
+  await page.evaluate(() => select('e901'));
+  await expect(page.locator('#info-panel input[name="edge-kind"]')).toHaveCount(0);
+  await expect(page.locator('#info-panel')).toContainText('두 박스 종류로 정해져요');
+});
