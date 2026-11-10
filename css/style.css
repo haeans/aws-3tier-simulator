@@ -12,7 +12,7 @@
   --muted: #6b7785;
   --accent: #ff9900;
   --select: #0073bb;
-  --edge: #7b8591;
+  --edge: #5d6773;
   /* 영역 색상 */
   --vpc: #248814;
   --az: #147eba;
@@ -457,8 +457,19 @@ body {
 .area:hover > .resize, .area.selected > .resize { display: block; }
 
 /* 연결선 (직각 경로) */
-.edge { stroke: var(--edge); stroke-width: 1.75; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.edge { stroke: var(--edge); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
 .edge.selected { stroke: var(--select); stroke-width: 2.5; }
+/* 연결선 종류 (25번): 요청(기본 회색 실선) / 서버가 시작한 통신(청록 실선) / 복제·전달(보라 점선) / 설정 관계(회색 점점선) */
+/* 가시성 (25번 사용자 피드백): 색은 진하게, 선 모양 차이는 크게 (실선 / 긴 점선 / 둥근 점) */
+.edge.k-egress      { stroke: #0a8f6c; stroke-width: 2.4; }
+.edge.k-replication { stroke: #7b3fe4; stroke-width: 2.2; stroke-dasharray: 9 5; }
+.edge.k-relation    { stroke: #6b7785; stroke-width: 2.6; stroke-dasharray: 0.1 6; stroke-linecap: round; }
+.edge.selected      { stroke: var(--select); }
+.edge-legend { display: inline-flex; gap: 12px; flex-wrap: wrap; margin-left: 10px; }
+.edge-legend b { display: inline-block; width: 24px; height: 0; border-top: 2px solid var(--edge); margin-right: 4px; vertical-align: 3px; }
+.edge-legend .k-egress b      { border-top: 3px solid #0a8f6c; }
+.edge-legend .k-replication b { border-top: 2px dashed #7b3fe4; }
+.edge-legend .k-relation b    { border-top: 3px dotted #6b7785; }
 .edge-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
 .edge-temp { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 /* 동적 흐름 점 (검증 후 표시) */

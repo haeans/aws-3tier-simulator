@@ -32,14 +32,25 @@
           <defs>
             <!-- 양방향 화살표 머리 (start는 자동 반전). 얇은 꺾쇠 모양 (23번) -->
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
-                    markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10"
+                    markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12"
                     orient="auto-start-reverse">
-              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#7b8591" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#5d6773" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
             </marker>
             <marker id="arrow-sel" viewBox="0 0 10 10" refX="9" refY="5"
                     markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11"
                     orient="auto-start-reverse">
-              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#0073bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#0073bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <!-- 서버가 시작한 통신(청록)·복제·전달(보라) 화살표 (25번) -->
+            <marker id="arrow-egress" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12"
+                    orient="auto-start-reverse">
+              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#0a8f6c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <marker id="arrow-replication" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12"
+                    orient="auto-start-reverse">
+              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#7b3fe4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
             </marker>
           </defs>
           <g id="edge-g"></g>

@@ -13,6 +13,19 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.47] 2026-11-10  연결선 종류 네 가지 — 실제 통신 방식대로 (25번, 동작 개편 1단계)
+  추가: 두 박스 종류로 연결선 종류와 방향을 자동으로 정함 (edgeInfo, js/data/services.js). 저장 형식은 그대로
+        요청(회색 실선): 사용자가 시작한 요청과 그 처리 중 호출 — 사용자→CloudFront→IGW→LB→EC2→RDS·캐시·S3·DynamoDB, 사용자↔Route 53
+        서버가 시작한 통신(청록 실선, 한 방향): EC2→NAT→IGW, EC2→VPC Endpoints→S3·DynamoDB, EC2→Session Manager, ECS→ECR
+        복제·전달(보라 점선, 한 방향): RDS→Standby·Read Replica, ElastiCache 복제, CloudTrail→CloudWatch·S3, 리소스→CloudWatch(지표·로그), CodeCommit→…→CodeDeploy→EC2(배포)
+        설정 관계(회색 점점선, 화살표 없음): WAF 부착, IAM 권한, CloudFormation 생성, Route 53→CloudFront·LB(주소 등록), ECS·EKS—Fargate(실행 방식)
+        표에 없는 짝은 요청. IGW—EC2처럼 잘못 이은 선도 요청이 지나가므로 요청으로 두고 판정이 알림
+  추가: 연결선에 마우스를 올리면 선 종류와 뜻을 설명. 검증 후 흐름 범례에 네 종류
+  변경: 검증 후 흐름 점은 요청 선만 따라감 (EC2→NAT, RDS→Standby, EC2→Session Manager 등에는 점이 흐르지 않음). Route 53 왕복·WAF 반짝임은 그대로
+  변경: WAF 선은 화살표 없음 (설정 관계)
+  변경: 가시성 — 선 색을 진하게(요청 진회색·서버 통신 초록·복제 보라·설정 관계 회색 둥근 점), 선을 굵게, 화살표를 크고 굵게 (사용자 피드백)
+  비고: 판정·제안 규칙과 성능 시뮬레이션 결과는 바뀌지 않음 (기준선 스냅샷 그대로)
+
 [1.46] 2026-11-10  AZ 장애 때 ElastiCache 동작 (24번)
   변경: 성능 시뮬레이션 — AZ 장애 때 그 AZ의 ElastiCache도 멈춤. [⚡ 장애 넣기]로 ElastiCache 박스를 직접 고장 낼 수도 있음
   변경: 멈춘 캐시의 몫은 다른 AZ의 캐시가 이어받고(복제 노드 승격, 문서: 보통 몇 초), 남은 캐시가 없으면 그 조회가 RDS로 감

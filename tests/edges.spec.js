@@ -329,3 +329,44 @@ test('가까이 붙은 두 박스(마주 보는 변 사이가 좁음)는 빙 돌
     expect(Math.max(...r.pts.map(p => p.x))).toBeLessThanOrEqual(r.hi);
   }
 });
+
+test('25번: 연결선 종류 — 요청 / 서버가 시작한 통신 / 복제·전달 / 설정 관계, 방향은 박스 종류로', async ({ page }) => {
+  await openApp(page);
+  const info = await page.evaluate(() => Object.fromEntries([
+    ['igw', 'lb'], ['lb', 'ec2'], ['ec2', 'rds'], ['ec2', 's3'], ['igw', 'ec2'], ['dbadmin', 'clientvpn'], ['pc', 'route53'],
+    ['nat', 'ec2'], ['nat', 'igw'], ['ec2', 'vpce'], ['s3', 'vpce'], ['sessionmanager', 'ec2'], ['ecr', 'ecs'],
+    ['rds-standby', 'rds'], ['rds', 'rds-replica'], ['cloudtrail', 'cloudwatch'], ['ec2', 'cloudwatch'], ['codedeploy', 'ec2'],
+    ['waf', 'lb'], ['ec2', 'iam'], ['route53', 'cloudfront'], ['ecs', 'fargate'],
+  ].map(([a, b]) => { const r = edgeInfo(a, b); return [`${a}-${b}`, `${r.kind}${r.dir}`]; })));
+  expect(info).toEqual({
+    'igw-lb': 'request0', 'lb-ec2': 'request0', 'ec2-rds': 'request0', 'ec2-s3': 'request0', 'igw-ec2': 'request0',
+    'dbadmin-clientvpn': 'request0', 'pc-route53': 'request0',
+    'nat-ec2': 'egress-1', 'nat-igw': 'egress1', 'ec2-vpce': 'egress1', 's3-vpce': 'egress-1', 'sessionmanager-ec2': 'egress-1', 'ecr-ecs': 'egress-1',
+    'rds-standby-rds': 'replication-1', 'rds-rds-replica': 'replication1', 'cloudtrail-cloudwatch': 'replication1',
+    'ec2-cloudwatch': 'replication1', 'codedeploy-ec2': 'replication1',
+    'waf-lb': 'relation0', 'ec2-iam': 'relation0', 'route53-cloudfront': 'relation0', 'ecs-fargate': 'relation0',
+  });
+});
+
+test('25번: 예시 고가용성 — 종류별로 그려지고(한 방향 화살표 포함), 검증 흐름 점은 요청 선만 따라간다', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('ha'));
+  const drawn = await page.evaluate(() => {
+    const el = e => document.querySelector(`#edge-g .edge[data-id="${e.id}"]`);
+    const T = (a, b) => state.edges.find(e => { const x = findNode(e.from).type, y = findNode(e.to).type; return (x === a && y === b) || (x === b && y === a); });
+    const nat = T('ec2', 'nat'), sb = T('rds', 'rds-standby'), waf = T('waf', 'lb');
+    const natEc2End = findNode(nat.to).type === 'nat' ? 'marker-end' : 'marker-start';   // 화살표는 NAT 쪽 끝에만
+    return {
+      allKinds: state.edges.every(e => el(e).classList.contains('k-' + edgeKind(findNode(e.from).type, findNode(e.to).type))),
+      natArrows: [el(nat).getAttribute(natEc2End), el(nat).getAttribute(natEc2End === 'marker-end' ? 'marker-start' : 'marker-end')],
+      sbKind: el(sb).classList.contains('k-replication'),
+      wafArrows: [el(waf).getAttribute('marker-start'), el(waf).getAttribute('marker-end')],
+    };
+  });
+  expect(drawn).toEqual({ allKinds: true, natArrows: ['url(#arrow-egress)', null], sbKind: true, wafArrows: [null, null] });
+  await page.click('#btn-validate');
+  const flowTypes = await page.evaluate(() => validation.flow.map(f => [findNode(f.src).type, findNode(f.dst).type].sort().join('-')));
+  for (const bad of ['ec2-nat', 'igw-nat', 'rds-rds-standby', 'ec2-sessionmanager', 'cloudtrail-cloudwatch']) expect(flowTypes).not.toContain(bad);
+  for (const good of ['igw-lb', 'ec2-lb', 'ec2-rds', 'pc-route53', 'lb-waf']) expect(flowTypes).toContain(good);
+  await expect(page.locator('.flow-legend')).toContainText('서버가 시작한 통신');
+});

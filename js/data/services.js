@@ -132,6 +132,50 @@ const ZONE_TEXT = {
 };
 const SVC_MAP = Object.fromEntries(SERVICES.map(s => [s.type, s]));
 
+// 연결선 종류 (25번): 실제로 무엇이 오가고 누가 연결을 시작하는지로 나눈다
+//   request     요청 (실선)            사용자가 시작한 요청과 그 처리 중 호출. 응답은 같은 길로 되돌아감
+//   egress      서버가 시작한 통신 (청록 실선, 한 방향)  서버가 먼저 밖으로 여는 연결. 밖에서는 이 길로 들어올 수 없음
+//   replication 복제·전달 (보라 점선, 한 방향)          AWS가 뒤에서 데이터를 옮김 (복제·로그·배포)
+//   relation    설정 관계 (회색 점점선, 화살표 없음)    데이터가 오가지 않음 (부착·권한·생성·주소 등록·실행 방식)
+const EDGE_KINDS = {
+  request:     { name: '요청',               desc: '사용자가 시작한 요청과 그 처리 중 호출이에요. 응답은 같은 길로 되돌아가요.' },
+  egress:      { name: '서버가 시작한 통신', desc: '서버가 먼저 밖으로 여는 연결이에요. 밖에서는 이 길로 들어올 수 없어요.' },
+  replication: { name: '복제·전달',          desc: 'AWS가 뒤에서 데이터를 옮겨요 (복제·로그·배포). 사용자 요청과는 상관없어요.' },
+  relation:    { name: '설정 관계',          desc: '데이터가 오가지 않는 연결이에요. 붙이거나 권한·생성·주소 등록을 맡아요.' },
+};
+const EDGE_SERVERS = ['ec2', 'ecs', 'eks', 'fargate'];   // 서버(앱이 도는 곳)
+// 위에서부터 처음 맞는 규칙을 쓴다. [앞 종류들, 뒤 종류들, 연결선 종류] — 화살표는 앞 → 뒤 (null = 아무 종류)
+// 표에 없는 짝은 요청(request). 잘못 이은 선(IGW—EC2 등)도 요청이 지나가므로 요청으로 두고 판정이 알린다
+const EDGE_RULES = [
+  [['waf'], null, 'relation'],                                   // CloudFront·LB에 붙는 검사 규칙
+  [['iam'], null, 'relation'],                                   // 권한
+  [['cloudformation'], null, 'relation'],                        // 리소스 생성
+  [['route53'], ['cloudfront', 'lb', 'ec2', 's3'], 'relation'],  // 주소 등록 (사용자—Route 53 주소 묻기는 요청)
+  [['ecs', 'eks'], ['fargate'], 'relation'],                     // 실행 방식
+  [['rds'], ['rds-standby', 'rds-replica'], 'replication'],      // DB 복제 (Standby 동기, Replica 비동기)
+  [['elasticache'], ['elasticache'], 'replication'],             // 캐시 복제
+  [['cloudtrail'], ['cloudwatch', 's3'], 'replication'],         // 기록 전달
+  [null, ['cloudwatch'], 'replication'],                         // 지표·로그 보내기
+  [['codecommit'], ['codepipeline', 'codebuild'], 'replication'],   // 배포 단계 (소스 → 빌드 → 배포)
+  [['codepipeline'], ['codebuild', 'codedeploy'], 'replication'],
+  [['codebuild'], ['codedeploy', 'ecr', 's3'], 'replication'],
+  [['codedeploy'], EDGE_SERVERS, 'replication'],
+  [EDGE_SERVERS, ['nat', 'vpce', 'sessionmanager', 'ecr'], 'egress'],   // 서버가 밖으로 (Session Manager·ECR은 서버 쪽 에이전트가 연결을 염)
+  [['nat'], ['igw'], 'egress'],
+  [['vpce'], ['s3', 'dynamodb'], 'egress'],
+];
+// 두 박스 종류로 연결선 종류와 방향을 정한다. dir: 1 = A→B, -1 = B→A, 0 = 방향 없음(요청은 흐름으로 정함, 설정 관계는 화살표 없음)
+function edgeInfo(typeA, typeB) {
+  const hit = (list, t) => !list || list.includes(t);
+  for (const [from, to, kind] of EDGE_RULES) {
+    const one = kind === 'relation' || kind === 'request' ? 0 : 1;
+    if (hit(from, typeA) && hit(to, typeB)) return { kind, dir: one };
+    if (hit(from, typeB) && hit(to, typeA)) return { kind, dir: -one };
+  }
+  return { kind: 'request', dir: 0 };
+}
+const edgeKind = (typeA, typeB) => edgeInfo(typeA, typeB).kind;
+
 // 영역 목록: 기본 크기(w,h) / 최소 크기(minW,minH) / 중첩 깊이(rank: 0=VPC, 1=AZ, 2=서브넷, 3=그룹)
 // overlay: 덧씌우는 영역. AZ 경계를 가로질러 놓을 수 있고, 다른 항목의 소속(parentContainer)에는 끼지 않는다.
 const AREAS = [

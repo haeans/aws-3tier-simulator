@@ -542,12 +542,18 @@ function renderEdges() {
     if (!route) return;
     const d = roundedPathD(route.points);
     const sel = ed.id === selectedId;
-    const marker = `url(#${sel ? 'arrow-sel' : 'arrow'})`;
-    const dir = flowDir && flowDir.has(ed.id) ? flowDir.get(ed.id) : null;   // null = 양쪽 화살표
-    const line = svgEl('path', { d, class: 'edge' + (sel ? ' selected' : ''), 'data-id': ed.id });
-    if (dir !== false) line.setAttribute('marker-start', marker);
-    if (dir !== true) line.setAttribute('marker-end', marker);
+    // 연결선 종류 (25번): 요청은 흐름 방향(검증 후) 또는 양쪽, 서버 통신·복제는 정해진 한 방향, 설정 관계는 화살표 없음
+    const info = edgeInfo(findNode(ed.from).type, findNode(ed.to).type);
+    const marker = `url(#${sel ? 'arrow-sel' : info.kind === 'request' ? 'arrow' : 'arrow-' + info.kind})`;
+    let dir = flowDir && flowDir.has(ed.id) ? flowDir.get(ed.id) : null;   // null = 양쪽 화살표, false = to 쪽, true = from 쪽
+    if (info.kind !== 'request') dir = info.dir === 1 ? false : true;     // 한 방향 (from→to면 to 쪽에 화살표)
+    const line = svgEl('path', { d, class: `edge k-${info.kind}` + (sel ? ' selected' : ''), 'data-id': ed.id });
+    if (info.kind !== 'relation') {
+      if (dir !== false) line.setAttribute('marker-start', marker);
+      if (dir !== true) line.setAttribute('marker-end', marker);
+    }
     const hit = svgEl('path', { d, class: 'edge-hit' });   // 클릭하기 쉽게 넓은 투명 선
+    attachTooltip(hit, () => `<b>${EDGE_KINDS[info.kind].name}</b><div>${EDGE_KINDS[info.kind].desc}</div>`);   // 선 종류 설명
     const pts = route.points;
     edgePoints.set(ed.id, pts);   // 동적 흐름 점이 따라갈 경로
     // 마우스를 올리면 이 선만 진하게, 나머지 선은 흐리게
