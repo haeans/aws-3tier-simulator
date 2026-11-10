@@ -94,6 +94,7 @@ aws-3tier-simulator/
 ├─ CHANGELOG.md               변경 이력 (최신이 위)
 ├─ .gitattributes             줄바꿈을 LF로 고정
 ├─ CLAUDE.md                  AI(Claude) 작업 규칙·테스트 방법
+├─ HANDOFF.md                 작업 인계: 다른 PC에서 이어서 작업하기 (준비·지금 상태·다음 할 일)
 ├─ package.json               개발 도구 목록과 명령 (npm test, npm run lint)
 ├─ playwright.config.js       자동 테스트 설정 (설치된 Edge 사용, index.html 직접 열기)
 ├─ eslint.config.js           코드 검사 설정 (파일 간 공유 이름 자동 수집)
