@@ -6,14 +6,16 @@ Route 53 · CloudFront · WAF는 아래에 이어서 씀 (2c, 2026-10-27).
 
 ## Load Balancer
 
-### LB-01 · 등급 A (앱에서 직접 검사 불가 → 설명·칭찬 문구에만 반영)
+### LB-01 · 등급 A (22번, v1.44에서 실제 규칙으로)
 - 요약: ALB는 서로 다른 AZ의 서브넷을 2개 이상 지정해야 한다
 - 근거: [ALB 사용 설명서 - Subnets](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html)
 - 인용: "You must select at least two Availability Zone subnets."
 - 표현 방식: 박스 1개가 이미 여러 AZ를 뜻하므로 규칙 없음. 칭찬·설명에서 "LB는 하나를 만들어 여러 AZ에 둔다"고 안내
 - 반례 구성: (없음 — 표현 약속으로 흡수)
-- 반영 규칙: 없음
-- 상태: 조사됨
+- 반영 규칙: (v1.44) LB가 쓰는 AZ(연결된 EC2의 AZ)에 서브넷이 없으면 판정 2 오류. 퍼블릭 서브넷만 없으면 제안 17
+  - 보충 조사(2026-11-10): "To enable a zone, specify a subnet in the zone." / 인터넷용 LB가 퍼블릭 서브넷이어야 한다는 문장은 ALB 문서 3곳에서 못 찾음
+    ("The nodes of an internet-facing load balancer have public IP addresses." 까지만) → 제안(등급 C 수준)으로 둠
+- 상태: 반영됨 (v1.44)
 
 ### LB-02 · 등급 B
 - 요약: LB가 연결된 서버(EC2)가 서로 다른 AZ 2곳 이상에 있어야 한다 (한 AZ에만 있으면 LB의 다른 AZ 노드가 놀게 된다)

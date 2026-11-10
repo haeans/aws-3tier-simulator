@@ -9,7 +9,7 @@ function collect() {
   const C = (x, y) => ({ x: x - NODE_W / 2, y: y - NODE_H / 2 });
   // 정상 구성 (helpers.js의 buildValidArch와 같은 배치)
   const VALID = {
-    nodes: [['pc', 120, 300], ['igw', 290, 300], ['lb', 400, 270], ['nat', 650, 270],
+    nodes: [['pc', 120, 300], ['igw', 290, 300], ['lb', 780, 270], ['nat', 650, 270],
       ['ec2', 400, 430], ['ec2', 880, 430], ['rds', 400, 590], ['rds-standby', 880, 590]],
     edges: [['pc', 'igw'], ['igw', 'lb'], ['lb', 'ec2'], ['lb', 'ec2#1'], ['rds', 'ec2']],
   };
@@ -19,7 +19,7 @@ function collect() {
       ['waf', 120, 60], ['route53', 120, 140], ['cloudfront', 120, 220], ['pc', 120, 300], ['smartphone', 120, 380],
       ['tablet', 120, 460], ['dbadmin', 120, 620],
       ['igw', 290, 300], ['clientvpn', 290, 620], ['vpce', 1290, 300],
-      ['lb', 400, 270], ['nat', 650, 270], ['lb', 880, 270],
+      ['lb', 780, 270], ['nat', 650, 270], ['lb', 780, 510],
       ['ec2', 400, 430], ['ecs', 560, 430], ['ec2', 880, 430], ['fargate', 1020, 430], ['eks', 1160, 430],
       ['rds', 400, 590], ['elasticache', 560, 590], ['rds-replica', 680, 590], ['rds-standby', 880, 590],
       ['s3', 1400, 300], ['dynamodb', 1400, 380], ['ecr', 1400, 460], ['sessionmanager', 1400, 540], ['cloudtrail', 1400, 620],
@@ -136,7 +136,7 @@ function collect() {
   build({ ...VALID, areas: [['asg', 340, 370, 400, 120]] }); out.push(verdictLine('valid+asgA'));
   build({ ...VALID, areas: [['asg', 340, 370, 880, 120]] }); out.push(verdictLine('valid+asgAB'));
   // 컨테이너만 있는 앱 계층 (EC2 없음, CTR-05 현재 동작 기록)
-  build({ nodes: [['pc', 120, 300], ['igw', 290, 300], ['lb', 400, 270], ['ecs', 400, 430], ['fargate', 880, 430], ['rds', 400, 590], ['rds-standby', 880, 590], ['ecr', 1400, 460]],
+  build({ nodes: [['pc', 120, 300], ['igw', 290, 300], ['lb', 780, 270], ['ecs', 400, 430], ['fargate', 880, 430], ['rds', 400, 590], ['rds-standby', 880, 590], ['ecr', 1400, 460]],
     edges: [['pc', 'igw'], ['igw', 'lb'], ['lb', 'ecs'], ['ecs', 'fargate'], ['ecs', 'rds'], ['ecs', 'ecr']] });
   out.push(verdictLine('container-only', true));
 

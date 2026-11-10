@@ -34,7 +34,7 @@ const SERVICES = [
   { type: 'cloudfront',     name: 'CloudFront',       category: 'network',   allowedZone: 'outside', validated: true  },
   { type: 'igw',            name: 'IGW',              category: 'network',   allowedZone: 'any',     validated: true  },
   { type: 'nat',            name: 'NAT',              category: 'network',   allowedZone: 'any',     validated: true  },
-  { type: 'lb',             name: 'Load Balancer',    category: 'network',   allowedZone: 'any',     validated: true  },
+  { type: 'lb',             name: 'Load Balancer',    category: 'network',   allowedZone: 'vpcInner', validated: true  },
   { type: 'vpce',           name: 'VPC Endpoints',    category: 'network',   allowedZone: 'endpoint', validated: false },
   { type: 'clientvpn',      name: 'Client VPN',       category: 'network',   allowedZone: 'vpcEdge', validated: true  },
   // 컴퓨팅
@@ -86,7 +86,7 @@ const SERVICE_DESC = {
   cloudfront:     '콘텐츠를 사용자와 가까운 엣지 로케이션에서 전달하는 CDN이에요. 캐시에 없으면 원본(S3, 웹 서버 등)에서 가져와요.',
   igw:            'VPC와 인터넷 사이의 통신을 가능하게 하는 출입문이에요. IGW로 가는 경로가 있는 서브넷이 퍼블릭 서브넷이에요.',
   nat:            '프라이빗 서브넷의 서버가 VPC 밖으로 연결할 수 있게 해줘요. 밖에서 먼저 연결을 시작할 수는 없어요.',
-  lb:             '들어온 요청을 여러 AZ의 대상(EC2 등)에 나눠줘요. 상태 확인을 해서 정상인 대상에만 보내요.',
+  lb:             '들어온 요청을 여러 AZ의 대상(EC2 등)에 나눠줘요. 상태 확인을 해서 정상인 대상에만 보내요. 하나를 만들어 여러 AZ에 걸쳐 쓰므로, 서브넷 밖(두 AZ의 퍼블릭 서브넷 사이)에 놓아요.',
   vpce:           'IGW나 NAT 없이 VPC에서 AWS 서비스에 비공개로 접속하게 해줘요. S3·DynamoDB는 게이트웨이 엔드포인트(VPC 경계), 그 밖의 서비스는 인터페이스 엔드포인트(프라이빗 서브넷 안)를 써요.',
   clientvpn:      '관리형 VPN 서비스예요. 관리자 PC에서 암호화된 연결로 VPC 안의 리소스에 접속하게 해줘요.',
   ec2:            'AWS 클라우드의 가상 서버예요. 필요한 만큼 늘리고 줄일 수 있고, 3-Tier에서 앱(로직) 계층을 맡아요.',
@@ -113,15 +113,16 @@ const SERVICE_DESC = {
 };
 SERVICES.forEach(s => { s.desc = SERVICE_DESC[s.type] || ''; });
 
-// 위치 제한 없는(any) 서비스 중 검증 규칙상 권장 위치
+// 검증 규칙상 권장 위치 (놓는 곳 안내에 함께 표시)
 const RECOMMENDED_ZONE = {
-  igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '퍼블릭 서브넷', ec2: '프라이빗 서브넷', ecs: '프라이빗 서브넷', eks: '프라이빗 서브넷', fargate: '프라이빗 서브넷',
+  igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '두 AZ의 퍼블릭 서브넷 사이', ec2: '프라이빗 서브넷', ecs: '프라이빗 서브넷', eks: '프라이빗 서브넷', fargate: '프라이빗 서브넷',
   rds: 'DB 서브넷', 'rds-replica': 'DB 서브넷', 'rds-standby': 'DB 서브넷', elasticache: 'DB 서브넷',
 };
 // allowedZone을 쉬운 말로
 const ZONE_TEXT = {
   outside: 'VPC 밖',
   vpcEdge: 'VPC 안팎 모두 가능 (서브넷 안은 불가)',
+  vpcInner: 'VPC 안, 서브넷 밖 (여러 AZ에 걸쳐 쓰는 서비스)',
   endpoint: 'VPC 경계·VPC 안, 또는 서브넷 안 (인터페이스 엔드포인트는 보통 프라이빗 서브넷)',
   private: '프라이빗 서브넷만',
   appSubnet: '프라이빗 서브넷 (퍼블릭 서브넷은 경고)',
@@ -147,7 +148,7 @@ const AREA_MAP = Object.fromEntries(AREAS.map(a => [a.type, a]));
 const AREA_DESC = {
   vpc:     { desc: 'AWS 안에 직접 만드는, 논리적으로 격리된 가상 네트워크예요.', zone: '다른 영역 바깥' },
   az:      { desc: '리전 안에서 서로 떨어진 독립된 위치(가용 영역)예요. 여러 AZ에 나눠 두면 한 AZ에 장애가 나도 버틸 수 있어요. 서브넷은 한 AZ 안에만 만들어요.', zone: 'VPC 안' },
-  public:  { desc: 'IGW로 가는 경로가 있는 서브넷이에요. 인터넷과 통신할 수 있어서 Load Balancer와 NAT를 둬요.', zone: 'AZ 안' },
+  public:  { desc: 'IGW로 가는 경로가 있는 서브넷이에요. 인터넷과 통신할 수 있어서 NAT를 두고, Load Balancer가 AZ마다 이 서브넷을 써요.', zone: 'AZ 안' },
   private: { desc: 'IGW로 가는 경로가 없는 서브넷이에요. 인터넷에서 직접 들어올 수 없어서 앱 서버(EC2)를 둬요.', zone: 'AZ 안' },
   db:      { desc: '데이터베이스를 두는 프라이빗 서브넷이에요. 앱 서버와 다른 서브넷으로 나눠 보호해요. RDS는 두 AZ 이상의 서브넷이 필요해요.', zone: 'AZ 안' },
   asg:     { desc: 'EC2를 한 그룹으로 묶어 정한 수를 유지하고, 사용량에 따라 자동으로 늘리고 줄여요. 문제가 생긴 EC2는 새 EC2로 바꿔요. 두 AZ의 프라이빗 서브넷에 걸쳐 놓고 그 안에 EC2를 두세요.',

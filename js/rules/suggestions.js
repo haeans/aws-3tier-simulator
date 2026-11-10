@@ -356,8 +356,9 @@ const SUGGESTION_RULES = [
         text: 'Load Balancer 하나가 여러 AZ의 EC2에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
     },
     check(ctx) {
-      const lbs = ctx.ofType('lb').filter(lb => ctx.azOf(lb));
-      if (new Set(lbs.map(ctx.azOf)).size < 2) return [];
+      // 22번: LB의 AZ = 연결된 EC2의 AZ. 한 AZ만 맡는 LB가 여럿이고 서로 다른 AZ를 맡으면 "AZ마다 따로"
+      const lbs = ctx.ofType('lb').filter(lb => lbAzsOf(ctx, lb).length === 1);
+      if (new Set(lbs.map(lb => lbAzsOf(ctx, lb)[0])).size < 2) return [];
       return [{
         nodeIds: lbs.map(n => n.id),
         reason: 'Load Balancer가 AZ마다 따로 있어요. 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지 못해요.',
@@ -440,6 +441,27 @@ const SUGGESTION_RULES = [
         reason: 'ECS나 EKS와 이어지지 않은 Fargate가 있어요. Fargate는 ECS 작업이나 EKS Pod를 실행해 주는 방식이에요.',
         action: 'Fargate를 ECS(또는 EKS)와 연결하세요.',
       }];
+    },
+  },
+  {
+    // 근거: LB-01 (AZ마다 서브넷 지정은 등급 A, 그 서브넷이 퍼블릭이어야 한다는 문장은 문서에 없어 제안으로 둔다. 22번 사용자 결정)
+    id: 17, kind: 'improve', title: 'Load Balancer용 퍼블릭 서브넷',
+    pillars: ['reliability'],
+    basis: 'Load Balancer는 쓰는 AZ마다 그 AZ의 서브넷에 노드를 둬요. 인터넷용 Load Balancer의 노드는 공인 IP를 가지므로, 보통 AZ마다 퍼블릭 서브넷을 지정해요.',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('lb').forEach(lb => {
+        // 서브넷이 하나도 없는 AZ는 판정 2가 오류로 알린다
+        const azs = lbAzsOf(ctx, lb).filter(az => subnetsIn(az).length && !subnetsIn(az, 'public').length);
+        if (!azs.length) return;
+        issues.push({
+          nodeIds: [lb.id, ...ctx.neighborsOf(lb, ...APP_TYPES).filter(e => azs.includes(ctx.azOf(e))).map(n => n.id)],
+          reason: `${azs.map(a => a.label).join(', ')}에 퍼블릭 서브넷이 없어요. Load Balancer가 그 AZ에 둘 노드가 인터넷 요청을 받기 어려워요.`,
+          action: `${azs.map(a => a.label).join(', ')}에 퍼블릭 서브넷을 만들어 주세요.`,
+        });
+      });
+      return issues;
     },
   },
 ];

@@ -13,9 +13,9 @@
 // 기본 3-Tier: 판정 "정상"이 나오는 최소 구성 (제안은 여러 개 남음 → 고가용성과 비교해 보기)
 const EXAMPLE_BASIC = {
   nodes: [
-    // IGW는 VPC 위쪽 테두리(LB·NAT 사이 위), 사용자는 그 바로 위 → 선이 겹치지 않고 곧게 이어짐
-    ['pc', 'pc', 260, -150], ['igw', 'igw', 260, 0], ['lb', 'lb', 140, 190], ['nat', 'nat', 380, 190],
-    ['ec2a', 'ec2', 140, 350], ['ec2b', 'ec2', 600, 350], ['rds', 'rds', 140, 510], ['sb', 'rds-standby', 600, 510],
+    // LB는 두 AZ의 퍼블릭 서브넷 사이(서브넷 밖), IGW·사용자는 그 바로 위 → 선이 겹치지 않고 곧게 이어짐
+    ['pc', 'pc', 500, -150], ['igw', 'igw', 500, 0], ['lb', 'lb', 500, 190], ['nat', 'nat', 120, 190],
+    ['ec2a', 'ec2', 260, 350], ['ec2b', 'ec2', 740, 350], ['rds', 'rds', 260, 510], ['sb', 'rds-standby', 740, 510],
   ],
   edges: [
     ['pc', 'igw'], ['igw', 'lb'], ['lb', 'ec2a'], ['lb', 'ec2b'], ['ec2a', 'rds'], ['ec2b', 'rds'], ['rds', 'sb'],
@@ -27,11 +27,11 @@ const EXAMPLE_BASIC = {
 const EXAMPLE_HA = {
   nodes: [
     ['pc', 'pc', -180, -130], ['r53', 'route53', -180, 40],
-    ['cf', 'cloudfront', 260, -130], ['waf', 'waf', 460, -130], ['igw', 'igw', 260, 0],
-    ['waf2', 'waf', -180, 190],
-    ['lb', 'lb', 140, 190], ['nat', 'nat', 380, 190], ['natb', 'nat', 760, 190],
-    ['ec2a', 'ec2', 140, 350], ['ec2b', 'ec2', 760, 350],
-    ['rds', 'rds', 140, 510], ['cache', 'elasticache', 380, 510], ['sb', 'rds-standby', 760, 510],
+    ['cf', 'cloudfront', 500, -130], ['waf', 'waf', 700, -130], ['igw', 'igw', 500, 0],
+    ['waf2', 'waf', 700, -40],
+    ['lb', 'lb', 500, 190], ['nat', 'nat', 120, 190], ['natb', 'nat', 880, 190],
+    ['ec2a', 'ec2', 260, 350], ['ec2b', 'ec2', 740, 350],
+    ['rds', 'rds', 180, 510], ['cache', 'elasticache', 360, 510], ['sb', 'rds-standby', 740, 510],
     ['ssm', 'sessionmanager', 1180, 350], ['cw', 'cloudwatch', 1180, 510], ['trail', 'cloudtrail', 1180, 640],
   ],
   edges: [
@@ -51,7 +51,7 @@ const EXAMPLE_MISTAKES = [
   { key: 'ec2-standby', rule: 'DB-02',  edges: [['ec2b', 'sb']] },               // 앱이 예비 DB에 접속 (오류)
   { key: 'user-ec2',    rule: 'IGW-03', edges: [['pc', 'ec2a']] },               // 사용자가 서버에 바로 접속 (경고)
   { key: 'db-public',   rule: 'DB-05',  move: { rds: [820, 190] } },             // DB를 퍼블릭 서브넷에 (경고)
-  { key: 'ec2-public',  rule: 'SRV-08', move: { ec2b: [600, 190] } },            // 서버를 퍼블릭 서브넷에 (경고)
+  { key: 'ec2-public',  rule: 'SRV-08', move: { ec2b: [740, 190] } },            // 서버를 퍼블릭 서브넷에 (경고)
 ];
 const EXAMPLE_MISTAKE_COUNT = 2;
 
