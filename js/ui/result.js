@@ -61,7 +61,10 @@ const INSPECT_TYPES = ['waf'];
 function computeFlow(nodeLevels) {
   const isSide = id => SIDE_TRIP_TYPES.includes(findNode(id).type);
   const adj = new Map(state.nodes.map(n => [n.id, []]));
-  const edges = state.edges.filter(e => adj.has(e.from) && adj.has(e.to));
+  // 25번: 요청 선만 흐른다 (서버 통신·복제·설정 관계는 흐름 점 없음). WAF는 설정 관계지만 검사 반짝임으로 남긴다
+  const isWaf = id => findNode(id).type === 'waf';
+  const edges = state.edges.filter(e => adj.has(e.from) && adj.has(e.to) &&
+    (isWaf(e.from) || isWaf(e.to) || edgeKind(findNode(e.from).type, findNode(e.to).type) === 'request'));
   edges.forEach(e => {
     if (isSide(e.from) || isSide(e.to)) return;   // 들르는 곳은 경로를 잇지 않음
     adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
@@ -257,7 +260,8 @@ function renderResult() {
     $result.insertAdjacentHTML('beforeend', '<div class="flow-legend">요청 흐름(사용자부터 차례로) ·' +
       `<span><i style="background:${FLOW_COLOR.ok}"></i>정상</span>` +
       `<span><i style="background:${FLOW_COLOR.warn}"></i>병목(느림)</span>` +
-      `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span></div>`);
+      `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span>` +
+      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span></div>');
   }
 
   // 목록 한 줄: 클릭하면 관련 박스로 이동·선택

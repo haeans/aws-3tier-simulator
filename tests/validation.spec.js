@@ -66,10 +66,14 @@ test('흐름: Route 53에 주소를 물어본 뒤(왕복) 출발하고, LB에서
   // WAF 선에는 점이 다니지 않고, 검사 중에 WAF 박스가 반짝인다
   expect(await page.evaluate(id => flowDots.find(d => d.f.id === id).dot, f.waf.id)).toBeNull();
   await page.waitForFunction(() => elMap.get(state.nodes.find(n => n.type === 'waf').id).classList.contains('flow-inspect'));
-  // Route 53·WAF 선은 양쪽 화살표
+  // Route 53(주소 묻기) 선은 양쪽 화살표, WAF 선은 설정 관계(부착)라 화살표 없음 (25번)
+  const dns = page.locator(`.edge[data-id="${f.dns.id}"]`);
+  await expect(dns).toHaveAttribute('marker-start', /arrow/);
+  await expect(dns).toHaveAttribute('marker-end', /arrow/);
   const waf = page.locator(`.edge[data-id="${f.waf.id}"]`);
-  await expect(waf).toHaveAttribute('marker-start', /arrow/);
-  await expect(waf).toHaveAttribute('marker-end', /arrow/);
+  await expect(waf).toHaveClass(/k-relation/);
+  expect(await waf.getAttribute('marker-start')).toBeNull();
+  expect(await waf.getAttribute('marker-end')).toBeNull();
 });
 
 test('LB — WAF — CloudFront처럼 WAF를 사이에 두면 제거 제안이 나오고, CloudFront를 경로에 두면 사라진다', async ({ page }) => {
