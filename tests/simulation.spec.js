@@ -1,6 +1,6 @@
 // 성능 시뮬레이션 테스트
 const { test, expect } = require('@playwright/test');
-const { openApp, buildValidArch, connect } = require('./helpers');
+const { openApp, buildValidArch, connect, verdict } = require('./helpers');
 
 // 기본 구성 + 두 번째 EC2도 RDS와 연결 (모든 EC2가 DB를 쓰는 구성)
 async function buildSimArch(page) {
@@ -505,6 +505,56 @@ test('ElastiCache·Read Replica: DB 조회 중 캐시 몫(80%)은 캐시가, 남
     render();
   });
   expect(await dbLoad()).toEqual({ rds: 6, cache: 80, replica: 14, success: 1 });
+});
+
+test('24번: ElastiCache가 멈추면 다른 AZ의 캐시가 이어받고, 모두 멈추면 캐시 몫이 RDS로 간다', async ({ page }) => {
+  await openApp(page);
+  await buildSimArch(page);
+  // 캐시 2개: AZ A DB 서브넷, AZ B DB 서브넷. EC2 2대 모두와 연결
+  await page.evaluate(() => {
+    addNode('elasticache', 620, 590); addNode('elasticache', 1100, 590);
+    const T = t => state.nodes.filter(n => n.type === t);
+    T('ec2').forEach(e => T('elasticache').forEach(c => state.edges.push({ id: newId('e'), from: e.id, to: c.id, fromSide: null, toSide: null, mid: null })));
+    render();
+  });
+  const run = downIdx => page.evaluate(idx => {
+    const f = createFaults();
+    const caches = state.nodes.filter(n => n.type === 'elasticache');
+    idx.forEach(i => setFault(f, caches[i].id, true));
+    const res = simulateTraffic(100, simFaultOptions(f));
+    const load = n => Math.round((res.nodes.get(n.id)?.load || 0) * 10) / 10;
+    return { rds: load(state.nodes.find(n => n.type === 'rds')), caches: caches.map(load), success: res.successRate };
+  }, downIdx);
+  expect(await run([])).toEqual({ rds: 20, caches: [40, 40], success: 1 });
+  expect(await run([0])).toEqual({ rds: 20, caches: [0, 80], success: 1 });     // 남은 캐시가 이어받음
+  expect(await run([0, 1])).toEqual({ rds: 100, caches: [0, 0], success: 1 });  // 캐시가 모두 멈추면 RDS로
+});
+
+test('24번: AZ 장애는 그 AZ의 ElastiCache도 멈추고, 캐시가 한 AZ에만 있으면 제안 18', async ({ page }) => {
+  await openApp(page);
+  await buildSimArch(page);
+  await page.evaluate(() => {
+    addNode('elasticache', 620, 590);   // AZ A에만
+    const T = t => state.nodes.filter(n => n.type === t);
+    T('ec2').forEach(e => state.edges.push({ id: newId('e'), from: e.id, to: T('elasticache')[0].id, fromSide: null, toSide: null, mid: null }));
+    render();
+  });
+  const down = await page.evaluate(() => {
+    const f = createFaults();
+    f.downAzs.add(azOf(state.nodes.find(n => n.type === 'elasticache')).id);
+    return faultDownNodes(f).has(state.nodes.find(n => n.type === 'elasticache').id);
+  });
+  expect(down).toBe(true);
+  expect((await verdict(page)).sug).toContain(18);
+  await page.evaluate(() => {
+    addNode('elasticache', 1100, 590);   // AZ B에도
+    const T = t => state.nodes.filter(n => n.type === t);
+    T('ec2').forEach(e => state.edges.push({ id: newId('e'), from: e.id, to: T('elasticache')[1].id, fromSide: null, toSide: null, mid: null }));
+    render();
+  });
+  const r = await verdict(page);
+  expect(r.sug).not.toContain(18);
+  expect(r.praises).toContain('S18');
 });
 
 test('공격 시나리오: WAF가 없으면 봇 요청이 서버까지 들어와 정상 요청도 실패하고, WAF를 LB에 붙이면 앞에서 막는다', async ({ page }) => {

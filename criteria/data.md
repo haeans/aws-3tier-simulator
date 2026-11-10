@@ -83,6 +83,15 @@
 - 요약: 자동 장애 조치(ElastiCache.3), 백업(.1), 암호화(.4·.5), 기본 서브넷 그룹 금지(.7)는 설정값이라 표현 불가 → 제외
 - 상태: 제외
 
+### CACHE-04 · 등급 C (24번, 2026-11-10)
+- 요약: ElastiCache를 한 AZ에만 두면 그 AZ 장애 때 캐시가 멈추고 데이터가 사라진다. 다른 AZ에 복제 노드를 두면(Multi-AZ) 복제 노드가 몇 초 만에 승격된다
+- 근거: [ElastiCache 자동 장애 조치](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/AutoFailover.html), [캐싱 전략](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html)
+- 인용: "Clusters without read replicas do not provide high availability or fault tolerance." / "Multi-AZ requires at least one replica in a different Availability Zone" / "Node failures aren't fatal for your application." (lazy loading)
+- 못 찾음: 캐시에 접속이 안 될 때(연결 오류) 앱이 DB로 넘어간다는 문장. 노드가 비었을 때 DB로 간다는 것까지만 있음 → 시뮬레이션은 "DB로 넘긴다고 가정"
+- 표현 방식: ElastiCache 박스가 있는 AZ가 1곳뿐이면 제안. 시뮬레이션: 멈춘 캐시의 몫은 다른 AZ의 캐시가 이어받고, 없으면 RDS로
+- 반영 규칙: SUGGESTION #18 ElastiCache를 다른 AZ에도, 시뮬레이션 FAULT_TYPES에 ElastiCache 추가
+- 상태: 반영됨 (v1.46)
+
 ### S3-01 · 등급 C (이미 반영됨)
 - 요약: S3는 VPC 밖의 서비스다. 프라이빗 서브넷의 EC2가 S3에 가려면 NAT나 게이트웨이 엔드포인트가 필요하고, 게이트웨이 엔드포인트는 추가 요금이 없다
 - 근거: [S3 게이트웨이 엔드포인트](https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html)

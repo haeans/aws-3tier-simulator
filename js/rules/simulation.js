@@ -120,7 +120,9 @@ function simulateTraffic(rps, faults = null, attack = 0) {
     // EC2의 DB 조회: ElastiCache가 연결돼 있으면 캐시에 있는 몫은 캐시가 응답 (lazy loading)
     //               Read Replica가 연결돼 있으면 남은 조회 중 읽기 몫은 Replica로, 쓰기는 본체(RDS)로
     if (APP_TYPES.includes(n.type) && nextType === 'rds') {
-      const caches = farther.filter(m => m.type === 'elasticache');
+      // 24번: 멈춘 캐시는 빼고, 남은 캐시가 캐시 몫을 이어받는다 (다른 AZ의 복제 노드가 몇 초 만에 승격, ElastiCache 문서)
+      //       캐시가 모두 멈췄으면 캐시 몫도 RDS로 (lazy loading: 캐시에 없으면 DB에서 읽음. 접속 실패도 DB로 넘긴다고 가정)
+      const caches = farther.filter(m => m.type === 'elasticache' && !F.down.has(m.id));
       const replicas = farther.filter(m => m.type === 'rds-replica');
       let rest = 1;
       const extra = [];
@@ -163,10 +165,11 @@ function simulateTraffic(rps, faults = null, attack = 0) {
    장애와 자동 복구 (시뮬레이션 시계 1초마다 stepFaults)
    - LB 상태 확인: 30초마다, 2번 연속 실패하면 EC2를 빼고, 5번 연속 성공하면 다시 넣는다 (ALB 기본값)
    - RDS Multi-AZ: 본체가 멈추면 다른 AZ의 Standby로 장애 조치. 약 90초 동안 DB 요청 실패 (문서: 보통 60~120초)
-   - AZ 장애: 그 AZ 안의 EC2·DB가 모두 멈춤. LB·IGW는 여러 AZ에 걸친 관리형이라 그대로 동작
+   - AZ 장애: 그 AZ 안의 EC2·DB·ElastiCache가 모두 멈춤. LB·IGW는 여러 AZ에 걸친 관리형이라 그대로 동작
+   - ElastiCache가 멈추면 다른 AZ의 캐시가 이어받고, 없으면 그 조회가 RDS로 간다 (24번)
    ========================================================= */
 const HEALTH_INTERVAL = 30, UNHEALTHY_COUNT = 2, HEALTHY_COUNT = 5, FAILOVER_TIME = 90;
-const FAULT_TYPES = [...APP_TYPES, ...RDS_TYPES];   // 장애를 넣을 수 있는 박스
+const FAULT_TYPES = [...APP_TYPES, ...RDS_TYPES, 'elasticache'];   // 장애를 넣을 수 있는 박스 (ElastiCache는 24번)
 
 // 사건 기록용 이름: "EC2(가용 영역 A)"
 function simNodeName(id) {
