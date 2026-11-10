@@ -37,6 +37,11 @@ const PLACEMENT_RULES = {
     test: zone => zone === 'outside' || zone === 'vpc',
     message: name => `${eunNeun(name)} 서브넷 안에는 놓을 수 없어요. VPC 바깥이나 서브넷 밖의 VPC 영역에 놓아주세요.`,
   },
+  // Load Balancer: 하나가 여러 AZ에 노드를 두므로 서브넷 하나에 넣지 않는다 (criteria/entry.md LB-01, 22번 결정)
+  vpcInner: {
+    test: zone => zone === 'vpc',
+    message: name => `${eunNeun(name)} 여러 AZ에 걸쳐 쓰는 서비스라 서브넷 밖에 놓아요. VPC 안, 두 AZ의 퍼블릭 서브넷 사이에 놓아주세요.`,
+  },
   // VPC Endpoints: 게이트웨이 엔드포인트는 VPC 경계, 인터페이스 엔드포인트는 고른 서브넷마다 생긴다.
   // 문서는 서브넷 종류를 제한하지 않는다 (criteria/ops.md VPCE-03). 프라이빗 서브넷은 안내문에서만 권장
   endpoint: {

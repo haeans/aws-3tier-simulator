@@ -54,7 +54,7 @@ const VALIDATION_RULES = [
     // 근거: IGW-01, SRV-08
     id: 2, level: 'error', message: '계층 배치',
     pillars: ['security'],
-    basis: '계층마다 네트워크를 나눠 보호해요. 인터넷 요청을 받는 Load Balancer는 퍼블릭 서브넷에, 앱 서버(EC2)는 프라이빗 서브넷에 둬요.',
+    basis: '계층마다 네트워크를 나눠 보호해요. 인터넷 요청을 받는 Load Balancer는 AZ마다 퍼블릭 서브넷에 노드를 두고, 앱 서버(EC2)는 프라이빗 서브넷에 둬요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_create_layers.html',
     check(ctx) {
       const issues = [];
@@ -62,9 +62,17 @@ const VALIDATION_RULES = [
         if (SUBNET_TYPES.includes(ctx.zoneOf(n))) issues.push({ nodeIds: [n.id],
           message: 'IGW는 서브넷 안에 두지 않아요. VPC 경계(서브넷 바깥)에 놓아주세요.' });
       });
+      // 22번: LB 하나가 여러 AZ에 노드를 두므로 서브넷 밖에 둔다 (예전 저장 구성은 퍼블릭 서브넷 안에 있을 수 있음)
       ctx.ofType('lb').forEach(n => {
-        if (ctx.zoneOf(n) !== 'public') issues.push({ nodeIds: [n.id],
-          message: 'Load Balancer는 퍼블릭 서브넷에 있어야 인터넷에서 오는 요청을 받을 수 있어요.' });
+        if (ctx.zoneOf(n) !== 'vpc') issues.push({ nodeIds: [n.id],
+          message: 'Load Balancer는 여러 AZ에 걸쳐 쓰는 서비스라 서브넷 밖에 둬요. VPC 안, 두 AZ의 퍼블릭 서브넷 사이로 옮겨주세요.' });
+      });
+      // 근거: LB-01 — LB가 쓰는 AZ마다 그 AZ의 서브넷을 지정해야 한다 (LB가 쓰는 AZ = 연결된 EC2가 있는 AZ)
+      ctx.ofType('lb').forEach(lb => {
+        lbAzsOf(ctx, lb).filter(az => !subnetsIn(az).length).forEach(az => issues.push({
+          nodeIds: [lb.id, ...ctx.neighborsOf(lb, ...APP_TYPES).filter(e => ctx.azOf(e) === az).map(n => n.id)],
+          message: `${az.label}에 서브넷이 없어서 Load Balancer가 그 AZ에 노드를 둘 수 없어요. ${az.label}에 퍼블릭 서브넷을 만들어주세요.`,
+        }));
       });
       // 근거: SRV-08 — 퍼블릭 서브넷의 EC2는 문서가 금지하지 않으므로 오류가 아니라 경고(규칙 11). 서브넷 밖·DB 서브넷은 오류 유지
       ctx.ofType(...APP_TYPES).forEach(n => {
@@ -80,7 +88,7 @@ const VALIDATION_RULES = [
       if (ec2s.some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
       if (ec2s.some(e => ctx.zoneOf(e) !== 'private')) return [];
       return [{ nodeIds: [...lbs, ...ec2s].map(n => n.id),
-        text: 'Load Balancer는 퍼블릭 서브넷, EC2는 프라이빗 서브넷에 나눠 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
+        text: '요청은 Load Balancer가 받고, EC2는 프라이빗 서브넷에 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
     },
   },
   {

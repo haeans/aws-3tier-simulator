@@ -12,7 +12,7 @@ const USER_GUIDE = {
   links: [
     { to: ['route53'], text: '먼저 Route 53에 도메인 이름(example.com)의 주소를 물어봐요. 받은 주소로 CloudFront나 Load Balancer에 접속해요.' },
     { to: ['cloudfront'], text: '가까운 엣지 로케이션의 CloudFront가 먼저 응답해요. 캐시에 없는 요청은 CloudFront가 원본으로 보내요.' },
-    { to: ['igw'], text: '웹 요청은 인터넷 게이트웨이(IGW)를 지나 퍼블릭 서브넷의 Load Balancer로 들어가요.' },
+    { to: ['igw'], text: '웹 요청은 인터넷 게이트웨이(IGW)를 지나 Load Balancer로 들어가요.' },
   ],
   avoid: [
     { to: ['ec2', 'elasticache', ...RDS_TYPES], text: '서버와 DB는 인터넷에서 직접 닿지 않게 숨겨요. IGW → Load Balancer를 거치게 하세요.' },
@@ -55,7 +55,7 @@ const SERVICE_GUIDE = {
   igw: {
     links: [
       { to: [...USER_TYPES, 'cloudfront'], text: '인터넷과 VPC 사이의 통신이 이 문을 지나요.' },
-      { to: ['lb'], text: '들어온 요청이 퍼블릭 서브넷의 Load Balancer로 가요.' },
+      { to: ['lb'], text: '들어온 요청이 Load Balancer로 가요.' },
       { to: ['nat'], text: '프라이빗 서버가 밖으로 보내는 요청은 NAT를 거쳐 이 문으로 나가요.' },
     ],
     avoid: [
@@ -77,7 +77,7 @@ const SERVICE_GUIDE = {
     links: [
       { to: ['igw'], text: 'IGW를 지나 들어온 인터넷 요청을 받는 입구예요.' },
       { to: ['waf'], text: 'Load Balancer(ALB)에 WAF를 붙이면, EC2로 보내기 전에 위험한 요청을 걸러내요.' },
-      { to: ['ec2'], text: '여러 AZ의 EC2에 요청을 나눠요. 상태 확인으로 정상인 EC2에만 보내서, 한 곳이 멈춰도 버텨요.' },
+      { to: ['ec2'], text: '여러 AZ의 EC2에 요청을 나눠요. 상태 확인으로 정상인 EC2에만 보내서, 한 곳이 멈춰도 버텨요. 연결된 EC2가 있는 AZ마다 그 AZ의 퍼블릭 서브넷에 Load Balancer 노드가 생겨요.' },
     ],
     avoid: [
       { to: RDS_TYPES, text: 'Load Balancer는 앱 서버 앞에 둬요. DB에는 EC2가 접속해요.' },

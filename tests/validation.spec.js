@@ -223,7 +223,7 @@ test('결과 목록의 항목을 클릭하면 해당 박스가 선택된다', as
   await buildValidArch(page);
   await page.evaluate(() => { state.nodes.find(n => n.type === 'lb').y = 1200; recomputeParents(); render(); });   // LB를 VPC 밖으로
   await page.click('#btn-validate');
-  await page.locator('.issue.error', { hasText: 'Load Balancer는 퍼블릭 서브넷에' }).click();
+  await page.locator('.issue.error', { hasText: 'Load Balancer는 여러 AZ에 걸쳐' }).click();
   const selectedType = await page.evaluate(() => state.nodes.find(n => n.id === selectedId)?.type);
   expect(selectedType).toBe('lb');
   // 오류 강조 바깥에 선택 테두리가 한 겹 더 보이고, 찾아간 박스가 깜빡인다
@@ -361,8 +361,39 @@ test('LB-02: LB와 연결된 EC2가 한 AZ에만 있으면 경고한다', async 
 test('LB-05: IGW와 이어지지 않은 LB가 하나 더 있으면 "한 입구" 칭찬이 사라진다', async ({ page }) => {
   await openApp(page);
   await buildValidArch(page);
-  await page.evaluate(() => { addNode('lb', 640, 330); });   // IGW와 이어지지 않은 LB
+  await page.evaluate(() => { addNode('lb', 780, 510); });   // IGW와 이어지지 않은 LB
   expect((await verdict(page)).praises).not.toContain('V1');
+});
+
+test('22번: 예전 배치처럼 LB가 퍼블릭 서브넷 안에 있으면 계층 배치 오류', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await moveNode(page, 'lb', 350, 240);   // AZ A 퍼블릭 서브넷 안 (저장 파일을 불러온 경우처럼 직접 옮김)
+  const r = await verdict(page);
+  expect(r.issues).toContain(2);
+  expect(r.msgs.join(' ')).toContain('서브넷 밖에 둬요');
+});
+
+test('LB-01: LB가 쓰는 AZ(연결된 EC2의 AZ)에 서브넷이 없으면 오류, 퍼블릭 서브넷만 없으면 제안 17', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  // AZ B의 퍼블릭 서브넷만 지우기 → 제안 17 (판정은 그대로 정상)
+  const dropSubnets = types => page.evaluate(types => {
+    const azB = state.containers.find(c => c.type === 'az' && c.label === '가용 영역 B');
+    state.containers = state.containers.filter(c => !(c.parentContainer === azB.id && types.includes(c.type)));
+    recomputeParents(); render();
+  }, types);
+  await dropSubnets(['public']);
+  let r = await verdict(page);
+  expect(r.status).toBe('ok');
+  expect(r.sug).toContain(17);
+  expect(r.msgs.join(' ')).toContain('가용 영역 B에 퍼블릭 서브넷이 없어요');
+  // 서브넷을 모두 지우면 → 판정 2 오류 (LB 노드를 둘 서브넷이 없음)
+  await dropSubnets(['private', 'db']);
+  r = await verdict(page);
+  expect(r.issues).toContain(2);
+  expect(r.msgs.join(' ')).toContain('가용 영역 B에 서브넷이 없어서');
+  expect(r.sug).not.toContain(17);
 });
 
 test('IGW-02: IGW와 EC2를 바로 이으면 오류 / IGW-03: 사용자와 EC2를 바로 이으면 경고 (칭찬도 사라짐)', async ({ page }) => {
@@ -413,7 +444,14 @@ test('NAT-02: NAT가 AZ 하나뿐이면 제안하고 AZ마다 두면 칭찬 / LB
   r = await verdict(page);
   expect(r.sug).toContain(7);
   expect(r.msgs.join(' ')).toContain('Load Balancer — NAT 연결');
-  await page.evaluate(() => { addNode('lb', 1040, 270); });   // AZ B 퍼블릭에도 LB
+  // AZ B의 EC2는 두 번째 LB로 옮겨 연결 → LB가 AZ마다 하나씩 (22번: LB의 AZ = 연결된 EC2의 AZ)
+  await page.evaluate(() => {
+    addNode('lb', 780, 510);
+    const [lb0, lb1] = state.nodes.filter(n => n.type === 'lb'), ec2b = state.nodes.filter(n => n.type === 'ec2')[1];
+    state.edges = state.edges.filter(e => !(e.from === lb0.id && e.to === ec2b.id) && !(e.to === lb0.id && e.from === ec2b.id));
+    state.edges.push({ id: newId('e'), from: lb1.id, to: ec2b.id, fromSide: null, toSide: null, mid: null });
+    render();
+  });
   r = await verdict(page);
   expect(r.sug).toContain(11);
   expect(r.praises).not.toContain('S11');

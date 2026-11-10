@@ -17,6 +17,7 @@
 - 서비스별 배치 가능 위치 제한 (어기면 안내 메시지와 함께 되돌림)
 - 서비스 박스끼리, 같은 단계 영역끼리 겹침 방지
 - IGW / VPC Endpoints / Client VPN은 VPC 경계선에 자동으로 붙음
+- Load Balancer는 VPC 안, 서브넷 밖에만 놓음 (두 AZ의 퍼블릭 서브넷 사이, v1.44)
 - 영역 크기 조절 (좌상단·우하단 손잡이), 영역 이동 시 안의 항목도 함께 이동
 - 여러 개 선택: Shift+클릭(넣고 빼기), Shift+드래그(범위 선택, 영역 위에서도 가능) → 함께 이동·Delete로 함께 삭제
   (서비스 박스만 여러 개 선택 가능)
@@ -36,7 +37,7 @@
 ### 검증
 - [검증하기]: 정상 / 경고 / 오류 3단계 판정 + 문제 박스 강조 (규칙 19개)
 - 검증 중에는 버튼이 [검증 종료]로 바뀜. 누르면 결과를 지우고 검증 전 화면으로 (구성은 그대로)
-- 개선·제거 제안 (판정과 별개, 규칙 16개)
+- 개선·제거 제안 (판정과 별개, 규칙 17개)
 - 잘한 점: 좋은 구성이 실제로 있으면 근거 태그와 함께 칭찬 (판정 5개·제안 9개 규칙에 짝지음). 문제 다음, 제안 앞에 표시
 - 판정·제안마다 Well-Architected 기준 태그와 "왜 그런지" 근거, 근거 문서 링크(자세히) 표시
 - 서비스 설명·연결 안내는 AWS 공식 문서 기준 (설명 패널에서 공식 문서 열기)
@@ -108,7 +109,7 @@ aws-3tier-simulator/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등)
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
-│   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 16개)
+│   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 17개)
 │   │   └─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
 │   ├─ ui/
 │   │   ├─ core.js            UI-1 상태·공통 유틸, UI-2 소속 판정·동작 검사
@@ -349,7 +350,11 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → rules → u
 - 근거 데이터는 criteria/ 폴더 (기준표·양식 README.md, 묶음별 md, 진행표 PROGRESS.md). 앱(index.html)에는 넣지 않고, 규칙 코드 주석에 항목 ID(LB-02 등)만 적는다.
 - 등급: A 오류(문서에 필수·안 됨) / B 경고(Security Hub·Config) / C 제안(Well-Architected·참조 구조) / X 제외(근거 없음, 규칙은 안 만들되 칭찬은 막음)
 - "하나라도 있으면 통과(some)"로 판정하던 규칙은 "모두"로 바꾸거나, 칭찬을 문제가 없는 경우에만 내도록 좁힌다.
-- LB 박스 1개 = 여러 AZ에 노드가 있는 하나의 LB로 간주 (ALB는 AZ 서브넷 2개 이상 필수). 모델·UI는 바꾸지 않고, AZ마다 따로 둔 구성은 제안 11로 알린다.
+- LB 박스 1개 = 여러 AZ에 노드가 있는 하나의 LB로 간주 (ALB는 AZ 서브넷 2개 이상 필수). AZ마다 따로 둔 구성은 제안 11로 알린다.
+- (22번, v1.44) 화면도 이 약속에 맞춰 LB를 서브넷 밖(두 AZ의 퍼블릭 서브넷 사이)에 둔다. 공식 아키텍처 그림이 ALB를 영역에 넣지 않고 아이콘 하나로 그리기 때문.
+  LB가 쓰는 AZ는 박스 위치가 아니라 연결된 EC2의 AZ로 정한다 (lbAzsOf, js/rules/context.js). 실제 ALB도 "대상이 있는 AZ"를 켜서 쓴다.
+  AZ 테두리 박스를 늘리는 A안(Auto Scaling 그룹 같은 영역)은 연결선을 영역에 붙여야 해서 조작·코드가 복잡해져 고르지 않았다.
+  LB-01 중 "AZ마다 서브넷"은 문서가 못 박아 오류(판정 2), "그 서브넷이 퍼블릭"은 문서 문장이 없어 제안 17로 둔다.
 - NAT 박스는 public NAT(퍼블릭 서브넷에 두고 IGW로 나감)로 간주. Private NAT(온프레미스·다른 VPC 연결용)는 표현하지 않는다.
 - 근거 등급과 앱의 표시 수준이 다를 수 있다: WAF 연결(B등급)은 "정상"의 의미를 흔들지 않도록 제안으로 두고, WAF·Route 53 같은 검증 대상이 아닌 서비스(validated:false)의 오류급 근거(A등급)도 제안(제거)으로 반영한다.
 - CloudFront—EC2, Route 53—EC2는 문서가 허용하는 구성(VPC origin, 공개 IP)이라 오류로 보지 않는다. 앱이 안내하는 기본 구조(사용자 → CloudFront → IGW → Load Balancer)와 다를 때만 제안한다.

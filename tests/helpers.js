@@ -49,7 +49,7 @@ const loadTemplateAt = page => page.evaluate(() => loadTemplate({ x: 280, y: 80 
 async function buildValidArch(page) {
   await page.evaluate(() => {
     loadTemplate({ x: 280, y: 80 });
-    addNode('pc', 120, 300); addNode('igw', 290, 300); addNode('lb', 400, 270); addNode('nat', 650, 270);
+    addNode('pc', 120, 300); addNode('igw', 290, 300); addNode('lb', 780, 270); addNode('nat', 650, 270);
     addNode('ec2', 400, 430); addNode('ec2', 880, 430); addNode('rds', 400, 590); addNode('rds-standby', 880, 590);
     const T = t => state.nodes.filter(n => n.type === t);
     const E = (a, b) => state.edges.push({ id: newId('e'), from: a.id, to: b.id, fromSide: null, toSide: null, mid: null });

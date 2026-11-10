@@ -8,6 +8,17 @@ function azOf(n) {
   return c || null;
 }
 
+// AZ 영역 안의 서브넷 (types를 주면 그 종류만)
+function subnetsIn(az, ...types) {
+  const want = types.length ? types : SUBNET_TYPES;
+  return state.containers.filter(c => c.parentContainer === az.id && want.includes(c.type));
+}
+
+// Load Balancer가 쓰는 AZ 목록 = 연결된 앱 서버(EC2 등)가 있는 AZ (22번: LB는 서브넷 밖에 두므로 박스 위치로 정하지 않는다)
+function lbAzsOf(ctx, lb) {
+  return [...new Set(ctx.neighborsOf(lb, ...APP_TYPES).map(ctx.azOf).filter(Boolean))];
+}
+
 // Auto Scaling 그룹 영역 안의 EC2 (EC2 박스 중심이 영역 안에 있으면 그룹에 속함)
 function asgMembersOf(area, nodes = state.nodes) {
   return nodes.filter(n => n.type === 'ec2' && inRect(rectOf(area), centerOf(n)));

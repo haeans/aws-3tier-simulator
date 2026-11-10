@@ -30,6 +30,18 @@ test('VPC Endpoints는 VPC 안과 모든 서브넷(퍼블릭·프라이빗·DB)�
   expect(await nodesOf(page, 'vpce')).toHaveLength(4);
 });
 
+test('22번: Load Balancer는 서브넷 밖(두 AZ의 퍼블릭 서브넷 사이)에만 놓인다', async ({ page }) => {
+  await openApp(page);
+  await loadTemplateAt(page);
+  await paletteDrop(page, 'Load Balancer', 540, 270);       // 퍼블릭 서브넷 A 안 → 거부
+  expect(await nodesOf(page, 'lb')).toHaveLength(0);
+  await expect(page.locator('#toast')).toContainText('서브넷 밖에 놓아요');
+  await paletteDrop(page, 'Load Balancer', 780, 270);       // AZ A·B 사이 (두 퍼블릭 서브넷에 걸친 모양)
+  const [lb] = await nodesOf(page, 'lb');
+  expect(lb).toBeTruthy();
+  expect(await page.evaluate(id => zoneOf(findNode(id)), lb.id)).toBe('vpc');
+});
+
 test('영역 중첩 규칙: AZ는 VPC 밖에 놓을 수 없다', async ({ page }) => {
   await openApp(page);
   await loadTemplateAt(page);
@@ -314,7 +326,7 @@ test('박스를 고르면 팔레트 맨 위에 추천 묶음이 뜨고, 거기�
   await openApp(page);
   await loadTemplateAt(page);
   await paletteDrop(page, 'EC2', 400, 430);
-  await paletteDrop(page, 'Load Balancer', 400, 270);
+  await paletteDrop(page, 'Load Balancer', 780, 270);
   const ec2 = (await nodesOf(page, 'ec2'))[0];
   const lb = (await nodesOf(page, 'lb'))[0];
   await page.evaluate(([a, b]) => { state.edges.push({ id: newId('e'), from: a, to: b, fromSide: null, toSide: null, mid: null }); render(); select(a); }, [ec2.id, lb.id]);
