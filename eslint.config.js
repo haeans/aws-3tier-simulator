@@ -73,7 +73,7 @@ module.exports = [
 
   // 설정 파일들
   {
-    files: ['*.config.js'],
+    files: ['*.config.js', 'scripts/**/*.js'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'commonjs', globals: globals.node },
     rules: js.configs.recommended.rules,
   },

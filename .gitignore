@@ -5,6 +5,9 @@ node_modules/
 test-results/
 playwright-report/
 blob-report/
+# AWS 공식 아키텍처 아이콘 (내 PC에만 둔다. npm run icons로 만든다, 23번 사용자 결정)
+icons/
+
 # 메모장 제외
 memo.txt
 

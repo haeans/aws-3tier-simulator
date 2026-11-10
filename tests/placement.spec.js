@@ -356,3 +356,30 @@ test('박스를 고르면 팔레트 맨 위에 추천 묶음이 뜨고, 거기�
   await page.keyboard.press('Escape');                                              // 선택을 풀면 추천 묶음도 사라짐
   await expect(rec).toBeHidden();
 });
+
+test('23번: 아이콘 파일이 없으면 그림을 지우고 글자 박스로 보인다', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => new Promise(resolve => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    fillServiceBox(el, { type: 'no-such-icon', name: '없는 아이콘' });
+    const img = el.querySelector('img');
+    img.addEventListener('error', () => setTimeout(() => resolve({
+      hasIcon: el.classList.contains('has-icon'), imgs: el.querySelectorAll('img').length, text: el.textContent,
+    })));
+  }));
+  expect(r).toEqual({ hasIcon: false, imgs: 0, text: '없는 아이콘' });
+});
+
+test('23번: icons/ 폴더가 있으면 박스·팔레트·영역 이름표에 공식 아이콘이 보인다', async ({ page }) => {
+  const fs = require('fs'), path = require('path');
+  test.skip(!fs.existsSync(path.join(__dirname, '..', 'icons', 'ec2.svg')), 'icons/ 폴더 없음 (npm run icons로 만든다)');
+  await openApp(page);
+  await loadTemplateAt(page);
+  await paletteDrop(page, 'EC2', 540, 430);
+  const loaded = sel => page.locator(sel).first().evaluate(img => /** @type {HTMLImageElement} */ (img).complete && /** @type {HTMLImageElement} */ (img).naturalWidth > 0);
+  await expect.poll(() => loaded('#node-layer .node .svc-icon, .node .svc-icon')).toBe(true);
+  await expect.poll(() => loaded('.palette .svc .svc-icon')).toBe(true);
+  await expect.poll(() => loaded('.area-public .area-icon')).toBe(true);
+  await expect(page.locator('.node').first()).toHaveClass(/has-icon/);
+});

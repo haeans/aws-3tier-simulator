@@ -422,6 +422,24 @@ function spreadOverlaps(routes) {
 
 const pathD = pts =>pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
 
+// 꺾이는 곳을 둥글게 그린 경로 (23번). 반지름은 앞뒤 선분 길이의 절반을 넘지 않게 줄인다 (짧은 꺾임도 모양 유지)
+const EDGE_CORNER_R = 6;
+function roundedPathD(pts) {
+  if (pts.length < 3) return pathD(pts);
+  let d = `M${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], p = pts[i], b = pts[i + 1];
+    const la = Math.hypot(p.x - a.x, p.y - a.y), lb = Math.hypot(b.x - p.x, b.y - p.y);
+    const r = Math.min(EDGE_CORNER_R, la / 2, lb / 2);
+    if (r < 0.5) { d += ` L${p.x},${p.y}`; continue; }
+    const s = { x: p.x + (a.x - p.x) * r / la, y: p.y + (a.y - p.y) * r / la };
+    const e = { x: p.x + (b.x - p.x) * r / lb, y: p.y + (b.y - p.y) * r / lb };
+    d += ` L${s.x},${s.y} Q${p.x},${p.y} ${e.x},${e.y}`;
+  }
+  const z = pts[pts.length - 1];
+  return d + ` L${z.x},${z.y}`;
+}
+
 // 연결선 끝 손잡이를 끌어 같은 박스의 다른 변으로 옮기기
 function startEndpointDrag(e, ed, end) {
   e.preventDefault();
@@ -522,7 +540,7 @@ function renderEdges() {
   state.edges.forEach(ed => {
     const route = routes.get(ed);
     if (!route) return;
-    const d = pathD(route.points);
+    const d = roundedPathD(route.points);
     const sel = ed.id === selectedId;
     const marker = `url(#${sel ? 'arrow-sel' : 'arrow'})`;
     const dir = flowDir && flowDir.has(ed.id) ? flowDir.get(ed.id) : null;   // null = 양쪽 화살표

@@ -41,7 +41,7 @@ function renderPaletteRec() {
     const svc = SVC_MAP[t];
     const el = document.createElement('div');
     styleServiceBox(el, svc);
-    el.textContent = svc.name;
+    fillServiceBox(el, svc);
     if (near.includes(t)) {   // 이미 연결된 종류
       el.classList.add('rec-done');
       el.insertAdjacentHTML('beforeend', '<span class="rec-check">✓</span>');
@@ -75,7 +75,7 @@ function buildPalette() {
     addPaletteSection(cat.label, cat.color, items.map(svc => {
       const el = document.createElement('div');
       styleServiceBox(el, svc);
-      el.textContent = svc.name;
+      fillServiceBox(el, svc);
       attachTooltip(el, () => serviceTooltip(svc));
       el.addEventListener('pointerdown', e => startPaletteDrag(e, 'node', svc));
       return el;
@@ -152,6 +152,27 @@ function styleServiceBox(el, svc) {
   el.style.setProperty('--cfg', cat.fg);
 }
 
+// AWS 공식 아이콘 (icons/ 폴더, 저장소에 없음 — npm run icons로 만든다. 23번)
+// 파일이 없으면 onMissing을 부르고 그림을 지운다 → 아이콘 없이 글자 박스로 보인다
+function iconImg(key, cls, onMissing) {
+  const img = document.createElement('img');
+  img.className = cls;
+  img.src = `icons/${key}.svg`;
+  img.alt = '';
+  img.draggable = false;
+  img.addEventListener('error', () => { if (onMissing) onMissing(img); img.remove(); });
+  return img;
+}
+
+// 서비스 박스 안: 아이콘 + 이름(span). 이름 span은 박스의 첫 span이어야 한다 (시뮬레이션 대수 표시·고장 표시가 찾음)
+function fillServiceBox(el, svc) {
+  el.classList.add('has-icon');
+  el.appendChild(iconImg(svc.type, 'svc-icon', () => el.classList.remove('has-icon')));
+  const name = document.createElement('span');
+  name.textContent = svc.name;
+  el.appendChild(name);
+}
+
 // ----- 팔레트 → 캔버스 드래그 -----
 // linkTo: 추천 묶음에서 끌었을 때 놓은 뒤 연결할 박스 id
 function startPaletteDrag(e, kind, def, linkTo) {
@@ -165,7 +186,7 @@ function startPaletteDrag(e, kind, def, linkTo) {
     ghost.className = `area area-${def.type}`;
   } else {
     styleServiceBox(ghost, def);
-    ghost.textContent = def.name;
+    fillServiceBox(ghost, def);
   }
   ghost.classList.add('ghost');
   ghost.style.width = w + 'px';
