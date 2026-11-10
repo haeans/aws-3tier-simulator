@@ -30,16 +30,16 @@
         <div id="area-layer"></div>
         <svg id="edge-layer">
           <defs>
-            <!-- 양방향 화살표 머리 (start는 자동 반전) -->
+            <!-- 양방향 화살표 머리 (start는 자동 반전). 얇은 꺾쇠 모양 (23번) -->
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
                     markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10"
                     orient="auto-start-reverse">
-              <path d="M0,1 L10,5 L0,9 z" fill="#545b64"/>
+              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#7b8591" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
             </marker>
             <marker id="arrow-sel" viewBox="0 0 10 10" refX="9" refY="5"
                     markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11"
                     orient="auto-start-reverse">
-              <path d="M0,1 L10,5 L0,9 z" fill="#0073bb"/>
+              <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#0073bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </marker>
           </defs>
           <g id="edge-g"></g>

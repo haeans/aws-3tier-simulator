@@ -246,7 +246,7 @@ const VALIDATION_RULES = [
     // 근거: IGW-02 (등급 A), SRV-07
     id: 8, level: 'error', message: '서버 경로',
     pillars: ['security'],
-    basis: '프라이빗 서브넷에는 IGW로 가는 경로가 없어서, 서버(EC2)를 IGW에 바로 이을 수 없어요. 인터넷 요청은 퍼블릭 서브넷의 Load Balancer가 받아 서버로 넘겨요.',
+    basis: '프라이빗 서브넷에는 IGW로 가는 경로가 없어서, 서버(EC2)를 IGW에 바로 이을 수 없어요. 인터넷 요청은 Load Balancer가 AZ마다 퍼블릭 서브넷에 둔 노드로 받아 서버로 넘겨요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html',
     check(ctx) {
       const issues = [];

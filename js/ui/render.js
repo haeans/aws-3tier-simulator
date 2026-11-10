@@ -15,6 +15,13 @@ function buildAreaEl(c) {
   if (c.type === 'vpc') label.innerHTML = '<span class="vpc-tag">VPC</span>';
   else if (c.type === 'az' || c.type === 'asg') label.textContent = c.label;
   else label.innerHTML = LOCK_SVG + `<span>${c.label}</span>`;
+  // 공식 그룹 아이콘 (AZ는 없음, DB 서브넷은 프라이빗 서브넷 아이콘). 있으면 자물쇠 대신 앞에 붙이고, 파일이 없으면 지금 모양 그대로
+  const groupIcon = { vpc: 'vpc', public: 'public', private: 'private', db: 'private', asg: 'asg' }[c.type];
+  if (groupIcon) {
+    const lock = label.querySelector('svg');
+    if (lock) lock.style.display = 'none';
+    label.prepend(iconImg('area-' + groupIcon, 'area-icon', () => { if (lock) lock.style.display = ''; }));
+  }
   attachTooltip(label, () => areaTooltip(c.type));   // 영역은 이름표에서만 설명 표시
   el.appendChild(label);
 
@@ -61,9 +68,7 @@ function buildNodeEl(node) {
   styleServiceBox(el, svc);
   el.dataset.id = node.id;
 
-  const label = document.createElement('span');
-  label.textContent = svc.name;
-  el.appendChild(label);
+  fillServiceBox(el, svc);
   attachTooltip(el, () => simTooltip(node.id) + serviceTooltip(svc));   // 시뮬레이션 중이면 사용률 설명을 맨 위에
 
   const del = document.createElement('div');
