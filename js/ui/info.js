@@ -21,6 +21,8 @@ function neighborTypes(id) {
 const typeNames = types => [...new Set(types.map(t => SVC_MAP[t].name))].join(', ');
 
 function renderInfo() {
+  const ed = selectedId ? state.edges.find(e => e.id === selectedId) : null;
+  if (ed && multiSel.size <= 1) { renderEdgeInfo(ed); return; }
   const n = selectedId ? findNode(selectedId) : null;
   if (!n || multiSel.size > 1) { $info.hidden = true; return; }   // 여러 개를 고르면 숨김
   const svc = SVC_MAP[n.type], cat = CAT_MAP[svc.category];
@@ -56,6 +58,37 @@ function renderInfo() {
   $info.classList.toggle('folded', uiPrefs.infoFolded);
   $info.hidden = false;
   updateInfoSim();
+}
+
+// 연결선을 고르면 (26번): 지금 종류와 뜻. 실제로 두 가지가 다 가능한 짝이면 종류를 고르는 버튼
+function renderEdgeInfo(ed) {
+  const a = findNode(ed.from), b = findNode(ed.to);
+  if (!a || !b) { $info.hidden = true; return; }
+  const info = edgeInfoOf(ed);
+  const choice = edgeChoices(a.type, b.type);
+  const auto = choice ? Object.keys(choice.kinds)[0] : null;
+  const rows = choice ? Object.entries(choice.kinds).map(([k, text]) =>
+    `<label class="ek-opt${k === info.kind ? ' on' : ''}"><input type="radio" name="edge-kind" value="${k}"${k === info.kind ? ' checked' : ''}>` +
+    `<span class="ek-swatch k-${k}"></span><b>${EDGE_KINDS[k].name}${k === auto ? ' <span class="ek-auto">(기본)</span>' : ''}</b>` +
+    `<span class="ek-text">${text}</span></label>`).join('') : '';
+  $info.innerHTML =
+    `<div class="ip-head"><span class="ip-name">${SVC_MAP[a.type].name} — ${SVC_MAP[b.type].name}</span>` +
+    '<span class="tt-cat">연결선</span>' +
+    `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
+    '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
+    `<div class="ip-desc"><span class="ek-swatch k-${info.kind}"></span><b>${EDGE_KINDS[info.kind].name}</b> — ${EDGE_KINDS[info.kind].desc}</div>` +
+    (choice
+      ? `<div class="ip-sec">이 연결은 두 가지가 다 있어요. 맞는 쪽을 골라 주세요</div><div class="ek-list">${rows}</div>`
+      : '<div class="ip-note">이 연결의 종류는 두 박스 종류로 정해져요.</div>');
+  $info.querySelector('.ip-close').addEventListener('click', () => select(null));
+  $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
+  $info.querySelectorAll('input[name="edge-kind"]').forEach(r => r.addEventListener('change', () => {
+    const v = /** @type {HTMLInputElement} */ (r).value;
+    if (v === auto) delete ed.kind; else ed.kind = v;   // 기본 종류면 저장하지 않음 (예전 저장 형식과 같게)
+    render();   // 다시 그리기 + 되돌리기 기록
+  }));
+  $info.classList.toggle('folded', uiPrefs.infoFolded);
+  $info.hidden = false;
 }
 
 // 성능 시뮬레이션 중이면 설명 패널 맨 위에 고른 박스의 "지금 상태" (계산할 때마다 이 칸만 다시 그림)

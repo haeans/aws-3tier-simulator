@@ -465,6 +465,16 @@ body {
 .edge.k-replication { stroke: #7b3fe4; stroke-width: 2.2; stroke-dasharray: 9 5; }
 .edge.k-relation    { stroke: #6b7785; stroke-width: 2.6; stroke-dasharray: 0.1 6; stroke-linecap: round; }
 .edge.selected      { stroke: var(--select); }
+/* 설명 패널의 연결선 종류 고르기 (26번) */
+.ek-swatch { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid var(--edge); margin-right: 6px; vertical-align: 3px; }
+.ek-swatch.k-egress      { border-top: 3px solid #0a8f6c; }
+.ek-swatch.k-replication { border-top: 2.5px dashed #7b3fe4; }
+.ek-swatch.k-relation    { border-top: 3px dotted #6b7785; }
+.ek-list { display: grid; gap: 6px; margin-top: 4px; }
+.ek-opt { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 2px 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.ek-opt.on { border-color: var(--select); background: #f0f7fd; }
+.ek-opt .ek-text { grid-column: 2 / 4; color: var(--muted); font-size: 12px; }
+.ek-auto { font-weight: 400; color: var(--muted); font-size: 11.5px; }
 .edge-legend { display: inline-flex; gap: 12px; flex-wrap: wrap; margin-left: 10px; }
 .edge-legend b { display: inline-block; width: 24px; height: 0; border-top: 2px solid var(--edge); margin-right: 4px; vertical-align: 3px; }
 .edge-legend .k-egress b      { border-top: 3px solid #0a8f6c; }

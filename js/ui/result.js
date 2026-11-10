@@ -64,7 +64,7 @@ function computeFlow(nodeLevels) {
   // 25번: 요청 선만 흐른다 (서버 통신·복제·설정 관계는 흐름 점 없음). WAF는 설정 관계지만 검사 반짝임으로 남긴다
   const isWaf = id => findNode(id).type === 'waf';
   const edges = state.edges.filter(e => adj.has(e.from) && adj.has(e.to) &&
-    (isWaf(e.from) || isWaf(e.to) || edgeKind(findNode(e.from).type, findNode(e.to).type) === 'request'));
+    (isWaf(e.from) || isWaf(e.to) || edgeInfoOf(e).kind === 'request'));
   edges.forEach(e => {
     if (isSide(e.from) || isSide(e.to)) return;   // 들르는 곳은 경로를 잇지 않음
     adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
