@@ -42,13 +42,20 @@ function runValidation() {
 // ----- 동적 흐름: 검증 후 사용자에서 안쪽으로, 요청이 지나가는 순서대로 한 구간씩 점이 흐른다 -----
 // 사용자 → IGW 구간이 끝나면 IGW → LB 구간이 시작되는 식. 갈림길은 동시에, 마지막 구간 뒤 잠깐 쉬고 반복.
 // 정상=초록, 경고(병목)=노랑(느림), 오류=빨강(아주 느림). 성능 계산이 아니라 검증 결과를 보여주는 표시.
-// 요청 방향만 보여준다 (응답까지 그리면 점이 왕복해 헷갈림). 단, Route 53은 주소를 묻고 받는 왕복, WAF는 박스 반짝임으로 보여준다.
+// 27번: 요청 점(채운 원)이 끝까지 간 뒤 응답 점(빈 원)이 같은 길을 거꾸로 돌아온다. 한 번에 요청 하나의 왕복만 보여 준다.
+//        캐시(CloudFront·ElastiCache)가 있으면 "캐시에 없는 요청"과 "캐시에 있는 요청"을 번갈아 보여 준다.
+//        보기 전환: [사용자 요청] / [서버 통신](서버가 시작한 통신 선을 따라 갔다 오는 흐름)
+// Route 53은 주소를 묻고 받는 왕복, WAF는 박스 반짝임으로 보여준다.
 const FLOW_HOP = { ok: 0.8, warn: 1.6, error: 3.2 };   // 한 구간을 지나는 시간(초)
 const FLOW_PAUSE = 0.6;                                 // 한 바퀴 끝나고 쉬는 시간(초)
+const FLOW_TURN = 0.3;                                  // 요청이 끝에 닿은 뒤 응답이 출발하기까지(초)
 const FLOW_COLOR = { ok: '#2e9e47', warn: '#e0a800', error: '#d13212' };
+const FLOW_RESPONSE = '#1a73e8';   // 응답 점: 단계 색과 겹치지 않는 파랑 하나 (정상·병목·오류는 요청 점 색으로 보임, 27번)
 const FLOW_SOURCES = [...USER_TYPES, 'dbadmin'];
 const $flowG = document.getElementById('flow-g');
 let flowRaf = null, flowFor = null, flowDots = [];
+let flowLabel = '';         // 지금 보여 주는 요청 설명 (결과 패널을 다시 그려도 유지)
+let flowView = 'request';   // 'request' 사용자 요청 | 'server' 서버 통신 (27번)
 
 // 요청 경로의 한 단계가 아니라, 경로 위의 박스가 잠깐 거쳤다가 다음으로 넘어가는 곳
 //   Route 53: 사용자가 먼저 도메인 주소를 물어보고(점 왕복), 답을 받은 뒤 CloudFront·IGW로 출발
@@ -58,13 +65,14 @@ const SIDE_TRIP_TYPES = ['route53', 'waf'];
 const INSPECT_TYPES = ['waf'];
 
 // 사용자 박스에서 연결을 따라가며 거리를 매겨 방향을 정한다 (가까운 쪽 → 먼 쪽). 사용자와 이어지지 않은 선은 흐르지 않음.
-function computeFlow(nodeLevels) {
+// keep: 이번 흐름에 쓸 연결선만 고르는 함수 (캐시에 있는/없는 요청을 따로 그릴 때, 27번)
+function computeFlow(nodeLevels, keep = null) {
   const isSide = id => SIDE_TRIP_TYPES.includes(findNode(id).type);
   const adj = new Map(state.nodes.map(n => [n.id, []]));
   // 25번: 요청 선만 흐른다 (서버 통신·복제·설정 관계는 흐름 점 없음). WAF는 설정 관계지만 검사 반짝임으로 남긴다
   const isWaf = id => findNode(id).type === 'waf';
   const edges = state.edges.filter(e => adj.has(e.from) && adj.has(e.to) &&
-    (isWaf(e.from) || isWaf(e.to) || edgeInfoOf(e).kind === 'request'));
+    (isWaf(e.from) || isWaf(e.to) || edgeInfoOf(e).kind === 'request') && (!keep || keep(e)));
   edges.forEach(e => {
     if (isSide(e.from) || isSide(e.to)) return;   // 들르는 곳은 경로를 잇지 않음
     adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
@@ -133,23 +141,111 @@ function stopFlow() {
   elMap.forEach(el => el.classList.remove('flow-inspect'));
 }
 
+// 응답: 요청 구간마다 같은 길을 거꾸로. 끝(가장 늦게 도착한 곳)에서 먼저 출발하도록 시간을 거울처럼 뒤집는다
+function withResponses(hops) {
+  const T = Math.max(0, ...hops.map(f => f.start + f.dur));
+  const back = hops.filter(f => !f.roundTrip && !f.inspect).map(f => ({
+    ...f, response: true, reverse: !f.reverse, start: T + FLOW_TURN + (T - (f.start + f.dur)),
+  }));
+  return [...hops, ...back];
+}
+
+const typeOfId = id => (findNode(id) || {}).type;
+const isServerType = t => EDGE_SERVERS.includes(t);
+// 서버—캐시 / 서버—DB 연결 (요청 선)
+const isCacheEdge = e => edgeInfoOf(e).kind === 'request' && [typeOfId(e.from), typeOfId(e.to)].includes('elasticache') && [e.from, e.to].some(id => isServerType(typeOfId(id)));
+const isDbEdge = e => edgeInfoOf(e).kind === 'request' && [typeOfId(e.from), typeOfId(e.to)].some(t => t === 'rds' || t === 'rds-replica') && [e.from, e.to].some(id => isServerType(typeOfId(id)));
+// CloudFront에서 원본(IGW·LB·S3) 쪽으로 가는 연결
+const isCdnOriginEdge = e => { const t = [typeOfId(e.from), typeOfId(e.to)]; return t.includes('cloudfront') && !t.some(x => FLOW_SOURCES.includes(x) || x === 'route53' || x === 'waf'); };
+
+// [사용자 요청] 보기: 요청 하나의 왕복. 캐시가 있으면 캐시에 없는 요청 → 캐시에 있는 요청 순서로 번갈아
+function requestCycles(nodeLevels) {
+  const full = computeFlow(nodeLevels, e => !isCacheEdge(e));
+  const cycles = [];
+  const hasCdn = full.some(f => typeOfId(f.dst) === 'cloudfront' || typeOfId(f.src) === 'cloudfront');
+  const hasCache = validation.flow.some(f => isCacheEdge(state.edges.find(e => e.id === f.id) || {}));
+  cycles.push({ hops: withResponses(full), label: hasCdn || hasCache ? '캐시에 없는 요청: DB까지 갔다가 같은 길로 응답이 돌아와요' : '요청이 끝까지 갔다가 같은 길로 응답이 돌아와요' });
+  if (hasCache) cycles.push({ hops: withResponses(computeFlow(nodeLevels, e => !isDbEdge(e))), label: 'ElastiCache에 있는 요청: DB까지 가지 않고 캐시에서 바로 받아 응답해요' });
+  if (hasCdn) cycles.push({ hops: withResponses(computeFlow(nodeLevels, e => !isCdnOriginEdge(e))), label: 'CloudFront에 있는 요청: 엣지에서 바로 응답해요 (서버까지 가지 않아요)' });
+  return cycles.filter(c => c.hops.length);
+}
+
+// [서버 통신] 보기: 서버에서 출발해 서버가 시작한 통신 선을 따라 화살표 방향으로 갔다가, 응답만 같은 길로 돌아온다
+function serverCycles(nodeLevels) {
+  const out = new Map();
+  state.edges.forEach(e => {
+    if (!findNode(e.from) || !findNode(e.to)) return;
+    const info = edgeInfoOf(e);
+    if (info.kind !== 'egress') return;
+    const [src, dst] = info.dir === 1 ? [e.from, e.to] : [e.to, e.from];
+    if (!out.has(src)) out.set(src, []);
+    out.get(src).push({ e, dst });
+  });
+  const levelOf = (x, y) => { const lv = [nodeLevels.get(x), nodeLevels.get(y)]; return lv.includes('error') ? 'error' : lv.includes('warn') ? 'warn' : 'ok'; };
+  const queue = state.nodes.filter(n => isServerType(n.type) && out.has(n.id)).map(n => n.id);
+  const arrival = new Map(queue.map(id => [id, 0]));
+  const hops = [];
+  for (let i = 0; i < queue.length; i++) {
+    const src = queue[i];
+    (out.get(src) || []).forEach(({ e, dst }) => {
+      if (arrival.has(dst) && arrival.get(dst) <= arrival.get(src)) return;   // 이미 더 일찍 닿은 곳
+      const level = levelOf(src, dst);
+      const start = arrival.get(src);
+      hops.push({ id: e.id, reverse: e.from !== src, roundTrip: false, inspect: false, level, src, dst, start, dur: FLOW_HOP[level] });
+      if (!arrival.has(dst)) { arrival.set(dst, start + FLOW_HOP[level]); queue.push(dst); }
+    });
+  }
+  return hops.length
+    ? [{ hops: withResponses(hops), label: '서버가 먼저 밖으로 연결을 열고, 응답만 같은 길로 돌아와요 (밖에서 먼저 들어올 수는 없어요)' }]
+    : [{ hops: [], label: '서버가 시작한 통신 선(초록)이 없어요' }];
+}
+
+// 보기 바꾸기 (범례 줄의 버튼)
+function setFlowView(view) {
+  flowView = view;
+  stopFlow();
+  render();
+}
+
 // 검증 결과가 있으면 흐름을 시작하고, 없어지면 멈춘다 (render()마다 호출)
 function syncFlow() {
-  if (resultTab === 'sim') { if (flowFor) stopFlow(); return; }   // 시뮬레이션 탭에서는 트래픽 점만 보여줌
-  if (!validation || !validation.flow || !validation.flow.length) { if (flowFor) stopFlow(); return; }
-  if (flowFor === validation) return;   // 이미 이 결과로 흐르는 중
+  const $edgeLayer = document.getElementById('edge-layer');
+  if (resultTab === 'sim') { if (flowFor) stopFlow(); $edgeLayer.classList.remove('view-server'); return; }   // 시뮬레이션 탭에서는 트래픽 점만 보여줌
+  if (!validation || !validation.flow || !validation.flow.length) { if (flowFor) stopFlow(); flowView = 'request'; $edgeLayer.classList.remove('view-server'); return; }
+  $edgeLayer.classList.toggle('view-server', flowView === 'server');
+  if (flowFor === validation) {   // 이미 이 결과로 흐르는 중 (결과 패널을 다시 그렸으면 설명만 다시 채움)
+    const $now = document.getElementById('flow-now');
+    if ($now) $now.textContent = flowLabel;
+    return;
+  }
   stopFlow();
   flowFor = validation;
-  validation.flow.forEach(f => {
-    if (f.inspect) { flowDots.push({ f, dot: null }); return; }   // WAF: 점 대신 박스 반짝임
-    const dot = svgEl('circle', { r: 4.5, class: 'flow-dot', fill: FLOW_COLOR[f.level], visibility: 'hidden' });
-    $flowG.appendChild(dot);
-    flowDots.push({ f, dot });
-  });
-  const cycle = Math.max(...validation.flow.map(f => f.start + f.dur)) + FLOW_PAUSE;
-  const t0 = performance.now();
+  const cycles = flowView === 'server' ? serverCycles(validation.nodeLevels) : requestCycles(validation.nodeLevels);
+  let ci = -1, cycleLen = 0, t0 = 0;
+  const startCycle = (k, now) => {
+    ci = k % cycles.length;
+    t0 = now;
+    flowDots = [];
+    $flowG.innerHTML = '';
+    elMap.forEach(el => el.classList.remove('flow-inspect'));
+    const hops = cycles[ci].hops;
+    hops.forEach(f => {
+      if (f.inspect) { flowDots.push({ f, dot: null }); return; }   // WAF: 점 대신 박스 반짝임
+      // 요청 점은 단계 색 작은 원, 응답 점은 파랑 큰 원 (27번, 흰 바탕에서도 잘 보이게)
+      const dot = f.response
+        ? svgEl('circle', { r: 6.5, class: 'flow-dot response', fill: FLOW_RESPONSE, stroke: '#0b3d91', 'stroke-width': 2, visibility: 'hidden' })
+        : svgEl('circle', { r: 4.5, class: 'flow-dot', fill: FLOW_COLOR[f.level], visibility: 'hidden' });
+      $flowG.appendChild(dot);
+      flowDots.push({ f, dot });
+    });
+    cycleLen = (hops.length ? Math.max(...hops.map(f => f.start + f.dur)) : 1) + FLOW_PAUSE;
+    flowLabel = cycles[ci].label;
+    const $now = document.getElementById('flow-now');
+    if ($now) $now.textContent = flowLabel;
+  };
   const tick = now => {
-    const t = ((now - t0) / 1000) % cycle;
+    if (ci < 0 || (now - t0) / 1000 >= cycleLen) startCycle(ci + 1, now);
+    const t = (now - t0) / 1000;
     flowDots.forEach(({ f, dot }) => {
       const k = (t - f.start) / f.dur;    // 이 구간에서 지나간 비율 (0~1일 때만 보임)
       if (!dot) {   // 검사 중인 동안 WAF 박스 반짝임
@@ -257,11 +353,16 @@ function renderResult() {
     `<span class="status ${validation.status}">${st.label}</span>` +
     `<span class="msg">${st.desc}${counts.length ? ` (${counts.join(' · ')})` : ''}</span>`);
   if (validation.flow && validation.flow.length) {
-    $result.insertAdjacentHTML('beforeend', '<div class="flow-legend">요청 흐름(사용자부터 차례로) ·' +
+    $result.insertAdjacentHTML('beforeend', '<div class="flow-legend">' +
+      '<span class="flow-view">' + [['request', '사용자 요청'], ['server', '서버 통신']].map(([v, t]) =>
+        `<button class="btn${flowView === v ? ' on' : ''}" data-view="${v}">${t}</button>`).join('') + '</span>' +
+      '<span class="flow-mark"><i class="fill"></i>가는 요청 <i class="hollow"></i>돌아오는 응답</span> ·' +
       `<span><i style="background:${FLOW_COLOR.ok}"></i>정상</span>` +
       `<span><i style="background:${FLOW_COLOR.warn}"></i>병목(느림)</span>` +
       `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span>` +
-      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span></div>');
+      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span>' +
+      '<div id="flow-now" class="flow-now"></div></div>');
+    $result.querySelectorAll('.flow-view button').forEach(btn => btn.addEventListener('click', () => setFlowView(btn.getAttribute('data-view'))));
   }
 
   // 목록 한 줄: 클릭하면 관련 박스로 이동·선택
