@@ -54,13 +54,14 @@ const simNowAttack = () => { const sc = SIM_SCENARIOS[simScenario]; return sc.at
 function setFault(f, id, on) {
   if (f.down.has(id) === on) return;
   if (on) f.down.add(id); else f.down.delete(id);
-  f.log.push({ t: simT, text: `${simNodeName(id)} ${on ? '고장' : '복구'}` });
+  const cache = findNode(id)?.type === 'elasticache' && on ? ' → 캐시 조회는 다른 캐시나 RDS로' : '';
+  f.log.push({ t: simT, text: `${simNodeName(id)} ${on ? '고장' : '복구'}${cache}` });
 }
 function setAzFault(f, azId, on) {
   if (f.downAzs.has(azId) === on) return;
   if (on) f.downAzs.add(azId); else f.downAzs.delete(azId);
   const az = findContainer(azId);
-  f.log.push({ t: simT, text: `${az ? az.label : 'AZ'} 전체 ${on ? '장애 (안의 EC2·DB가 모두 멈춤)' : '복구'}` });
+  f.log.push({ t: simT, text: `${az ? az.label : 'AZ'} 전체 ${on ? '장애 (안의 EC2·DB·캐시가 모두 멈춤)' : '복구'}` });
 }
 const clockText = t => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 
@@ -330,12 +331,12 @@ $world.addEventListener('pointerdown', e => {
   e.preventDefault();
   const n = findNode(id);
   if (n) {
-    if (!FAULT_TYPES.includes(n.type)) { showToast('장애는 EC2·RDS 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
+    if (!FAULT_TYPES.includes(n.type)) { showToast('장애는 EC2·RDS·ElastiCache 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
     setFault(simFaults, id, !simFaults.down.has(id));
   } else {
     let c = findContainer(id);
     while (c && c.type !== 'az') c = findContainer(c.parentContainer);
-    if (!c) { showToast('장애는 EC2·RDS 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
+    if (!c) { showToast('장애는 EC2·RDS·ElastiCache 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
     setAzFault(simFaults, c.id, !simFaults.downAzs.has(c.id));
   }
   computeSim();

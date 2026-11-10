@@ -464,4 +464,27 @@ const SUGGESTION_RULES = [
       return issues;
     },
   },
+  {
+    // 근거: CACHE-04 (등급 C) — 복제 노드가 없는 클러스터는 고가용성이 없다. 다른 AZ에 복제 노드가 있으면 몇 초 만에 승격
+    id: 18, kind: 'improve', title: 'ElastiCache를 다른 AZ에도',
+    pillars: ['reliability', 'performance'],
+    basis: 'ElastiCache를 한 AZ에만 두면 그 AZ에 장애가 났을 때 캐시가 멈추고, 캐시가 받던 조회가 모두 DB로 몰려요. 다른 AZ에도 두면(복제 노드) 몇 초 만에 이어받아요.',
+    ref: 'https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/AutoFailover.html',
+    praise(ctx) {
+      const caches = ctx.ofType('elasticache');
+      if (new Set(caches.map(ctx.azOf).filter(Boolean)).size < 2) return [];
+      return [{ nodeIds: caches.map(n => n.id),
+        text: 'ElastiCache를 여러 AZ에 두었어요. 한 AZ에 장애가 나도 다른 AZ의 캐시가 이어받아 DB 부담이 갑자기 늘지 않아요.' }];
+    },
+    check(ctx) {
+      const caches = ctx.ofType('elasticache');
+      const azs = new Set(caches.map(ctx.azOf).filter(Boolean));
+      if (azs.size !== 1) return [];
+      return [{
+        nodeIds: caches.map(n => n.id),
+        reason: 'ElastiCache가 한 AZ에만 있어요. 그 AZ에 장애가 나면 캐시가 멈추고, 캐시가 받던 조회가 모두 DB로 몰려요.',
+        action: '다른 AZ의 DB 서브넷(또는 프라이빗 서브넷)에도 ElastiCache를 두고 EC2와 연결하세요.',
+      }];
+    },
+  },
 ];

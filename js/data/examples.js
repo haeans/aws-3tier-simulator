@@ -23,7 +23,7 @@ const EXAMPLE_BASIC = {
   ],
 };
 
-// 고가용성: 판정 "정상", 제안 0개인 모범 구성 (Auto Scaling, AZ마다 NAT, CloudFront·WAF, 캐시, 운영 도구)
+// 고가용성: 판정 "정상", 제안 0개인 모범 구성 (Auto Scaling, AZ마다 NAT, CloudFront·WAF, AZ마다 캐시, 운영 도구)
 const EXAMPLE_HA = {
   nodes: [
     ['pc', 'pc', -180, -130], ['r53', 'route53', -180, 40],
@@ -31,13 +31,13 @@ const EXAMPLE_HA = {
     ['waf2', 'waf', 700, -40],
     ['lb', 'lb', 500, 190], ['nat', 'nat', 120, 190], ['natb', 'nat', 880, 190],
     ['ec2a', 'ec2', 260, 350], ['ec2b', 'ec2', 740, 350],
-    ['rds', 'rds', 180, 510], ['cache', 'elasticache', 360, 510], ['sb', 'rds-standby', 740, 510],
+    ['rds', 'rds', 180, 510], ['cache', 'elasticache', 360, 510], ['sb', 'rds-standby', 740, 510], ['cacheb', 'elasticache', 900, 510],
     ['ssm', 'sessionmanager', 1180, 350], ['cw', 'cloudwatch', 1180, 510], ['trail', 'cloudtrail', 1180, 640],
   ],
   edges: [
     ['pc', 'r53'], ['pc', 'cf'], ['waf', 'cf'], ['cf', 'igw'], ['igw', 'lb'], ['waf2', 'lb'],
     ['lb', 'ec2a'], ['lb', 'ec2b'], ['ec2a', 'nat'], ['ec2b', 'natb'], ['nat', 'igw'], ['natb', 'igw'],
-    ['ec2a', 'rds'], ['ec2b', 'rds'], ['rds', 'sb'], ['ec2a', 'cache'], ['ec2b', 'cache'],
+    ['ec2a', 'rds'], ['ec2b', 'rds'], ['rds', 'sb'], ['ec2a', 'cache'], ['ec2b', 'cache'], ['ec2a', 'cacheb'], ['ec2b', 'cacheb'],   // 캐시는 두 AZ에 (한 AZ 장애 때 다른 쪽이 이어받음, 제안 18)
     ['ec2a', 'ssm'], ['ec2b', 'ssm'], ['trail', 'cw'],
   ],
   asg: { x: 40, y: 280, width: 900, height: 140 },
