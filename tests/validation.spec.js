@@ -832,3 +832,45 @@ test('예시 "고쳐 보세요": 실수마다 판정 문제가 생기고, 어떤
   await expect(page.locator('#toast')).toContainText('문제 2개');
   expect((await verdict(page)).issues.length).toBeGreaterThanOrEqual(2);
 });
+
+test('27번: 요청이 끝까지 간 뒤 응답이 같은 길로 돌아오고, 캐시에 없는/있는(ElastiCache·CloudFront) 요청을 번갈아 보여 준다', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('ha'));
+  await page.click('#btn-validate');
+  const r = await page.evaluate(() => requestCycles(validation.nodeLevels).map(c => {
+    const req = c.hops.filter(f => !f.response && !f.roundTrip && !f.inspect), res = c.hops.filter(f => f.response);
+    const T = Math.max(...req.map(f => f.start + f.dur));
+    const pair = f => [findNode(f.src).type, findNode(f.dst).type].join('>');
+    return {
+      label: c.label, reqDst: [...new Set(req.map(f => findNode(f.dst).type))].sort(),
+      sameEdges: res.length === req.length && res.every(x => req.some(f => f.id === x.id && f.reverse !== x.reverse)),
+      afterTurn: res.every(x => x.start >= T), firstPair: pair(req[0]),
+    };
+  }));
+  expect(r.map(c => c.label.split(':')[0])).toEqual(['캐시에 없는 요청', 'ElastiCache에 있는 요청', 'CloudFront에 있는 요청']);
+  expect(r[0].reqDst).toContain('rds');
+  expect(r[0].reqDst).not.toContain('elasticache');
+  expect(r[1].reqDst).toContain('elasticache');
+  expect(r[1].reqDst).not.toContain('rds');
+  expect(r[2].reqDst).not.toContain('igw');   // CloudFront에서 바로 응답
+  r.forEach(c => { expect(c.sameEdges).toBe(true); expect(c.afterTurn).toBe(true); });
+  await expect(page.locator('#flow-now')).toContainText('요청');
+  // 응답 점은 빈 원으로 그려진다
+  await page.waitForFunction(() => document.querySelectorAll('#flow-g .flow-dot.response').length > 0);
+});
+
+test('27번: [서버 통신] 보기 — 서버에서 출발해 초록 선(NAT→IGW, Session Manager)을 따라 갔다 오고 다른 선은 흐려진다', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('ha'));
+  await page.click('#btn-validate');
+  const btn = await page.locator('.flow-view button[data-view="server"]').boundingBox();
+  await page.mouse.click(btn.x + btn.width / 2, btn.y + btn.height / 2);
+  await expect(page.locator('#edge-layer')).toHaveClass(/view-server/);
+  await expect(page.locator('#flow-now')).toContainText('서버가 먼저 밖으로');
+  const pairs = await page.evaluate(() => serverCycles(validation.nodeLevels)[0].hops.filter(f => !f.response)
+    .map(f => [findNode(f.src).type, findNode(f.dst).type].join('>')));
+  expect([...new Set(pairs)].sort()).toEqual(['ec2>nat', 'ec2>sessionmanager', 'nat>igw']);
+  const back = await page.locator('.flow-view button[data-view="request"]').boundingBox();
+  await page.mouse.click(back.x + back.width / 2, back.y + back.height / 2);
+  await expect(page.locator('#edge-layer')).not.toHaveClass(/view-server/);
+});
