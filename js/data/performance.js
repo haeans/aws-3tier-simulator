@@ -8,10 +8,17 @@
    ========================================================= */
 const PERF_NOTE = '숫자는 학습용 가정값이에요. 실제 AWS 성능 수치가 아니에요.';
 
+// 캐시·복제본·공격 가정값 (동작은 문서 근거, 비율은 학습용 가정)
+const PERF_CDN_HIT = 0.5;     // CloudFront: 들어온 요청의 50%(이미지 등 정적 파일)를 엣지 캐시가 바로 응답
+const PERF_CACHE_HIT = 0.8;   // ElastiCache: EC2의 DB 조회 중 80%는 캐시에 있음 (lazy loading)
+const PERF_READ_SHARE = 0.7;  // DB 조회 중 70%는 읽기 → Read Replica가 있으면 Replica로, 쓰기는 본체로
+const PERF_ATTACK = 3;        // 공격 시나리오: 기본 트래픽의 3배만큼 봇 요청
+
 // capacity: 1초에 처리할 수 있는 요청 수 (null = 제한 없음. AWS가 알아서 늘리는 관리형으로 봄)
 // latency:  한 번 거칠 때 걸리는 기본 시간(ms). 바쁠수록 대기 시간이 붙어 늘어난다.
+// edgeHit:  들어온 요청 중 이 박스가 바로 응답하는 비율 (나머지만 다음 박스로. R6)
 const PERF = {
-  cloudfront: { capacity: null, latency: 10 },
+  cloudfront: { capacity: null, latency: 10, edgeHit: PERF_CDN_HIT },
   igw:        { capacity: null, latency: 1 },    // 대역폭 제한 없음 (IGW 문서)
   lb:         { capacity: null, latency: 5 },    // 트래픽에 맞춰 자동 확장 (ELB 문서)
   ec2:        { capacity: 100,  latency: 30 },   // EC2 1대가 초당 100요청을 처리한다고 가정
@@ -33,11 +40,22 @@ const PERF_ROUTES = {
   ec2:        ['rds'],
 };
 
-// 캐시·복제본·공격 가정값 (동작은 문서 근거, 비율은 학습용 가정)
-const PERF_CDN_HIT = 0.5;     // CloudFront: 들어온 요청의 50%(이미지 등 정적 파일)를 엣지 캐시가 바로 응답
-const PERF_CACHE_HIT = 0.8;   // ElastiCache: EC2의 DB 조회 중 80%는 캐시에 있음 (lazy loading)
-const PERF_READ_SHARE = 0.7;  // DB 조회 중 70%는 읽기 → Read Replica가 있으면 Replica로, 쓰기는 본체로
-const PERF_ATTACK = 3;        // 공격 시나리오: 기본 트래픽의 3배만큼 봇 요청
+// 옆길 (R6): 본 대상(키 종류)으로 갈 요청 중 일부를, 함께 연결된 다른 종류가 대신 받는다 (적힌 순서대로)
+//   share: 나눌 비율. of: 'all' = 전체의 비율, 'rest' = 앞 옆길이 가져가고 남은 요청의 비율
+//   skipDown: 멈춘 박스는 빼고 남은 박스가 몫을 이어받음 (모두 멈췄으면 그 몫은 본 대상으로)
+//   rds: ElastiCache가 캐시에 있는 조회를 응답(lazy loading, 24번 멈춤 반영), Read Replica가 남은 조회 중 읽기를 받음
+const PERF_SIDE_ROUTES = {
+  rds: [
+    { type: 'elasticache', share: PERF_CACHE_HIT, of: 'all', skipDown: true },
+    { type: 'rds-replica', share: PERF_READ_SHARE, of: 'rest', skipDown: false },
+  ],
+};
+
+// 공격을 막는 박스 (R6): 요청 경로의 이 종류 박스에 붙어 있으면 공격(봇) 요청을 그 앞에서 막는다
+const PERF_GUARDS = { waf: ['cloudfront', 'lb'] };
+
+// 요청이 지나가는 길이 아닌 박스 (R6): 주소 알려 주기(Route 53)·검사 규칙(WAF)은 요청을 넘기지 않는다
+const PERF_OFF_PATH = ['route53', 'waf'];
 
 // 동작 근거 문서
 const PERF_DOCS = {

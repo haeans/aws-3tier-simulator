@@ -7,7 +7,8 @@
 
 ## 진행 중 / 다음
 
-(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R6·R7 또는 ROADMAP [후보])
+34) [엔진 분기를 데이터로] REFACTOR.md R6 — 진행 중 (v1.50.5, 브랜치 refactor/perf-data)
+    - 결정 (2026-11-11 사용자): 트래픽 계산만 데이터로(edgeHit·PERF_SIDE_ROUTES·PERF_GUARDS·PERF_OFF_PATH), 장애 엔진은 코드에 둠
 
 
 ## 확정 (순서대로)

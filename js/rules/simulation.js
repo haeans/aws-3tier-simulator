@@ -14,11 +14,10 @@ const queueFactor = util => util < 0.9 ? 1 / (1 - util) : 10;
 
 // 사용자에서 출발해 요청이 닿는 박스까지의 거리 (Route 53·WAF는 길이 아니므로 거치지 않음)
 function perfDistances(s = state) {
-  const PASS_OFF = ['route53', 'waf'];
   const adj = new Map(s.nodes.map(n => [n.id, []]));
   s.edges.forEach(e => {
     if (!adj.has(e.from) || !adj.has(e.to)) return;
-    if (PASS_OFF.includes(findNode(e.from, s).type) || PASS_OFF.includes(findNode(e.to, s).type)) return;
+    if (PERF_OFF_PATH.includes(findNode(e.from, s).type) || PERF_OFF_PATH.includes(findNode(e.to, s).type)) return;
     adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
   });
   const queue = s.nodes.filter(n => USER_TYPES.includes(n.type)).map(n => n.id);
@@ -58,9 +57,9 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     load.set(id, (load.get(id) || 0) + amount);
     inLat.set(id, (inLat.get(id) || 0) + amount * lat);
   };
-  // WAF가 요청 경로의 CloudFront·LB에 붙어 있으면 공격 요청을 막음 (비율 기반 규칙 등)
-  const frontsOf = w => linkedNodesOf(s, w, 'cloudfront', 'lb').filter(m => dist.has(m.id));
-  const guard = attack > 0 ? s.nodes.find(w => w.type === 'waf' && frontsOf(w).length) : null;
+  // 막는 박스(WAF 등, PERF_GUARDS)가 요청 경로의 앞단(CloudFront·LB)에 붙어 있으면 공격 요청을 막음 (비율 기반 규칙 등)
+  const frontsOf = w => linkedNodesOf(s, w, ...PERF_GUARDS[w.type]).filter(m => dist.has(m.id));
+  const guard = attack > 0 ? s.nodes.find(w => PERF_GUARDS[w.type] && frontsOf(w).length) : null;
   const total = rps + (guard ? 0 : attack);
   users.forEach(u => add(u.id, users.length ? total / users.length : 0, 0));
 
@@ -104,10 +103,10 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
       else { served += done; latSum += done * lat; }
       return;
     }
-    // 넘길 양: CloudFront는 엣지 캐시가 바로 응답한 몫(성공)을 빼고 원본(IGW)으로
+    // 넘길 양: 바로 응답하는 박스(CloudFront 엣지 캐시 등, PERF.edgeHit)는 응답한 몫(성공)을 빼고 다음 박스(원본)로
     let fwd = done;
-    if (n.type === 'cloudfront') {
-      const hits = done * PERF_CDN_HIT;
+    if (perf && perf.edgeHit) {
+      const hits = done * perf.edgeHit;
       info.cacheHits = hits;
       served += hits;
       latSum += hits * lat;
@@ -117,24 +116,21 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     const weightOf = m => Math.max(countOf(m.id), 0) || 1;
     const totalWeight = next.reduce((sum, m) => sum + weightOf(m), 0);
     const targets = next.map(m => ({ m, share: fwd * weightOf(m) / totalWeight }));
-    // EC2의 DB 조회: ElastiCache가 연결돼 있으면 캐시에 있는 몫은 캐시가 응답 (lazy loading)
-    //               Read Replica가 연결돼 있으면 남은 조회 중 읽기 몫은 Replica로, 쓰기는 본체(RDS)로
-    if (APP_TYPES.includes(n.type) && nextType === 'rds') {
-      // 24번: 멈춘 캐시는 빼고, 남은 캐시가 캐시 몫을 이어받는다 (다른 AZ의 복제 노드가 몇 초 만에 승격, ElastiCache 문서)
-      //       캐시가 모두 멈췄으면 캐시 몫도 RDS로 (lazy loading: 캐시에 없으면 DB에서 읽음. 접속 실패도 DB로 넘긴다고 가정)
-      const caches = farther.filter(m => m.type === 'elasticache' && !F.down.has(m.id));
-      const replicas = farther.filter(m => m.type === 'rds-replica');
+    // 옆길 (PERF_SIDE_ROUTES): 본 대상으로 갈 요청 중 일부를 함께 연결된 다른 종류가 받음
+    //   예) EC2의 DB 조회: ElastiCache가 캐시에 있는 몫을 응답 (lazy loading), Read Replica가 남은 조회 중 읽기를 받고 쓰기는 본체(RDS)로
+    //   24번: 멈춘 캐시는 빼고, 남은 캐시가 캐시 몫을 이어받는다 (다른 AZ의 복제 노드가 몇 초 만에 승격, ElastiCache 문서)
+    //         캐시가 모두 멈췄으면 캐시 몫도 RDS로 (lazy loading: 캐시에 없으면 DB에서 읽음. 접속 실패도 DB로 넘긴다고 가정)
+    const sides = PERF_SIDE_ROUTES[nextType];
+    if (sides) {
       let rest = 1;
       const extra = [];
-      if (caches.length) {
-        caches.forEach(m => extra.push({ m, share: fwd * PERF_CACHE_HIT / caches.length }));
-        rest -= PERF_CACHE_HIT;
-      }
-      if (replicas.length) {
-        const reads = rest * PERF_READ_SHARE;
-        replicas.forEach(m => extra.push({ m, share: fwd * reads / replicas.length }));
-        rest -= reads;
-      }
+      sides.forEach(side => {
+        const boxes = farther.filter(m => m.type === side.type && !(side.skipDown && F.down.has(m.id)));
+        if (!boxes.length) return;
+        const portion = side.of === 'all' ? side.share : rest * side.share;
+        boxes.forEach(m => extra.push({ m, share: fwd * portion / boxes.length }));
+        rest -= portion;
+      });
       targets.forEach(x => { x.share *= rest; });
       targets.push(...extra);
     }
