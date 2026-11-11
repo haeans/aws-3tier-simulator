@@ -418,3 +418,12 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 조회 도구는 js/rules/context.js에 모았다. linkedNodes(검증 대상이 아닌 서비스까지 포함한 모든 연결선)와 ctx.neighborsOf(그 ctx에 든 박스끼리만)는 찾는 범위가 달라 합치지 않았다.
 - 제안 id는 화면의 "제안 N" 번호이자 criteria 문서가 가리키는 번호라 바꾸지 않는다. 배열 순서가 화면 순서다 (13은 WAF 제안끼리 모이게 10 다음).
 - criteria 문서에서 "반영됨"인 항목은 해당 규칙 코드에 `// 근거: ID` 주석이 있어야 한다. 자동 테스트가 문서와 코드를 대조한다 (UI-10 같은 화면 구역 번호는 제외).
+
+### 구조 정리 (리팩터링 R1~R7, 2026-11-11, 29~35번)
+- 목표: 판정·제안·시뮬레이션 결과와 화면 동작은 그대로 두고 구조만 정리. 자세한 단계와 이유는 REFACTOR.md
+- 캔버스 상태와 도형 계산은 js/model.js (DOM 없음). 규칙(js/rules/)은 js/ui/의 이름을 쓰지 않는다 (R2)
+- 판정·제안·시뮬레이션·장애 엔진은 구성 s를 인자로 받는다 (기본값은 캔버스 state). 규칙 본문은 ctx 도구(ctx.s, ctx.findNode, ctx.linkedNodes 등)를 쓴다. 13번(전후 비교)의 바탕 (R3)
+- 연결 상대 찾기는 edgeOtherEnd 하나. requestReach는 perfDistances 결과를 쓴다 (제안용 ctx 전용) (R4)
+- 저장·되돌리기는 js/ui/storage.js, 예전 저장 형식 고치기는 migrateSaved 한 곳. 기본 틀은 js/ui/examples.js (R5)
+- 트래픽 계산의 서비스별 동작은 데이터(PERF.edgeHit, PERF_SIDE_ROUTES, PERF_GUARDS, PERF_OFF_PATH). 장애 엔진(Multi-AZ 장애 조치·Auto Scaling)은 AWS 기능 자체의 동작이라 코드에 둔다 (R6, 사용자 결정)
+- 애니메이션 테스트는 실제 시간을 기다리지 않고 시각을 넘겨 그린다 (simDrawDots(t)) (R7)

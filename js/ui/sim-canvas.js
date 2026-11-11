@@ -173,9 +173,15 @@ function startSimDots() {
   simRaf = requestAnimationFrame(simTick);
 }
 
-// 한 화면: 연결선마다 "지금까지 나온 점"들의 위치를 계산해서 그림
+// 한 화면: 시계를 읽어 점을 그리고 다음 화면을 예약
 function simTick(now) {
-  const t = (now - simT0) / 1000;
+  simDrawDots((now - simT0) / 1000);
+  simRaf = requestAnimationFrame(simTick);
+}
+
+// 점이 흐르기 시작한 지 t초 뒤의 모습을 그림: 연결선마다 "지금까지 나온 점"들의 위치를 계산
+// (R7: 시계와 떼어 두어, 테스트가 실제 시간을 기다리지 않고 원하는 순간을 그려 볼 수 있다)
+function simDrawDots(t) {
   const head = t * SIM_SPEED;            // 처음 나온 점이 지금까지 간 거리
   const linger = SIM_BURST * SIM_SPEED;  // 사라지는 동안을 거리로 환산
   const seen = new Set();
@@ -217,5 +223,4 @@ function simTick(now) {
   });
   // 없어진 연결선의 점은 지움
   simPools.forEach((pool, key) => { if (!seen.has(key)) { pool.forEach(c => c.remove()); simPools.delete(key); } });
-  simRaf = requestAnimationFrame(simTick);
 }
