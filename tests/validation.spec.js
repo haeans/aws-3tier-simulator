@@ -874,3 +874,30 @@ test('27번: [서버 통신] 보기 — 서버에서 출발해 초록 선(NAT→
   await page.mouse.click(back.x + back.width / 2, back.y + back.height / 2);
   await expect(page.locator('#edge-layer')).not.toHaveClass(/view-server/);
 });
+
+test('EGR-01: 프라이빗 서버가 먼저 여는 연결(CloudWatch 에이전트·ECS Exec)에 NAT도 VPC Endpoints도 없으면 제안한다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => { addNode('cloudwatch', 120, 460); addNode('vpce', 1200, 110); addNode('sessionmanager', 120, 160); addNode('ecs', 560, 430); });
+  await connect(page, 'ec2', 'cloudwatch', 0, 0);
+  let r = await verdict(page);
+  expect(r.sug).not.toContain(19);                           // 기본 지표(복제·전달 선)는 길이 필요 없음
+  await page.evaluate(() => {                               // 선 종류를 "서버가 시작한 통신"(에이전트)으로
+    const cw = state.nodes.find(n => n.type === 'cloudwatch');
+    state.edges.find(e => e.from === cw.id || e.to === cw.id).kind = 'egress';
+    render();
+  });
+  r = await verdict(page);
+  expect(r.sug).toContain(19);
+  expect(r.status).toBe('ok');                               // 판정은 그대로
+  await connect(page, 'vpce', 'cloudwatch');                 // VPC Endpoints로 길이 생김
+  r = await verdict(page);
+  expect(r.sug).not.toContain(19);
+  // 컨테이너—Session Manager(ECS Exec): NAT로 길이 생기면 사라짐
+  await connect(page, 'ecs', 'sessionmanager');
+  r = await verdict(page);
+  expect(r.sug).toContain(19);
+  await connect(page, 'ecs', 'nat');
+  r = await verdict(page);
+  expect(r.sug).not.toContain(19);
+});
