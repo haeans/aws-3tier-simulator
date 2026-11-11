@@ -7,8 +7,7 @@
 
 ## 진행 중 / 다음
 
-30) [상태·도형 도구 분리] REFACTOR.md R2 — 진행 중 (v1.50.1, 브랜치 refactor/model)
-    - state·findNode·rectOf 등을 js/model.js로. script 순서 data → model → rules → ui → main (사용자 승인 2026-11-11)
+(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R3 이후 또는 ROADMAP [후보])
 
 
 ## 확정 (순서대로)
@@ -264,3 +263,6 @@
     결정 (2026-11-11 사용자): 이미 알리는 짝(판정 16·18, 제안 3)은 그대로 두고 빈 곳만 새 제안 19로. 수준은 제안
     대상: 서버—CloudWatch 초록 선(에이전트), 컨테이너(ECS·Fargate)—Session Manager(ECS Exec). EKS는 근거 없어 제외
     함께 고침: VPC Endpoints → CloudWatch·Session Manager·ECR 선을 서버가 시작한 통신(초록)으로
+
+30) [상태·도형 도구 분리] REFACTOR.md R2 — 완료 (v1.50.1, PR #18)
+    - state·findNode·rectOf 등을 js/model.js로. script 순서 data → model → rules → ui → main (사용자 승인 2026-11-11)
