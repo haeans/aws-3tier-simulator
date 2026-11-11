@@ -7,7 +7,8 @@
 
 ## 진행 중 / 다음
 
-(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R7 또는 ROADMAP [후보])
+35) [가끔 실패하는 테스트] REFACTOR.md R7 — 진행 중 (v1.50.6, 브랜치 test/dot-spacing)
+    - 트래픽 점 간격 테스트가 실제 시간을 기다리지 않게 (simDrawDots(t))
 
 
 ## 확정 (순서대로)

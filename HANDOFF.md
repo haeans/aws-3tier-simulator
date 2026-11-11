@@ -83,7 +83,7 @@
 
 - bash에서 `node -e "..."`나 heredoc 안에 템플릿 문자열(\`${...}\`)·`$변수`가 있으면 셸이 먼저 바꿔 버려 코드가 깨진다 → **Write 도구로 scratchpad에 node 스크립트 파일을 만들어 실행**
 - 화면 확인: scratchpad에 Playwright 설정(`testDir: __dirname`, `require('<저장소>/node_modules/@playwright/test')`, `channel: 'msedge'`)과 spec을 두고 `npx playwright test --config=<그 설정>`으로 스크린샷. 결과 패널 아래에 가려진 점·박스를 찍지 않게 위치를 확인
-- 시뮬레이션 "트래픽 점 간격" 테스트가 실행이 느릴 때 가끔 실패한다 → 다시 돌리면 통과 (2026-11-10 한 번 발생)
+- 시뮬레이션 "트래픽 점 간격" 테스트가 느릴 때 가끔 실패하던 문제는 R7(35번)에서 고침: 애니메이션은 실제 시간을 기다리지 말고 simDrawDots(t)처럼 시각을 넘겨 그려서 확인한다
 - 판정 결과를 일부러 바꿨을 때만 `npx playwright test regression --update-snapshots`, 그 뒤 바뀐 줄이 의도한 것뿐인지 diff로 확인
 - 연결선 종류·방향은 `EDGE_RULES`(js/data/services.js), 선 하나의 종류는 `edgeInfoOf(ed)`(js/ui/edges.js), 검증 흐름은 `computeFlow`·`requestCycles`·`serverCycles`(js/ui/result.js)
 - 사용자는 Team 요금제라 토큰 한도가 빠듯하다. 작업 단위를 잘게, 결과는 파일에

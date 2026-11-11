@@ -136,12 +136,15 @@ test('트래픽 점: 모든 선에서 같은 속도, 같은 요청량이면 선 
   await page.locator('#result .tab[data-tab="sim"]').click();
   await page.locator('#sim-play').click();
   await page.locator('#sim-rps').fill('100');
-  // LB → EC2 두 선은 길이가 다르지만 요청량(50)이 같다 → 1초 동안 보이는 점 수가 길이에 비례
-  const r = await page.evaluate(async () => {
+  await expect(page.locator('#sim-success')).toHaveText('100.0%');   // 요청량 100이 계산에 반영된 뒤
+  // LB → EC2 두 선은 길이가 다르지만 요청량(50)이 같다 → 선 위에 보이는 점 수가 길이에 비례
+  // R7: 실제 시간을 기다리지 않고, 화면 갱신을 멈춘 뒤 흐르기 시작한 지 30초 뒤(모든 선이 점으로 찬 상태)를 직접 그려서 센다
+  const r = await page.evaluate(() => {
+    cancelAnimationFrame(simRaf);
     const lb = state.nodes.find(n => n.type === 'lb').id;
     const links = simResult.links.filter(l => l.src === lb);
     const lens = links.map(l => polyLength(edgePoints.get(l.edgeId)));
-    await new Promise(res => setTimeout(res, 300));
+    simDrawDots(30);
     const counts = links.map(l => simDots.filter(d => d.edgeId === l.edgeId).length);
     return { lens, counts, gap: SIM_SPEED * SIM_DOT_PER / 50 };
   });
