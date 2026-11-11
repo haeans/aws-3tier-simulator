@@ -13,8 +13,9 @@ let idSeq = 1;
 const newId = prefix => `${prefix}${idSeq++}`;   // n=서비스, c=영역, e=연결선
 
 // ----- 박스·영역 찾기 -----
-const findNode = id => state.nodes.find(n => n.id === id);
-const findContainer = id => state.containers.find(c => c.id === id);
+// s: 구성 (R3, 없으면 캔버스 구성 state). map(findNode)처럼 넘기면 두 번째 인자(순번)가 s로 들어가므로 화살표 함수로 감싼다
+const findNode = (id, s = state) => s.nodes.find(n => n.id === id);
+const findContainer = (id, s = state) => s.containers.find(c => c.id === id);
 const isContainer = item => item.width !== undefined;
 
 // ----- 도형 계산 (박스 크기 NODE_W·NODE_H는 js/data/services.js) -----

@@ -20,8 +20,8 @@ function eunNeun(word) {
 }
 
 // 서비스 박스의 현재 위치 구역: 'outside' | 'vpc'(VPC·AZ 안, 서브넷 밖) | 'public' | 'private' | 'db'
-function zoneOf(node) {
-  const p = findContainer(node.parentContainer);
+function zoneOf(node, s = state) {
+  const p = findContainer(node.parentContainer, s);
   if (!p) return 'outside';
   if (p.type === 'vpc' || p.type === 'az') return 'vpc';
   return p.type;

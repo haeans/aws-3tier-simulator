@@ -69,7 +69,7 @@ const VALIDATION_RULES = [
       });
       // 근거: LB-01 — LB가 쓰는 AZ마다 그 AZ의 서브넷을 지정해야 한다 (LB가 쓰는 AZ = 연결된 EC2가 있는 AZ)
       ctx.ofType('lb').forEach(lb => {
-        lbAzsOf(ctx, lb).filter(az => !subnetsIn(az).length).forEach(az => issues.push({
+        lbAzsOf(ctx, lb).filter(az => !ctx.subnetsIn(az).length).forEach(az => issues.push({
           nodeIds: [lb.id, ...ctx.neighborsOf(lb, ...APP_TYPES).filter(e => ctx.azOf(e) === az).map(n => n.id)],
           message: `${az.label}에 서브넷이 없어서 Load Balancer가 그 AZ에 노드를 둘 수 없어요. ${az.label}에 퍼블릭 서브넷을 만들어주세요.`,
         }));
@@ -132,8 +132,8 @@ const VALIDATION_RULES = [
       if (!dbs.length) return [];
       // 근거: CF-01·R53-02·LB-07 — CloudFront·Route 53·WAF·Load Balancer가 DB에 바로 이어져 있으면 "인터넷과 바로 이어지지 않는다"고 칭찬하지 않는다
       // (LB—RDS는 오류·경고 근거가 없어(등급 X) 판정은 그대로 두고 칭찬만 막는다. Route 53·WAF는 검증 대상이 아니라 ctx에 없으므로 연결선에서 직접 찾는다)
-      const exposed = dbs.some(db => state.edges.some(e => {
-        const other = findNode(e.from === db.id ? e.to : e.to === db.id ? e.from : '');
+      const exposed = dbs.some(db => ctx.s.edges.some(e => {
+        const other = ctx.findNode(e.from === db.id ? e.to : e.to === db.id ? e.from : '');
         return other && ['cloudfront', 'route53', 'waf', 'lb'].includes(other.type);
       }));
       if (exposed) return [];
@@ -340,9 +340,9 @@ const VALIDATION_RULES = [
     ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.WorkingWithRDSInstanceinaVPC.html',
     check(ctx) {
       const dbs = ctx.ofType(...RDS_TYPES);
-      const subnets = state.containers.filter(c => SUBNET_TYPES.includes(c.type));
+      const subnets = ctx.s.containers.filter(c => SUBNET_TYPES.includes(c.type));
       if (!dbs.length || !subnets.length) return [];   // 서브넷이 아예 없으면 규칙 4가 알림
-      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => findContainer(id)?.type === 'az'));
+      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => ctx.findContainer(id)?.type === 'az'));
       if (azIds.size >= 2) return [];
       return [{ nodeIds: dbs.map(n => n.id),
         message: 'RDS는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
@@ -357,9 +357,9 @@ const VALIDATION_RULES = [
     check(ctx) {
       const issues = [];
       ctx.ofType('ec2').filter(e => ctx.zoneOf(e) === 'private').forEach(e => {
-        const sms = linkedNodes(e, 'sessionmanager');
+        const sms = ctx.linkedNodes(e, 'sessionmanager');
         if (!sms.length || ctx.neighborsOf(e, 'nat').length) return;
-        const bare = sms.filter(sm => !linkedNodes(sm, 'vpce').length);
+        const bare = sms.filter(sm => !ctx.linkedNodes(sm, 'vpce').length);
         if (bare.length !== sms.length) return;
         issues.push({ nodeIds: [e.id, ...sms.map(n => n.id)],
           message: '프라이빗 서브넷의 EC2가 Session Manager에 닿을 길이 없어 보여요. NAT에 연결하거나, VPC Endpoints를 Session Manager와 연결해주세요.' });
@@ -373,8 +373,8 @@ const VALIDATION_RULES = [
     pillars: ['security'],
     basis: '컨테이너(ECS·EKS·Fargate)는 프라이빗 서브넷에 두는 것이 안전해요. 퍼블릭 서브넷에서 공개 IP를 받으면 인터넷에 드러날 수 있어요.',
     ref: 'https://docs.aws.amazon.com/securityhub/latest/userguide/ecs-controls.html',
-    check() {
-      return containerNodes().filter(n => zoneOf(n) === 'public').map(n => ({ nodeIds: [n.id],
+    check(ctx) {
+      return ctx.containerNodes().filter(n => ctx.zoneOf(n) === 'public').map(n => ({ nodeIds: [n.id],
         message: `${eunNeun(SVC_MAP[n.type].name)} 퍼블릭 서브넷에 있어요. 공개 IP를 받으면 인터넷에 드러날 수 있으니 프라이빗 서브넷에 두는 것이 안전해요.` }));
     },
   },
@@ -384,12 +384,12 @@ const VALIDATION_RULES = [
     pillars: ['security', 'operations'],
     basis: '컨테이너가 이미지를 받으려면 인터넷으로 나가는 길이 있어야 해요. 프라이빗 서브넷에서는 NAT를 거치거나 ECR용 VPC Endpoints를 써요.',
     ref: 'https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html',
-    check() {
+    check(ctx) {
       const issues = [];
-      containerNodes().filter(n => zoneOf(n) === 'private').forEach(n => {
-        const ecrs = linkedNodes(n, 'ecr');
-        if (!ecrs.length || linkedNodes(n, 'nat').length) return;
-        if (ecrs.some(r => linkedNodes(r, 'vpce').length)) return;
+      ctx.containerNodes().filter(n => ctx.zoneOf(n) === 'private').forEach(n => {
+        const ecrs = ctx.linkedNodes(n, 'ecr');
+        if (!ecrs.length || ctx.linkedNodes(n, 'nat').length) return;
+        if (ecrs.some(r => ctx.linkedNodes(r, 'vpce').length)) return;
         issues.push({ nodeIds: [n.id, ...ecrs.map(r => r.id)],
           message: `프라이빗 서브넷의 ${SVC_MAP[n.type].name}가 ECR에서 이미지를 받아올 길이 없어 보여요. NAT에 연결하거나, VPC Endpoints를 ECR과 연결해주세요.` });
       });
@@ -402,11 +402,11 @@ const VALIDATION_RULES = [
     pillars: ['reliability'],
     basis: 'EKS 클러스터는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요.',
     ref: 'https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html',
-    check() {
-      const eks = state.nodes.filter(n => n.type === 'eks');
-      const subnets = state.containers.filter(c => SUBNET_TYPES.includes(c.type));
+    check(ctx) {
+      const eks = ctx.s.nodes.filter(n => n.type === 'eks');
+      const subnets = ctx.s.containers.filter(c => SUBNET_TYPES.includes(c.type));
       if (!eks.length || !subnets.length) return [];
-      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => findContainer(id)?.type === 'az'));
+      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => ctx.findContainer(id)?.type === 'az'));
       if (azIds.size >= 2) return [];
       return [{ nodeIds: eks.map(n => n.id),
         message: 'EKS는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
@@ -415,8 +415,9 @@ const VALIDATION_RULES = [
 ];
 
 // 모든 규칙을 실행해 결과를 만든다
-function validateArchitecture() {
-  const ctx = buildContext();
+// s: 검사할 구성 (R3, 없으면 캔버스 구성)
+function validateArchitecture(s = state) {
+  const ctx = buildContext(false, s);
   const issues = [];
   VALIDATION_RULES.forEach(rule => {
     rule.check(ctx).forEach(it => issues.push({ rule, message: it.message, nodeIds: it.nodeIds || [] }));
@@ -436,7 +437,7 @@ function validateArchitecture() {
   const status = issues.some(i => i.rule.level === 'error') ? 'error' : issues.length ? 'warn' : 'ok';
 
   // 개선·제거 제안 (판정과 별개)
-  const allCtx = buildContext(true);
+  const allCtx = buildContext(true, s);
   const suggestions = [];
   SUGGESTION_RULES.forEach(rule => {
     rule.check(allCtx).forEach(it => suggestions.push({ rule, reason: it.reason, action: it.action, nodeIds: it.nodeIds || [] }));

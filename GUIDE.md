@@ -118,7 +118,7 @@ aws-3tier-simulator/
 │   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
-│   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등)
+│   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등). 구성 s를 인자로 받음 (R3)
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 19개)
 │   │   └─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
@@ -157,6 +157,7 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 검증 규칙: js/rules/validation.js: VALIDATION_RULES 배열에 항목 추가
 - 개선·제거 제안: js/rules/suggestions.js: SUGGESTION_RULES 배열에 항목 추가
 - 여러 규칙이 함께 쓰는 조회 도구: js/rules/context.js
+  - 규칙 본문은 전역 state·findNode 대신 ctx의 도구(ctx.s, ctx.findNode, ctx.linkedNodes 등)를 쓴다. 그래야 캔버스가 아닌 구성도 검사할 수 있다 (R3: validateArchitecture(s), simulateTraffic(..., s), createFaults(s))
 - 판정·제안·시뮬레이션 결과를 일부러 바꾸면: `npx playwright test regression --update-snapshots`로 기준선을 다시 저장 (구조만 바꾸는 작업이면 저장하지 않고 통과해야 함)
 
 

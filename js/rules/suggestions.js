@@ -413,12 +413,12 @@ const SUGGESTION_RULES = [
     ref: 'https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html',
     praise(ctx) {
       const ec2s = ctx.ofType('ec2');
-      if (!ec2s.length || ec2s.some(e => !ec2HasSessionManager(e))) return [];
+      if (!ec2s.length || ec2s.some(e => !ec2HasSessionManager(e, ctx.s))) return [];
       return [{ nodeIds: ec2s.map(n => n.id),
         text: '모든 EC2를 Session Manager로 관리해요. 열린 접속 포트나 SSH 키 없이 안전하게 접속해요.' }];
     },
     check(ctx) {
-      const bare = ctx.ofType('ec2').filter(e => !ec2HasSessionManager(e));
+      const bare = ctx.ofType('ec2').filter(e => !ec2HasSessionManager(e, ctx.s));
       if (!bare.length) return [];
       return [{
         nodeIds: bare.map(n => n.id),
@@ -453,7 +453,7 @@ const SUGGESTION_RULES = [
       const issues = [];
       ctx.ofType('lb').forEach(lb => {
         // 서브넷이 하나도 없는 AZ는 판정 2가 오류로 알린다
-        const azs = lbAzsOf(ctx, lb).filter(az => subnetsIn(az).length && !subnetsIn(az, 'public').length);
+        const azs = lbAzsOf(ctx, lb).filter(az => ctx.subnetsIn(az).length && !ctx.subnetsIn(az, 'public').length);
         if (!azs.length) return;
         issues.push({
           nodeIds: [lb.id, ...ctx.neighborsOf(lb, ...APP_TYPES).filter(e => azs.includes(ctx.azOf(e))).map(n => n.id)],
@@ -495,19 +495,19 @@ const SUGGESTION_RULES = [
     pillars: ['operations', 'security'],
     basis: 'CloudWatch 에이전트가 로그를 보내거나 ECS Exec(Session Manager)로 컨테이너에 접속할 때는 서버가 먼저 밖으로 연결해요. 프라이빗 서브넷에서는 NAT를 거치거나 VPC Endpoints를 써야 닿아요.',
     ref: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html',
-    check() {
+    check(ctx) {
       const issues = [];
-      const noEndpoint = m => !linkedNodes(m, 'vpce').length;
-      state.nodes.filter(n => ['ec2', 'ecs', 'fargate'].includes(n.type) && zoneOf(n) === 'private').forEach(n => {
-        if (linkedNodes(n, 'nat').length) return;   // NAT로 나가는 길이 있음
+      const noEndpoint = m => !ctx.linkedNodes(m, 'vpce').length;
+      ctx.s.nodes.filter(n => ['ec2', 'ecs', 'fargate'].includes(n.type) && ctx.zoneOf(n) === 'private').forEach(n => {
+        if (ctx.linkedNodes(n, 'nat').length) return;   // NAT로 나가는 길이 있음
         // 서버—CloudWatch를 "서버가 시작한 통신"(에이전트)으로 고른 선
-        const cws = state.edges.filter(ed => ed.from === n.id || ed.to === n.id).map(ed => {
-          const other = findNode(ed.from === n.id ? ed.to : ed.from);
+        const cws = ctx.s.edges.filter(ed => ed.from === n.id || ed.to === n.id).map(ed => {
+          const other = ctx.findNode(ed.from === n.id ? ed.to : ed.from);
           if (!other || other.type !== 'cloudwatch') return null;
           return edgeInfo(n.type, other.type, ed.kind || null).kind === 'egress' ? other : null;
         }).filter(m => m && noEndpoint(m));
         // 컨테이너—Session Manager (ECS Exec)
-        const sms = n.type === 'ec2' ? [] : linkedNodes(n, 'sessionmanager').filter(noEndpoint);
+        const sms = n.type === 'ec2' ? [] : ctx.linkedNodes(n, 'sessionmanager').filter(noEndpoint);
         const targets = [...new Set([...cws, ...sms])];
         if (!targets.length) return;
         const names = [...new Set(targets.map(m => SVC_MAP[m.type].name))].join('·');
