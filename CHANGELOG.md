@@ -13,6 +13,15 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.50.4] 2026-11-11  저장·기록·기본 틀을 제자리로 (33번, REFACTOR R5)
+  변경: 저장·불러오기·화면 설정·실행 취소(saveState·loadSaved·uiPrefs·recordHistory·undo·redo 등)를 js/ui/render.js에서 새 파일 js/ui/storage.js로
+  변경: 기본 틀 만들기(loadTemplate·TEMPLATE_VPC·TEMPLATE_USER_GAP)를 js/main.js에서 js/ui/examples.js로
+  변경: 불러올 때 저장된 형식 번호(version, 없으면 1)를 읽고, 예전 형식 고치기(Auto Scaling 박스 제거·알 수 없는 항목 버리기)를 migrateSaved 하나에 모음.
+        저장 형식은 그대로 (SAVE_VERSION = 1)
+  수정: 영역 이름표(서브넷)의 이름을 HTML이 아니라 글자(textContent)로 넣음 — 이름에 < > 가 있어도 그대로 보임
+  추가: 테스트 — 형식 번호 없는 예전 저장 불러오기, 영역 이름 글자 그대로 (tests/placement.spec.js)
+  비고: 화면 동작·판정·제안·시뮬레이션 결과는 그대로 (기준선 테스트 통과)
+
 [1.50.3] 2026-11-11  중복 조회 정리 (32번, REFACTOR R4)
   변경: "연결선의 반대편 박스 찾기"를 edgeOtherEnd(ed, id, s)(js/model.js) 하나로. linkedNodes·판정 4 칭찬·시뮬레이션 WAF 앞단 찾기(frontsOf)·
         제안 19·설명 패널(neighborTypes)이 이것(또는 linkedNodes)을 씀

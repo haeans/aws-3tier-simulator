@@ -49,7 +49,7 @@
 - 규칙 추가: `js/rules/` 안의 배열(PLACEMENT_RULES / VALIDATION_RULES / SUGGESTION_RULES)
 - 배치·이동·크기 조절은 반드시 `commit(before, actedId, movedIds)`(js/ui/core.js)를 거친다.
   - commit은 소속을 다시 계산하고, 규칙 위반이나 겹침이 있으면 동작 전 상태로 되돌린다.
-- 되돌리기 기록은 `render()` 끝에서 자동으로 한다(`recordHistory`, js/ui/render.js). 상태를 바꾸는 동작은 마지막에 render()를 불러야 기록된다.
+- 되돌리기 기록은 `render()` 끝에서 자동으로 한다(`recordHistory`, js/ui/storage.js). 상태를 바꾸는 동작은 마지막에 render()를 불러야 기록된다.
 - 드래그 중에는 `render()`(DOM 전체 재생성)를 부르지 않고 `updatePositions()`를 쓴다.
   - render()를 부르면 포인터를 잡고 있던 요소가 사라져 드래그가 끊긴다.
 

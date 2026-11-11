@@ -7,7 +7,8 @@
 
 ## 진행 중 / 다음
 
-(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R5 이후 또는 ROADMAP [후보])
+33) [저장·기록·기본 틀을 제자리로] REFACTOR.md R5 — 진행 중 (v1.50.4, 브랜치 refactor/storage)
+    - js/ui/storage.js 분리, loadTemplate을 examples.js로, 저장 형식 번호 읽기·migrateSaved, 영역 이름 textContent
 
 
 ## 확정 (순서대로)

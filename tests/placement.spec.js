@@ -383,3 +383,22 @@ test('23번: icons/ 폴더가 있으면 박스·팔레트·영역 이름표에 �
   await expect.poll(() => loaded('.area-public .area-icon')).toBe(true);
   await expect(page.locator('.node').first()).toHaveClass(/has-icon/);
 });
+
+test('R5: 형식 번호가 없는 예전 저장도 불러오고, 영역 이름은 글자 그대로 보인다 (HTML로 해석하지 않음)', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => localStorage.setItem(STORAGE_KEY, JSON.stringify({ idSeq: 9, zoom: 1, state: {
+    nodes: [{ id: 'n1', type: 'autoscaling', x: 100, y: 100, parentContainer: null },
+            { id: 'n2', type: 'ec2', x: 300, y: 100, parentContainer: null }],
+    containers: [{ id: 'c5', type: 'public', x: 600, y: 100, width: 400, height: 140, parentContainer: null, label: '<b>굵게</b>' }],
+    edges: [],
+  } })));
+  await page.reload();
+  await expect(page.locator('.node')).toHaveCount(1);
+  await expect(page.locator('#toast')).toContainText('예전 Auto Scaling 박스 1개를 지웠어요');
+  const label = page.locator('#area-layer .area-public .area-label span');
+  await expect(label).toHaveText('<b>굵게</b>');
+  await expect(page.locator('#area-layer .area-public .area-label b')).toHaveCount(0);
+  // 다시 저장하면 지금 형식 번호가 적힌다
+  const v = await page.evaluate(() => [JSON.parse(localStorage.getItem(STORAGE_KEY)).version, SAVE_VERSION]);
+  expect(v[0]).toBe(v[1]);
+});
