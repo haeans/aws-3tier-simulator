@@ -95,12 +95,14 @@ aws-3tier-simulator/
 ├─ .gitattributes             줄바꿈을 LF로 고정
 ├─ CLAUDE.md                  AI(Claude) 작업 규칙·테스트 방법
 ├─ HANDOFF.md                 작업 인계: 다른 PC에서 이어서 작업하기 (준비·지금 상태·다음 할 일)
+├─ REFACTOR.md                리팩터링 지침: 구조 정리 단계(R1~R7)와 진행 상태
 ├─ package.json               개발 도구 목록과 명령 (npm test, npm run lint)
 ├─ playwright.config.js       자동 테스트 설정 (설치된 Edge 사용, index.html 직접 열기)
 ├─ eslint.config.js           코드 검사 설정 (파일 간 공유 이름 자동 수집)
 ├─ tsconfig.json              타입 검사 설정 (@ts-check 파일 검사, 기본 강도)
 ├─ scripts/setup-icons.js     AWS 아이콘 패키지에서 필요한 아이콘을 icons/로 복사 (npm run icons, 개발 도구)
 ├─ icons/                     AWS 공식 아이콘 (커밋하지 않음. 없으면 글자 박스)
+├─ criteria/                  판정 근거 조사 (README.md 기준표·양식, entry·server·data·ops·container.md 묶음별 조사, PROGRESS.md 진행표). 앱에는 넣지 않음
 ├─ tests/                     자동 테스트 (helpers.js, placement/edges/validation/simulation.spec.js)
 │   ├─ regression.spec.js     리팩터링 기준선: 여러 구성의 판정·제안·잘한 점·시뮬레이션 결과를 스냅샷과 비교
 │   └─ regression.spec.js-snapshots/  기준선 스냅샷 (판정을 일부러 바꿀 때만 다시 저장)
