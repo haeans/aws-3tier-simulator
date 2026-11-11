@@ -1,49 +1,11 @@
 // @ts-check
-// js/main.js — UI-9 기본 틀·이벤트 바인딩·시작 (가장 마지막에 불러와야 함)
+// js/main.js — UI-9 이벤트 바인딩·시작 (가장 마지막에 불러와야 함)
 
 /* ---------------------------------------------------------
-   UI-9. 기본 틀·이벤트 바인딩·시작
+   UI-9. 이벤트 바인딩·시작
    --------------------------------------------------------- */
 
-// ----- 기본 틀 (VPC 1개 + AZ 2개 + AZ별 퍼블릭/프라이빗/DB 서브넷) -----
-const TEMPLATE_VPC = { w: 1000, h: 660 };   // 기본 틀 VPC 크기
-const TEMPLATE_USER_GAP = 200;              // VPC 왼쪽에 사용자 박스를 놓을 자리
-
-// origin: VPC 왼쪽 위 위치. 없으면 캔버스 한가운데 (사방에 여백이 있어 배치하기 편함)
-// 만든 VPC 왼쪽 위 위치를 돌려준다 (예시 구성이 이 위치 기준으로 놓임). 묻는 창에서 취소하면 null
-function loadTemplate(origin) {
-  const hasContent = state.nodes.length + state.containers.length > 0;
-  if (hasContent && !confirm('캔버스의 기존 내용을 모두 지우고 기본 틀을 만들까요?')) return null;
-
-  state.nodes = [];
-  state.edges = [];
-  state.containers = [];
-  selectedId = null;
-  cancelPendingConnect();
-
-  const make =(type, x, y, width, height, label) => state.containers.push({
-    id: newId('c'), type, x, y, width, height, parentContainer: null,
-    label: label || AREA_MAP[type].name,
-  });
-  const o = origin || {
-    x: snap((($world.offsetWidth - TEMPLATE_VPC.w) + TEMPLATE_USER_GAP) / 2),
-    y: snap(($world.offsetHeight - TEMPLATE_VPC.h) / 2),
-  };
-  make('vpc', o.x, o.y, TEMPLATE_VPC.w, TEMPLATE_VPC.h);
-  [{ letter: 'A', x: o.x + 40 }, { letter: 'B', x: o.x + 520 }].forEach(({ letter, x }) => {
-    make('az', x, o.y + 60, 440, 560, '가용 영역 ' + letter);
-    make('public',  x + 20, o.y + 120, 400, 140);
-    make('private', x + 20, o.y + 280, 400, 140);
-    make('db',      x + 20, o.y + 440, 400, 140);
-  });
-  recomputeParents();
-  render();
-  // 사용자 자리까지 포함한 기본 틀의 가운데가 화면 가운데에 오도록 이동
-  const cx = o.x - TEMPLATE_USER_GAP / 2 + TEMPLATE_VPC.w / 2, cy = o.y + TEMPLATE_VPC.h / 2;
-  $wrap.scrollTo(cx * zoom - $wrap.clientWidth / 2, cy * zoom - $wrap.clientHeight / 2);
-  showToast('기본 틀을 만들었어요. 사용자는 VPC 왼쪽 바깥에 놓아보세요.');
-  return o;
-}
+// 기본 틀 만들기(loadTemplate)는 js/ui/examples.js (R5)
 
 // ----- 이벤트 바인딩 -----
 // 빈 캔버스 클릭 → 선택 해제. 흰 배경(영역 밖)을 끌면 화면 이동

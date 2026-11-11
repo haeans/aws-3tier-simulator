@@ -127,13 +127,14 @@ aws-3tier-simulator/
 │   │   ├─ palette.js         UI-3 팔레트·설명 툴팁
 │   │   ├─ edit.js            UI-4 추가·삭제·선택·이동·크기 조절
 │   │   ├─ edges.js           UI-5 연결선 (연결점 끌기·경로·손잡이)
-│   │   ├─ render.js          UI-6 그리기, UI-7 줌·화면 이동·저장·실행 취소
+│   │   ├─ render.js          UI-6 그리기, UI-7 줌·화면 이동
+│   │   ├─ storage.js         UI-14 저장·불러오기(형식 고치기 migrateSaved)·화면 설정·실행 취소
 │   │   ├─ result.js          UI-8 검증 결과 표시·동적 흐름
 │   │   ├─ info.js            UI-10 서비스 설명 패널
 │   │   ├─ simulate.js        UI-11 성능 시뮬레이션 패널·시계·그래프
 │   │   ├─ sim-canvas.js      UI-12 성능 시뮬레이션 캔버스 표시 (박스 색·사용률 막대·트래픽 점)
-│   │   └─ examples.js        UI-13 [불러오기 ▾] 메뉴·예시 불러오기·전체 보기(fitView)
-│   └─ main.js                UI-9 기본 틀·이벤트·시작
+│   │   └─ examples.js        UI-13 [불러오기 ▾] 메뉴·기본 틀(loadTemplate)·예시 불러오기·전체 보기(fitView)
+│   └─ main.js                UI-9 이벤트·시작
 └─ docs/                      개인 메모 (Git에 올리지 않음)
 ```
 
