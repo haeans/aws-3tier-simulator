@@ -84,12 +84,13 @@
 <div class="toast" id="toast"></div>
 <div class="tooltip" id="tooltip"></div>
 
-<!-- 스크립트는 순서대로 불러온다 (일반 script 태그: 서버 없이 파일을 바로 열어도 동작). main.js는 반드시 마지막. -->
+<!-- 스크립트는 순서대로 불러온다 (일반 script 태그: 서버 없이 파일을 바로 열어도 동작). 순서: data → model → rules → ui → main.js(반드시 마지막) -->
 <script src="js/data/services.js"></script>
 <script src="js/data/guide.js"></script>
 <script src="js/data/references.js"></script>
 <script src="js/data/performance.js"></script>
 <script src="js/data/examples.js"></script>
+<script src="js/model.js"></script>
 <script src="js/rules/placement.js"></script>
 <script src="js/rules/context.js"></script>
 <script src="js/rules/validation.js"></script>

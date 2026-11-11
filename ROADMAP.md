@@ -7,7 +7,8 @@
 
 ## 진행 중 / 다음
 
-(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R2 이후 또는 ROADMAP [후보])
+30) [상태·도형 도구 분리] REFACTOR.md R2 — 진행 중 (v1.50.1, 브랜치 refactor/model)
+    - state·findNode·rectOf 등을 js/model.js로. script 순서 data → model → rules → ui → main (사용자 승인 2026-11-11)
 
 
 ## 확정 (순서대로)
