@@ -113,7 +113,7 @@ aws-3tier-simulator/
 │   │   ├─ services.js        카테고리, 서비스 목록(SERVICES), 역할별 종류(USER_TYPES·APP_TYPES·RDS_TYPES), 영역 목록(AREAS), 설명 문구
 │   │   ├─ guide.js           설명 패널 내용 (SERVICE_GUIDE: 연결 상대·오가는 요청·연결하면 안 되는 상대)
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
-│   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연, PERF_ROUTES: 요청을 넘기는 방식, 근거 문서)
+│   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
 │   │   └─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA, 고쳐 보세요용 EXAMPLE_MISTAKES)
 │   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/

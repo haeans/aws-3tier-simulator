@@ -13,6 +13,13 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.50.5] 2026-11-11  시뮬레이션 엔진의 서비스 분기를 데이터로 (34번, REFACTOR R6)
+  변경: simulateTraffic 안의 서비스 이름 분기를 js/data/performance.js 데이터로 옮김 (사용자 승인 범위: 트래픽 계산만)
+        CloudFront 엣지 응답 → PERF.cloudfront.edgeHit, ElastiCache·Read Replica로 나눠 보내기 → PERF_SIDE_ROUTES,
+        WAF가 지키는 앞단 → PERF_GUARDS, 길이 아닌 박스(Route 53·WAF) → PERF_OFF_PATH
+  비고: 장애 엔진(RDS↔Standby 장애 조치, Auto Scaling, 장애를 넣을 수 있는 종류)은 AWS 기능 자체의 동작이라 코드에 둠 (사용자 결정)
+        PERF_CDN_HIT 등 비율 이름은 화면 안내가 쓰므로 그대로. 결과·화면 변화 없음 (기준선 테스트 통과)
+
 [1.50.4] 2026-11-11  저장·기록·기본 틀을 제자리로 (33번, REFACTOR R5)
   변경: 저장·불러오기·화면 설정·실행 취소(saveState·loadSaved·uiPrefs·recordHistory·undo·redo 등)를 js/ui/render.js에서 새 파일 js/ui/storage.js로
   변경: 기본 틀 만들기(loadTemplate·TEMPLATE_VPC·TEMPLATE_USER_GAP)를 js/main.js에서 js/ui/examples.js로

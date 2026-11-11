@@ -7,7 +7,7 @@
 
 ## 진행 중 / 다음
 
-(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R6·R7 또는 ROADMAP [후보])
+(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R7 또는 ROADMAP [후보])
 
 
 ## 확정 (순서대로)
@@ -275,3 +275,6 @@
 
 33) [저장·기록·기본 틀을 제자리로] REFACTOR.md R5 — 완료 (v1.50.4, PR #21)
     - js/ui/storage.js 분리, loadTemplate을 examples.js로, 저장 형식 번호 읽기·migrateSaved, 영역 이름 textContent
+
+34) [엔진 분기를 데이터로] REFACTOR.md R6 — 완료 (v1.50.5, PR #22)
+    - 결정 (2026-11-11 사용자): 트래픽 계산만 데이터로(edgeHit·PERF_SIDE_ROUTES·PERF_GUARDS·PERF_OFF_PATH), 장애 엔진은 코드에 둠
