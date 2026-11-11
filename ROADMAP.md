@@ -7,8 +7,7 @@
 
 ## 진행 중 / 다음
 
-33) [저장·기록·기본 틀을 제자리로] REFACTOR.md R5 — 진행 중 (v1.50.4, 브랜치 refactor/storage)
-    - js/ui/storage.js 분리, loadTemplate을 examples.js로, 저장 형식 번호 읽기·migrateSaved, 영역 이름 textContent
+(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R6·R7 또는 ROADMAP [후보])
 
 
 ## 확정 (순서대로)
@@ -273,3 +272,6 @@
 
 32) [중복 조회 정리] REFACTOR.md R4 — 완료 (v1.50.3, PR #20)
     - 연결 상대 찾기를 edgeOtherEnd 하나로, requestReach는 perfDistances 결과를 씀 (결과 같음 확인)
+
+33) [저장·기록·기본 틀을 제자리로] REFACTOR.md R5 — 완료 (v1.50.4, PR #21)
+    - js/ui/storage.js 분리, loadTemplate을 examples.js로, 저장 형식 번호 읽기·migrateSaved, 영역 이름 textContent
