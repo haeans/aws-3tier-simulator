@@ -7,9 +7,7 @@
 
 ## 진행 중 / 다음
 
-28) [서버 통신 경로 제안] — 구현됨, 사용자 테스트 중 (v1.50, 브랜치 feat/server-path)
-    결정 (2026-11-11 사용자): 이미 알리는 짝(판정 16·18, 제안 3)은 그대로 두고 빈 곳만 새 제안 19로. 수준은 제안
-    대상: 서버—CloudWatch 초록 선(에이전트), 컨테이너(ECS·Fargate)—Session Manager(ECS Exec). EKS는 근거 없어 제외
+(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R2 이후 또는 ROADMAP [후보])
 
 
 ## 확정 (순서대로)
@@ -260,3 +258,8 @@
 29) [문서 어긋남 정리] REFACTOR.md R1 — 완료 (PR #16 병합, 코드 변경 없음)
     - ROADMAP 구역 정리(완료 항목을 [완료]로), 문서의 옛 값 고치기, 리팩터링 지침(REFACTOR.md)·방향성 후보 추가
     - 이어지는 구조 정리(R2~R7)는 REFACTOR.md. 28번과의 순서는 사용자가 정한다
+
+28) [서버 통신 경로 제안] — 완료 (v1.50, PR #17)
+    결정 (2026-11-11 사용자): 이미 알리는 짝(판정 16·18, 제안 3)은 그대로 두고 빈 곳만 새 제안 19로. 수준은 제안
+    대상: 서버—CloudWatch 초록 선(에이전트), 컨테이너(ECS·Fargate)—Session Manager(ECS Exec). EKS는 근거 없어 제외
+    함께 고침: VPC Endpoints → CloudWatch·Session Manager·ECR 선을 서버가 시작한 통신(초록)으로
