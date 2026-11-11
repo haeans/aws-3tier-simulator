@@ -1,21 +1,25 @@
 // @ts-check
 // js/rules/context.js — 판정·제안·시뮬레이션이 함께 쓰는 조회 도구 (연결 상대, AZ, Auto Scaling 그룹 등)
+// R3: 구성 s를 인자로 받는다 (없으면 캔버스 구성 state). 규칙 본문은 전역 대신 ctx의 도구를 쓴다
 
 // 박스가 속한 AZ 영역 (서브넷이면 그 부모 AZ, 없으면 null)
-function azOf(n) {
-  let c = findContainer(n.parentContainer);
-  while (c && c.type !== 'az') c = findContainer(c.parentContainer);
+function azOf(n, s = state) {
+  let c = findContainer(n.parentContainer, s);
+  while (c && c.type !== 'az') c = findContainer(c.parentContainer, s);
   return c || null;
 }
 
 // AZ 영역 안의 서브넷 (types를 주면 그 종류만)
 function subnetsIn(az, ...types) {
+  return subnetsInOf(state, az, ...types);
+}
+function subnetsInOf(s, az, ...types) {
   const want = types.length ? types : SUBNET_TYPES;
-  return state.containers.filter(c => c.parentContainer === az.id && want.includes(c.type));
+  return s.containers.filter(c => c.parentContainer === az.id && want.includes(c.type));
 }
 
 // Load Balancer가 쓰는 AZ 목록 = 연결된 앱 서버(EC2 등)가 있는 AZ (22번: LB는 서브넷 밖에 두므로 박스 위치로 정하지 않는다)
-function lbAzsOf(ctx, lb) {
+function lbAzsOf(ctx, lb) {   // (ctx의 구성을 씀)
   return [...new Set(ctx.neighborsOf(lb, ...APP_TYPES).map(ctx.azOf).filter(Boolean))];
 }
 
@@ -26,18 +30,21 @@ function asgMembersOf(area, nodes = state.nodes) {
 
 // 연결선으로 이어진 박스 중 해당 종류 (검증 대상이 아닌 서비스도 찾는다)
 function linkedNodes(n, ...types) {
-  return state.edges
-    .map(e => findNode(e.from === n.id ? e.to : e.to === n.id ? e.from : ''))
+  return linkedNodesOf(state, n, ...types);
+}
+function linkedNodesOf(s, n, ...types) {
+  return s.edges
+    .map(e => findNode(e.from === n.id ? e.to : e.to === n.id ? e.from : '', s))
     .filter(m => m && types.includes(m.type));
 }
 
 // 규칙에서 쓰는 조회 도구 모음
 // includeAll: true면 검증 대상이 아닌 서비스도 포함 (개선·제거 제안용)
-function buildContext(includeAll = false) {
-  const nodes = includeAll ? state.nodes : state.nodes.filter(n => SVC_MAP[n.type].validated);
+function buildContext(includeAll = false, s = state) {
+  const nodes = includeAll ? s.nodes : s.nodes.filter(n => SVC_MAP[n.type].validated);
   const ids = new Set(nodes.map(n => n.id));
   const adj = new Map(nodes.map(n => [n.id, new Set()]));
-  state.edges.forEach(ed => {
+  s.edges.forEach(ed => {
     if (!ids.has(ed.from) || !ids.has(ed.to)) return;
     adj.get(ed.from).add(ed.to);
     adj.get(ed.to).add(ed.from);
@@ -46,12 +53,20 @@ function buildContext(includeAll = false) {
     // 해당 종류의 박스 목록
     ofType: (...types) => nodes.filter(n => types.includes(n.type)),
     // n과 직접 연결된 박스 중 해당 종류
-    neighborsOf: (n, ...types) => [...adj.get(n.id)].map(findNode).filter(m => types.includes(m.type)),
-    zoneOf,
-    azOf,
+    neighborsOf: (n, ...types) => [...adj.get(n.id)].map(id => findNode(id, s)).filter(m => types.includes(m.type)),
+    zoneOf: n => zoneOf(n, s),
+    azOf: n => azOf(n, s),
     nameOf: n => SVC_MAP[n.type].name,
+    // 이 구성 전체 (검증 대상이 아닌 서비스도 포함)
+    s,
+    findNode: id => findNode(id, s),
+    findContainer: id => findContainer(id, s),
+    // 연결선으로 이어진 박스 중 해당 종류 (검증 대상이 아닌 서비스도 찾는다)
+    linkedNodes: (n, ...types) => linkedNodesOf(s, n, ...types),
+    subnetsIn: (az, ...types) => subnetsInOf(s, az, ...types),
+    containerNodes: () => containerNodes(s),
     // Auto Scaling 그룹 영역과 그 안의 EC2
-    asgGroups: () => state.containers.filter(c => c.type === 'asg').map(area => ({
+    asgGroups: () => s.containers.filter(c => c.type === 'asg').map(area => ({
       area,
       members: asgMembersOf(area, nodes),
     })),
@@ -59,13 +74,13 @@ function buildContext(includeAll = false) {
 }
 
 // 컨테이너 박스 (ECS·EKS·Fargate는 검증 대상이 아니라 ctx에 없어 직접 찾는다)
-function containerNodes() {
-  return state.nodes.filter(n => ['ecs', 'eks', 'fargate'].includes(n.type));
+function containerNodes(s = state) {
+  return s.nodes.filter(n => ['ecs', 'eks', 'fargate'].includes(n.type));
 }
 
 // EC2가 Session Manager와 이어졌는지
-function ec2HasSessionManager(e) {
-  return linkedNodes(e, 'sessionmanager').length > 0;
+function ec2HasSessionManager(e, s = state) {
+  return linkedNodesOf(s, e, 'sessionmanager').length > 0;
 }
 
 // 프라이빗 서브넷에 EC2가 있는 AZ 목록과, 그중 같은 AZ의 퍼블릭 서브넷에 NAT가 있는 AZ 목록
@@ -81,7 +96,7 @@ function requestReach(ctx) {
   const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
   const queue = [...reached];
   for (let i = 0; i < queue.length; i++) {
-    ctx.neighborsOf(findNode(queue[i]), ...PASS).forEach(m => {
+    ctx.neighborsOf(ctx.findNode(queue[i]), ...PASS).forEach(m => {
       if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
     });
   }

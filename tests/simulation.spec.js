@@ -648,3 +648,38 @@ test('시뮬레이션 중 박스를 클릭하면 설명 패널 맨 위에 지금
   await page.locator('#result .tab[data-tab="validate"]').click();         // 검증 탭에서는 지금 상태 칸 없음
   await expect(sim).toBeHidden();
 });
+
+test('R3: 캔버스와 다른 구성을 넘겨 판정·시뮬레이션·장애를 계산해도 캔버스 결과가 섞이지 않는다', async ({ page }) => {
+  await openApp(page);
+  await buildSimArch(page);
+  const r = await page.evaluate(() => {
+    const canvasOf = () => JSON.stringify({ v: validateArchitecture().status, sim: simulateTraffic(300).successRate });
+    const before = canvasOf();
+    const stateBefore = JSON.stringify(state);
+    // 다른 구성: 캔버스를 복사한 뒤 두 번째 EC2와 그 연결선을 뺌
+    const s2 = JSON.parse(JSON.stringify({ nodes: state.nodes, containers: state.containers, edges: state.edges }));
+    const gone = s2.nodes.filter(n => n.type === 'ec2')[1].id;
+    s2.nodes = s2.nodes.filter(n => n.id !== gone);
+    s2.edges = s2.edges.filter(e => e.from !== gone && e.to !== gone);
+    const sim2 = simulateTraffic(300, null, 0, s2);
+    // 장애도 그 구성으로: 남은 EC2를 끄면 그 구성에서는 모두 실패
+    const f = createFaults(s2);
+    f.down.add(s2.nodes.find(n => n.type === 'ec2').id);
+    const down2 = simulateTraffic(300, simFaultOptions(f), 0, s2);
+    // 판정: 그 구성에서 RDS를 빼면 오류
+    const s3 = JSON.parse(JSON.stringify(s2));
+    s3.nodes = s3.nodes.filter(n => n.type !== 'rds');
+    return {
+      before, after: canvasOf(), sameState: JSON.stringify(state) === stateBefore,
+      canvasSim: simulateTraffic(300).successRate, sim2: sim2.successRate, hasGone: sim2.nodes.has(gone),
+      down2: down2.successRate, v3: validateArchitecture(s3).status, canvasV: validateArchitecture().status,
+    };
+  });
+  expect(r.after).toBe(r.before);            // 캔버스 결과 그대로
+  expect(r.sameState).toBe(true);            // 캔버스 구성도 그대로
+  expect(r.sim2).toBeLessThan(r.canvasSim);  // EC2 1대 구성은 더 많이 실패
+  expect(r.hasGone).toBe(false);             // 뺀 박스는 결과에 없음
+  expect(r.down2).toBe(0);
+  expect(r.v3).toBe('error');
+  expect(r.canvasV).not.toBe('error');
+});

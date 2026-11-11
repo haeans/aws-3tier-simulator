@@ -175,7 +175,7 @@ function startMoveDrag(e, item, el) {
   if (!multi) select(item.id);
 
   const before = takeSnapshot();
-  const group = multi ? [...multiSel].map(findNode).filter(Boolean) : [item];
+  const group = multi ? [...multiSel].map(id => findNode(id)).filter(Boolean) : [item];
   if (isContainer(item)) {
     const d = getDescendants(item.id);
     group.push(...d.containers, ...d.nodes);

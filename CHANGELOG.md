@@ -13,6 +13,14 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.50.2] 2026-11-11  규칙·엔진이 구성을 인자로 받음 (31번, REFACTOR R3)
+  변경: validateArchitecture(s)·buildContext(includeAll, s)·simulateTraffic(rps, faults, attack, s)·createFaults(s)·perfDistances(s) 등이
+        구성 s를 받는다 (없으면 캔버스 구성 state). 장애 정보는 만든 구성을 f.s로 기억해 상태 확인·장애 조치·Auto Scaling이 그 구성을 봄
+  변경: 규칙 본문은 전역 대신 ctx의 도구를 씀 (ctx.s, ctx.findNode, ctx.linkedNodes, ctx.subnetsIn, ctx.containerNodes 등)
+        findNode(id, s)·findContainer(id, s)·zoneOf(n, s)·azOf(n, s)에 구성 인자 추가 (map(findNode) 같은 호출은 화살표 함수로 감쌈)
+  추가: 테스트 — 캔버스와 다른 구성을 넘겨 계산해도 캔버스 결과·구성이 섞이지 않음 (tests/simulation.spec.js)
+  비고: 화면 동작·판정·제안·시뮬레이션 결과는 그대로 (기준선 테스트 통과). 배치 규칙(findViolation 등)은 편집 중인 캔버스만 보므로 그대로 둠
+
 [1.50.1] 2026-11-11  상태·도형 도구를 화면 파일에서 분리 (30번, REFACTOR R2)
   변경: 캔버스 상태(state·newId)와 findNode·findContainer·isContainer·rectOf·centerOf·inRect·inRectInclusive·rectsOverlap을
         js/ui/core.js에서 새 파일 js/model.js로 옮김 (DOM을 쓰지 않음). 규칙(js/rules/)이 화면 파일(js/ui/)에 기대지 않게 됨
