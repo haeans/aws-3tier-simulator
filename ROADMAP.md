@@ -7,8 +7,7 @@
 
 ## 진행 중 / 다음
 
-31) [구성을 인자로] REFACTOR.md R3 — 진행 중 (v1.50.2, 브랜치 refactor/config-arg)
-    - 판정·제안·시뮬레이션·장애 엔진이 구성 s를 받음 (없으면 캔버스). 13번 전후 비교의 바탕
+(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R4 이후 또는 ROADMAP [후보])
 
 
 ## 확정 (순서대로)
@@ -267,3 +266,6 @@
 
 30) [상태·도형 도구 분리] REFACTOR.md R2 — 완료 (v1.50.1, PR #18)
     - state·findNode·rectOf 등을 js/model.js로. script 순서 data → model → rules → ui → main (사용자 승인 2026-11-11)
+
+31) [구성을 인자로] REFACTOR.md R3 — 완료 (v1.50.2, PR #19)
+    - 판정·제안·시뮬레이션·장애 엔진이 구성 s를 받음 (없으면 캔버스). 13번 전후 비교의 바탕
