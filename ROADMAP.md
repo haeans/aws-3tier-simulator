@@ -7,8 +7,7 @@
 
 ## 진행 중 / 다음
 
-32) [중복 조회 정리] REFACTOR.md R4 — 진행 중 (v1.50.3, 브랜치 refactor/linked)
-    - 연결 상대 찾기를 edgeOtherEnd 하나로, requestReach는 perfDistances 결과를 씀 (결과 같음 확인)
+(없음 — 다음 작업은 사용자가 고른다: REFACTOR.md R5 이후 또는 ROADMAP [후보])
 
 
 ## 확정 (순서대로)
@@ -270,3 +269,6 @@
 
 31) [구성을 인자로] REFACTOR.md R3 — 완료 (v1.50.2, PR #19)
     - 판정·제안·시뮬레이션·장애 엔진이 구성 s를 받음 (없으면 캔버스). 13번 전후 비교의 바탕
+
+32) [중복 조회 정리] REFACTOR.md R4 — 완료 (v1.50.3, PR #20)
+    - 연결 상대 찾기를 edgeOtherEnd 하나로, requestReach는 perfDistances 결과를 씀 (결과 같음 확인)
