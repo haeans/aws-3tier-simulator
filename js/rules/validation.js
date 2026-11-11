@@ -132,10 +132,7 @@ const VALIDATION_RULES = [
       if (!dbs.length) return [];
       // 근거: CF-01·R53-02·LB-07 — CloudFront·Route 53·WAF·Load Balancer가 DB에 바로 이어져 있으면 "인터넷과 바로 이어지지 않는다"고 칭찬하지 않는다
       // (LB—RDS는 오류·경고 근거가 없어(등급 X) 판정은 그대로 두고 칭찬만 막는다. Route 53·WAF는 검증 대상이 아니라 ctx에 없으므로 연결선에서 직접 찾는다)
-      const exposed = dbs.some(db => ctx.s.edges.some(e => {
-        const other = ctx.findNode(e.from === db.id ? e.to : e.to === db.id ? e.from : '');
-        return other && ['cloudfront', 'route53', 'waf', 'lb'].includes(other.type);
-      }));
+      const exposed = dbs.some(db => ctx.linkedNodes(db, 'cloudfront', 'route53', 'waf', 'lb').length);
       if (exposed) return [];
       // 근거: DB-05 — 칭찬은 모든 DB가 DB 서브넷에 있을 때만 (프라이빗은 오류는 아니지만 칭찬은 아님, 퍼블릭은 경고)
       if (dbs.some(db => ctx.zoneOf(db) !== 'db')) return [];

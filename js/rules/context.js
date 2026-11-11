@@ -34,7 +34,7 @@ function linkedNodes(n, ...types) {
 }
 function linkedNodesOf(s, n, ...types) {
   return s.edges
-    .map(e => findNode(e.from === n.id ? e.to : e.to === n.id ? e.from : '', s))
+    .map(e => edgeOtherEnd(e, n.id, s))
     .filter(m => m && types.includes(m.type));
 }
 
@@ -91,14 +91,8 @@ function natCoverage(ctx) {
 }
 
 // 사용자에서 출발해 요청이 닿는 박스 id 집합 (Route 53·WAF는 길이 아니므로 거치지 않음)
+// R4: 시뮬레이션의 perfDistances와 같은 탐색이라 그 결과를 쓴다. 모든 서비스를 보는 탐색이므로
+// 제안용 ctx(buildContext(true))에서만 쓴다 (검증 대상만 보는 ctx와는 닿는 범위가 다르다)
 function requestReach(ctx) {
-  const PASS = SERVICES.map(s => s.type).filter(t => t !== 'waf' && t !== 'route53');
-  const reached = new Set(ctx.ofType(...USER_TYPES).map(u => u.id));
-  const queue = [...reached];
-  for (let i = 0; i < queue.length; i++) {
-    ctx.neighborsOf(ctx.findNode(queue[i]), ...PASS).forEach(m => {
-      if (!reached.has(m.id)) { reached.add(m.id); queue.push(m.id); }
-    });
-  }
-  return reached;
+  return new Set(perfDistances(ctx.s).dist.keys());
 }

@@ -502,7 +502,7 @@ const SUGGESTION_RULES = [
         if (ctx.linkedNodes(n, 'nat').length) return;   // NAT로 나가는 길이 있음
         // 서버—CloudWatch를 "서버가 시작한 통신"(에이전트)으로 고른 선
         const cws = ctx.s.edges.filter(ed => ed.from === n.id || ed.to === n.id).map(ed => {
-          const other = ctx.findNode(ed.from === n.id ? ed.to : ed.from);
+          const other = edgeOtherEnd(ed, n.id, ctx.s);
           if (!other || other.type !== 'cloudwatch') return null;
           return edgeInfo(n.type, other.type, ed.kind || null).kind === 'egress' ? other : null;
         }).filter(m => m && noEndpoint(m));
