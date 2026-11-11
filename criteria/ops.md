@@ -108,6 +108,16 @@
 - 인용: "manage a collection of resources as a single unit"
 - 상태: 제외 (규칙 없음)
 
+### EGR-01 · 등급 C (28번, 조사일 2026-11-11)
+- 요약: 서버가 먼저 여는 연결(CloudWatch 에이전트, ECS Exec)은 프라이빗 서브넷에서 NAT나 인터페이스 VPC Endpoints가 있어야 닿는다
+- 근거: [ECS Exec](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html), [CloudWatch 인터페이스 엔드포인트](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch-and-interface-VPC.html)
+- 인용: "If you don't have internet access ... you must create the interface Amazon VPC endpoints" (ECS Exec) / "without requiring an internet gateway, network address translation (NAT) instance" (CloudWatch)
+- 표현 방식: 프라이빗 서버(EC2·ECS·Fargate)에 NAT 연결이 없고, 상대(CloudWatch 초록 선 / 컨테이너—Session Manager)에 VPC Endpoints 연결도 없으면 제안
+- 등급 이유: CloudWatch 기본 지표는 길이 없어도 모인다(CW-01). 에이전트 로그는 CloudWatch Logs 문서를 읽지 못해 확인하지 못함 → 정상 판정을 흔들지 않게 제안
+- 제외: EC2—Session Manager(SSM-01 판정 16), 컨테이너—ECR(CTR-02 판정 18), S3·DynamoDB(제안 3). EKS—Session Manager는 근거 못 찾음(X)
+- 반영 규칙: SUGGESTION #19 서버 통신 경로
+- 상태: 반영됨 (v1.50)
+
 ## 3h·3j 반영 요약 (다음 칸이 할 일)
 
 | 칸 | 변경 | 근거 |

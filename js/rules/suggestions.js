@@ -487,4 +487,37 @@ const SUGGESTION_RULES = [
       }];
     },
   },
+  {
+    // 근거: EGR-01 (등급 C, 28번) — 서버가 먼저 여는 연결은 프라이빗 서브넷에서 NAT나 VPC Endpoints가 있어야 나간다
+    // 이미 다른 규칙이 알리는 짝은 뺀다: EC2—Session Manager(판정 16), 컨테이너—ECR(판정 18), 서버—S3·DynamoDB(제안 3)
+    // EKS—Session Manager는 공식 문서 근거를 찾지 못해 넣지 않는다
+    id: 19, kind: 'improve', title: '서버 통신 경로',
+    pillars: ['operations', 'security'],
+    basis: 'CloudWatch 에이전트가 로그를 보내거나 ECS Exec(Session Manager)로 컨테이너에 접속할 때는 서버가 먼저 밖으로 연결해요. 프라이빗 서브넷에서는 NAT를 거치거나 VPC Endpoints를 써야 닿아요.',
+    ref: 'https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html',
+    check() {
+      const issues = [];
+      const noEndpoint = m => !linkedNodes(m, 'vpce').length;
+      state.nodes.filter(n => ['ec2', 'ecs', 'fargate'].includes(n.type) && zoneOf(n) === 'private').forEach(n => {
+        if (linkedNodes(n, 'nat').length) return;   // NAT로 나가는 길이 있음
+        // 서버—CloudWatch를 "서버가 시작한 통신"(에이전트)으로 고른 선
+        const cws = state.edges.filter(ed => ed.from === n.id || ed.to === n.id).map(ed => {
+          const other = findNode(ed.from === n.id ? ed.to : ed.from);
+          if (!other || other.type !== 'cloudwatch') return null;
+          return edgeInfo(n.type, other.type, ed.kind || null).kind === 'egress' ? other : null;
+        }).filter(m => m && noEndpoint(m));
+        // 컨테이너—Session Manager (ECS Exec)
+        const sms = n.type === 'ec2' ? [] : linkedNodes(n, 'sessionmanager').filter(noEndpoint);
+        const targets = [...new Set([...cws, ...sms])];
+        if (!targets.length) return;
+        const names = [...new Set(targets.map(m => SVC_MAP[m.type].name))].join('·');
+        issues.push({
+          nodeIds: [n.id, ...targets.map(m => m.id)],
+          reason: `프라이빗 서브넷의 ${SVC_MAP[n.type].name}가 ${names}로 먼저 여는 연결(초록 선)이 밖으로 나갈 길이 없어 보여요.`,
+          action: `${SVC_MAP[n.type].name}를 NAT에 연결하거나, VPC Endpoints를 ${names}와 연결하세요.`,
+        });
+      });
+      return issues;
+    },
+  },
 ];

@@ -13,6 +13,15 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.50] 2026-11-11  서버 통신 경로 제안 (28번)
+  추가: 제안 19 [서버 통신 경로] — 프라이빗 서브넷의 서버가 먼저 여는 연결(초록 선)이 NAT도 VPC Endpoints도 거치지 않으면 제안
+        대상: 서버—CloudWatch를 "서버가 시작한 통신"(에이전트)으로 고른 선, 컨테이너(ECS·Fargate)—Session Manager(ECS Exec)
+  수정: VPC Endpoints → CloudWatch 선이 복제·전달(보라 점선)로, VPC Endpoints—Session Manager·ECR 선이 요청(검정)으로 그려지던 것
+        → 모두 서버가 시작한 통신(초록, VPC Endpoints → 상대). [서버 통신] 보기의 흐름 점도 VPC Endpoints 너머까지 이어짐
+  비고: 이미 알리는 짝은 빼서 중복 알림 없음 — EC2—Session Manager(판정 16), 컨테이너—ECR(판정 18), 서버—S3·DynamoDB(제안 3)
+        EKS—Session Manager는 공식 문서 근거를 찾지 못해 넣지 않음. 판정(정상·경고·오류)은 바뀌지 않음. 근거 criteria/ops.md EGR-01
+  비고: 29번(R1) 완료 표시, CLAUDE.md·HANDOFF.md의 main 커밋 값(6a69b5b) 맞춤
+
 [1.49] 2026-11-10  응답 흐름과 보기 전환 (27번, 동작 개편 3단계)
   변경: 검증 후 흐름 — 요청 점(채운 원)이 끝까지 간 뒤 응답 점(파랑 큰 원, 정상·병목·오류는 요청 점 색으로)이 같은 길을 거꾸로 돌아옴 (한 번에 요청 하나의 왕복)
   추가: 캐시가 있으면 요청을 번갈아 보여 줌 — 캐시에 없는 요청(DB까지) → ElastiCache에 있는 요청(DB 안 감) → CloudFront에 있는 요청(엣지에서 바로 응답)

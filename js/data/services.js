@@ -155,6 +155,8 @@ const EDGE_RULES = [
   [['rds'], ['rds-standby', 'rds-replica'], 'replication'],      // DB 복제 (Standby 동기, Replica 비동기)
   [['elasticache'], ['elasticache'], 'replication'],             // 캐시 복제
   [['cloudtrail'], ['cloudwatch', 's3'], 'replication'],         // 기록 전달
+  // 서버가 VPC Endpoints를 거쳐 AWS 서비스로 나가는 길 (28번). "→ CloudWatch는 복제·전달" 줄보다 먼저 와야 한다
+  [['vpce'], ['s3', 'dynamodb', 'cloudwatch', 'sessionmanager', 'ecr'], 'egress'],
   [null, ['cloudwatch'], 'replication'],                         // 지표·로그 보내기
   [['codecommit'], ['codepipeline', 'codebuild'], 'replication'],   // 배포 단계 (소스 → 빌드 → 배포)
   [['codepipeline'], ['codebuild', 'codedeploy'], 'replication'],
@@ -162,7 +164,6 @@ const EDGE_RULES = [
   [['codedeploy'], EDGE_SERVERS, 'replication'],
   [EDGE_SERVERS, ['nat', 'vpce', 'sessionmanager', 'ecr'], 'egress'],   // 서버가 밖으로 (Session Manager·ECR은 서버 쪽 에이전트가 연결을 염)
   [['nat'], ['igw'], 'egress'],
-  [['vpce'], ['s3', 'dynamodb'], 'egress'],
 ];
 // 실제로 두 가지가 다 가능한 짝 (26번): 선을 골라 설명 패널에서 종류를 바꿀 수 있다. 첫 번째가 자동(기본) 종류
 // 서버가 시작한 통신일 때 화살표는 서버 → 상대

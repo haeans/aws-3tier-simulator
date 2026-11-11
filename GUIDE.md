@@ -40,7 +40,7 @@
 ### 검증
 - [검증하기]: 정상 / 경고 / 오류 3단계 판정 + 문제 박스 강조 (규칙 19개)
 - 검증 중에는 버튼이 [검증 종료]로 바뀜. 누르면 결과를 지우고 검증 전 화면으로 (구성은 그대로)
-- 개선·제거 제안 (판정과 별개, 규칙 18개)
+- 개선·제거 제안 (판정과 별개, 규칙 19개)
 - 잘한 점: 좋은 구성이 실제로 있으면 근거 태그와 함께 칭찬 (판정 5개·제안 9개 규칙에 짝지음). 문제 다음, 제안 앞에 표시
 - 판정·제안마다 Well-Architected 기준 태그와 "왜 그런지" 근거, 근거 문서 링크(자세히) 표시
 - 서비스 설명·연결 안내는 AWS 공식 문서 기준 (설명 패널에서 공식 문서 열기)
@@ -119,7 +119,7 @@ aws-3tier-simulator/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등)
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
-│   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 18개)
+│   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 19개)
 │   │   └─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
 │   ├─ ui/
 │   │   ├─ core.js            UI-1 상태·공통 유틸, UI-2 소속 판정·동작 검사

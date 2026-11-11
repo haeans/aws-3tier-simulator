@@ -409,3 +409,13 @@ test('26번: 선을 고르면 설명 패널에 선 종류, 서버—S3는 요청
   await expect(page.locator('#info-panel input[name="edge-kind"]')).toHaveCount(0);
   await expect(page.locator('#info-panel')).toContainText('두 박스 종류로 정해져요');
 });
+
+test('28번: VPC Endpoints → CloudWatch·Session Manager·ECR은 서버가 시작한 통신(초록)이고, 서버 통신 흐름이 이어진다', async ({ page }) => {
+  await openApp(page);
+  const info = await page.evaluate(() => Object.fromEntries([
+    ['vpce', 'cloudwatch'], ['cloudwatch', 'vpce'], ['vpce', 'sessionmanager'], ['ecr', 'vpce'], ['vpce', 'dynamodb'],
+  ].map(([a, b]) => { const r = edgeInfo(a, b); return [`${a}-${b}`, `${r.kind}${r.dir}`]; })));
+  expect(info).toEqual({
+    'vpce-cloudwatch': 'egress1', 'cloudwatch-vpce': 'egress-1', 'vpce-sessionmanager': 'egress1', 'ecr-vpce': 'egress-1', 'vpce-dynamodb': 'egress1',
+  });
+});
