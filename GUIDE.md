@@ -115,6 +115,7 @@ aws-3tier-simulator/
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연, PERF_ROUTES: 요청을 넘기는 방식, 근거 문서)
 │   │   └─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA, 고쳐 보세요용 EXAMPLE_MISTAKES)
+│   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등)
@@ -122,7 +123,7 @@ aws-3tier-simulator/
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 19개)
 │   │   └─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
 │   ├─ ui/
-│   │   ├─ core.js            UI-1 상태·공통 유틸, UI-2 소속 판정·동작 검사
+│   │   ├─ core.js            UI-1 화면 상태·공통 유틸(DOM 참조·좌표 변환), UI-2 소속 판정·동작 검사
 │   │   ├─ palette.js         UI-3 팔레트·설명 툴팁
 │   │   ├─ edit.js            UI-4 추가·삭제·선택·이동·크기 조절
 │   │   ├─ edges.js           UI-5 연결선 (연결점 끌기·경로·손잡이)
@@ -142,7 +143,8 @@ aws-3tier-simulator/
 - 자동 테스트: `npm test`          (화면 보며 실행: `npm run test:ui`)
 
 ### 스크립트 불러오는 순서
-index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → rules → ui → main)
+index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → rules → ui → main)
+- js/model.js에는 DOM을 쓰는 코드를 넣지 않는다. 규칙(js/rules/)은 js/ui/의 이름을 쓰지 않는다 (R2, 2026-11-11)
 일반 script 태그라 파일끼리 전역 변수·함수를 공유한다.
 새 파일을 추가하면 index.html에 script 태그를 넣고, main.js는 항상 마지막에 둔다.
 

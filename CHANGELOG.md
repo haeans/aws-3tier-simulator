@@ -13,6 +13,12 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.50.1] 2026-11-11  상태·도형 도구를 화면 파일에서 분리 (30번, REFACTOR R2)
+  변경: 캔버스 상태(state·newId)와 findNode·findContainer·isContainer·rectOf·centerOf·inRect·inRectInclusive·rectsOverlap을
+        js/ui/core.js에서 새 파일 js/model.js로 옮김 (DOM을 쓰지 않음). 규칙(js/rules/)이 화면 파일(js/ui/)에 기대지 않게 됨
+  변경: script 순서 data → model → rules → ui → main (사용자 승인 2026-11-11)
+  비고: 화면 동작·판정·제안·시뮬레이션 결과는 그대로 (기준선 테스트 통과)
+
 [1.50] 2026-11-11  서버 통신 경로 제안 (28번)
   추가: 제안 19 [서버 통신 경로] — 프라이빗 서브넷의 서버가 먼저 여는 연결(초록 선)이 NAT도 VPC Endpoints도 거치지 않으면 제안
         대상: 서버—CloudWatch를 "서버가 시작한 통신"(에이전트)으로 고른 선, 컨테이너(ECS·Fargate)—Session Manager(ECS Exec)
