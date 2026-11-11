@@ -17,6 +17,8 @@ const newId = prefix => `${prefix}${idSeq++}`;   // n=서비스, c=영역, e=연
 const findNode = (id, s = state) => s.nodes.find(n => n.id === id);
 const findContainer = (id, s = state) => s.containers.find(c => c.id === id);
 const isContainer = item => item.width !== undefined;
+// 연결선 ed에서 박스 id의 반대편 박스 (ed가 id와 이어지지 않았으면 undefined) — R4: 연결 상대 찾기는 모두 이것을 쓴다
+const edgeOtherEnd = (ed, id, s = state) => findNode(ed.from === id ? ed.to : ed.to === id ? ed.from : '', s);
 
 // ----- 도형 계산 (박스 크기 NODE_W·NODE_H는 js/data/services.js) -----
 function rectOf(item) {

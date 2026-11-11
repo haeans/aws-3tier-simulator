@@ -11,8 +11,7 @@ const $info = document.getElementById('info-panel');
 // 박스와 직접 연결된 상대 박스의 종류 목록
 function neighborTypes(id) {
   return state.edges
-    .filter(ed => ed.from === id || ed.to === id)
-    .map(ed => findNode(ed.from === id ? ed.to : ed.from))
+    .map(ed => edgeOtherEnd(ed, id))
     .filter(Boolean)
     .map(n => n.type);
 }

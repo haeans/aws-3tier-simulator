@@ -13,6 +13,13 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.50.3] 2026-11-11  중복 조회 정리 (32번, REFACTOR R4)
+  변경: "연결선의 반대편 박스 찾기"를 edgeOtherEnd(ed, id, s)(js/model.js) 하나로. linkedNodes·판정 4 칭찬·시뮬레이션 WAF 앞단 찾기(frontsOf)·
+        제안 19·설명 패널(neighborTypes)이 이것(또는 linkedNodes)을 씀
+  변경: requestReach(제안용 요청 도달 범위)가 perfDistances(시뮬레이션)의 결과를 씀 — 예시 3개와 이상한 연결을 더한 구성에서 결과가 같음을 확인
+        제안용 ctx(모든 서비스)에서만 쓴다고 주석에 남김. ctx.neighborsOf와 linkedNodes는 범위가 달라 그대로 둠 (GUIDE.md 4장)
+  비고: 화면 동작·판정·제안·시뮬레이션 결과는 그대로 (기준선 테스트 통과)
+
 [1.50.2] 2026-11-11  규칙·엔진이 구성을 인자로 받음 (31번, REFACTOR R3)
   변경: validateArchitecture(s)·buildContext(includeAll, s)·simulateTraffic(rps, faults, attack, s)·createFaults(s)·perfDistances(s) 등이
         구성 s를 받는다 (없으면 캔버스 구성 state). 장애 정보는 만든 구성을 f.s로 기억해 상태 확인·장애 조치·Auto Scaling이 그 구성을 봄

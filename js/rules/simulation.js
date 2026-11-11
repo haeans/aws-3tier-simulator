@@ -59,9 +59,8 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     inLat.set(id, (inLat.get(id) || 0) + amount * lat);
   };
   // WAF가 요청 경로의 CloudFront·LB에 붙어 있으면 공격 요청을 막음 (비율 기반 규칙 등)
-  const frontsOf = id => s.edges.filter(e => e.from === id || e.to === id).map(e => findNode(e.from === id ? e.to : e.from, s))
-    .filter(m => m && (m.type === 'cloudfront' || m.type === 'lb') && dist.has(m.id));
-  const guard = attack > 0 ? s.nodes.find(w => w.type === 'waf' && frontsOf(w.id).length) : null;
+  const frontsOf = w => linkedNodesOf(s, w, 'cloudfront', 'lb').filter(m => dist.has(m.id));
+  const guard = attack > 0 ? s.nodes.find(w => w.type === 'waf' && frontsOf(w).length) : null;
   const total = rps + (guard ? 0 : attack);
   users.forEach(u => add(u.id, users.length ? total / users.length : 0, 0));
 
