@@ -7,6 +7,7 @@
    --------------------------------------------------------- */
 const $btnLoad = document.getElementById('btn-load');
 const $loadMenu = document.getElementById('load-menu');
+const $fileOpen = /** @type {HTMLInputElement} */ (document.getElementById('file-open'));
 
 // 목록에서 서로 다른 것 n개를 랜덤으로
 function pickRandom(list, n) {
@@ -69,12 +70,27 @@ function fitView() {
 function buildLoadMenu() {
   $loadMenu.innerHTML = EXAMPLES.map((ex, i) =>
     `<button class="load-item" data-key="${ex.key}"${ex.key === 'template' ? ' id="btn-template"' : ''}>` +
-    `<b>${ex.name}</b><span>${ex.desc}</span></button>` + (i === 0 ? '<div class="load-sep"></div>' : '')).join('');
-  $loadMenu.querySelectorAll('.load-item').forEach(b => b.addEventListener('click', () => {
+    `<b>${ex.name}</b><span>${ex.desc}</span></button>` + (i === 0 ? '<div class="load-sep"></div>' : '')).join('') +
+    // 39번: 파일에서 열기 (맨 아래)
+    '<div class="load-sep"></div><button class="load-item" id="btn-file-open"><b>파일에서 열기…</b>' +
+    '<span>[파일로 저장]한 구성 파일(.json)을 열어요</span></button>';
+  $loadMenu.querySelectorAll('.load-item[data-key]').forEach(b => b.addEventListener('click', () => {
     setLoadMenu(false);
     loadExample(b.getAttribute('data-key'));
   }));
+  document.getElementById('btn-file-open').addEventListener('click', () => {
+    setLoadMenu(false);
+    $fileOpen.value = '';   // 같은 파일을 다시 골라도 열리게
+    $fileOpen.click();
+  });
 }
+// 파일을 고르면 읽어서 연다 (js/ui/storage.js의 importData)
+$fileOpen.addEventListener('change', () => {
+  const file = $fileOpen.files && $fileOpen.files[0];
+  if (!file) return;
+  file.text().then(importData, () => showToast('파일을 읽지 못했어요.', 'warn'));
+});
+document.getElementById('btn-file-save').addEventListener('click', () => saveToFile());
 function setLoadMenu(open) {
   $loadMenu.hidden = !open;
   $btnLoad.classList.toggle('active', open);

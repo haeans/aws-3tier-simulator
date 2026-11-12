@@ -77,6 +77,80 @@ function loadSaved() {
   return nodes.length + containers.length;
 }
 
+// ----- 파일로 저장 / 파일에서 열기 (39번) -----
+// 브라우저 저장소는 한 칸뿐이라, 구성을 파일로 내려받아 보관·공유하고 다시 열 수 있게 한다.
+// 파일 내용: { app, version(저장 형식 번호), savedAt, state: { nodes, containers, edges } }
+// 화면 시점(줌·스크롤)은 넣지 않는다. 열 때 구성이 한 화면에 들어오도록 맞춘다(fitView).
+const FILE_APP = 'aws-3tier-simulator';   // 이 도구에서 저장한 파일인지 알아보는 표시
+
+function exportData() {
+  return JSON.stringify({ app: FILE_APP, version: SAVE_VERSION, savedAt: new Date().toISOString(),
+    state: { nodes: state.nodes, containers: state.containers, edges: state.edges } }, null, 2);
+}
+
+// 파일 이름: aws-3tier-20261112-1530.json (저장한 날짜·시각)
+function exportFileName(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `aws-3tier-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`;
+}
+
+function saveToFile() {
+  if (!state.nodes.length && !state.containers.length) { showToast('저장할 내용이 없어요. 캔버스에 먼저 배치해 보세요.'); return; }
+  const url = URL.createObjectURL(new Blob([exportData()], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = exportFileName();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`"${a.download}" 파일로 저장했어요. 브라우저의 내려받기 폴더를 확인해 보세요.`);
+}
+
+// 파일 내용(글자)을 캔버스에 연다. 열었으면 true.
+// 파일은 사람이 고쳤을 수 있으므로 숫자·글자를 확인하고, 알 수 없는 항목은 버린다 (저장소에서 불러올 때와 같은 migrateSaved)
+function importData(text) {
+  let data = null;
+  try { data = JSON.parse(text); } catch (e) { /* 아래에서 안내 */ }
+  if (!data || data.app !== FILE_APP || !data.state) {
+    showToast('이 도구에서 [파일로 저장]한 파일이 아니라서 열 수 없어요.', 'warn');
+    return false;
+  }
+  const num = v => typeof v === 'number' && isFinite(v);
+  const raw = data.state;
+  const total = ['nodes', 'containers', 'edges'].reduce((n, k) => n + (Array.isArray(raw[k]) ? raw[k].length : 0), 0);
+  const m = migrateSaved(raw, Number(data.version) || 1);
+  const seenIds = new Set();
+  const fresh = i => typeof i.id === 'string' && !seenIds.has(i.id) && !!seenIds.add(i.id);   // id가 글자이고 겹치지 않는 것만
+  const nodes = m.nodes.filter(n => fresh(n) && num(n.x) && num(n.y));
+  const containers = m.containers.filter(c => fresh(c) && num(c.x) && num(c.y) && num(c.width) && num(c.height) && c.width > 0 && c.height > 0);
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const edges = m.edges.filter(ed => fresh(ed) && nodeIds.has(ed.from) && nodeIds.has(ed.to) && ed.from !== ed.to);
+  containers.forEach(c => { c.label = String(c.label || AREA_MAP[c.type].name).slice(0, 40); });
+  if (!nodes.length && !containers.length) {
+    showToast('파일에 열 수 있는 박스나 영역이 없어요.', 'warn');
+    return false;
+  }
+  const hasContent = state.nodes.length + state.containers.length > 0;
+  if (hasContent && !confirm('캔버스의 기존 내용을 모두 지우고 파일의 구성을 열까요?')) return false;
+
+  state.nodes = nodes;
+  state.containers = containers;
+  state.edges = edges;
+  // 새 id가 파일의 id와 겹치지 않도록 번호 이어가기
+  const maxId = Math.max(0, ...[...nodes, ...containers, ...edges].map(i => parseInt(i.id.slice(1), 10) || 0));
+  idSeq = Math.max(idSeq, maxId + 1);
+  selectedId = null;
+  cancelPendingConnect();
+  recomputeParents();
+  render();
+  fitView();
+  const dropped = total - nodes.length - containers.length - edges.length;
+  showToast(`파일을 열었어요 (박스 ${nodes.length}개, 영역 ${containers.length}개, 연결 ${edges.length}개).` +
+    (dropped > 0 ? ` 알 수 없는 항목 ${dropped}개는 뺐어요.` : '') + ' 잘못 열었으면 [되돌리기]를 누르세요.');
+  return true;
+}
+
 
 // ----- 실행 취소 / 다시 실행 -----
 // render()가 끝날 때마다 캔버스 상태를 기록한다. 바뀌었으면 바뀌기 전 상태를 되돌리기 목록에 쌓는다.

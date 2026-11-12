@@ -402,3 +402,66 @@ test('R5: 형식 번호가 없는 예전 저장도 불러오고, 영역 이름�
   const v = await page.evaluate(() => [JSON.parse(localStorage.getItem(STORAGE_KEY)).version, SAVE_VERSION]);
   expect(v[0]).toBe(v[1]);
 });
+
+// ----- 39번: 구성을 파일로 저장 / 파일에서 열기 -----
+test('39번: [파일로 저장]으로 내려받은 파일을 [불러오기 ▾] → [파일에서 열기]로 열면 같은 구성이 되고, 되돌릴 수 있다', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('ha'));
+  const before = await page.evaluate(() => stateJSON());
+  // 저장: 날짜 이름의 json 파일이 내려받아짐
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#btn-file-save').click()]);
+  expect(download.suggestedFilename()).toMatch(/^aws-3tier-\d{8}-\d{4}\.json$/);
+  const path = await download.path();
+  const saved = JSON.parse(require('fs').readFileSync(path, 'utf8'));
+  expect(saved.app).toBe('aws-3tier-simulator');
+  expect(saved.state.nodes.length).toBeGreaterThan(5);
+
+  // 다른 구성으로 바꾼 뒤 파일에서 열기 (기존 내용을 지울지 묻는 창은 openApp이 수락)
+  await page.evaluate(() => loadExample('basic'));
+  await page.locator('#btn-load').click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#btn-file-open').click()]);
+  await chooser.setFiles(path);
+  await expect(page.locator('#toast')).toContainText('파일을 열었어요');
+  expect(await page.evaluate(() => stateJSON())).toBe(before);
+  // 열고 나서 새로 놓는 박스의 id가 파일의 id와 겹치지 않음
+  const dup = await page.evaluate(() => { const id = newId('n'); return [...state.nodes, ...state.containers, ...state.edges].some(i => i.id === id); });
+  expect(dup).toBe(false);
+  // 되돌리기: 열기 전 구성(기본 3-Tier)으로
+  await page.locator('#btn-undo').click();
+  expect(await page.evaluate(() => stateJSON())).not.toBe(before);
+});
+
+test('39번: 이 도구의 파일이 아니면 열지 않고, 알 수 없는 항목은 빼고 연다', async ({ page }) => {
+  await openApp(page);
+  await loadTemplateAt(page);
+  const before = await page.evaluate(() => stateJSON());
+  // 다른 파일·깨진 파일: 캔버스 그대로
+  for (const text of ['글자만 있는 파일', '{"state":{"nodes":[]}}', '{"app":"aws-3tier-simulator","version":1,"state":{"nodes":[],"containers":[],"edges":[]}}']) {
+    expect(await page.evaluate(t => importData(t), text)).toBe(false);
+    expect(await page.evaluate(() => stateJSON())).toBe(before);
+  }
+  // 없는 서비스, 숫자가 아닌 위치, 끝이 없는 연결선, 겹치는 id는 빼고 연다. 영역 이름의 < >는 글자 그대로
+  const file = { app: 'aws-3tier-simulator', version: 1, state: {
+    nodes: [
+      { id: 'n1', type: 'pc', x: 100, y: 100, parentContainer: null },
+      { id: 'n2', type: 'cloudfront', x: 300, y: 100, parentContainer: null },
+      { id: 'n3', type: '없는서비스', x: 500, y: 100, parentContainer: null },
+      { id: 'n4', type: 'pc', x: '왼쪽', y: 100, parentContainer: null },
+      { id: 'n1', type: 'pc', x: 700, y: 100, parentContainer: null },
+    ],
+    containers: [{ id: 'c1', type: 'public', x: 100, y: 300, width: 400, height: 300, parentContainer: null, label: '<b>내 VPC</b>' }],
+    edges: [
+      { id: 'e1', from: 'n1', to: 'n2', fromSide: null, toSide: null, mid: null },
+      { id: 'e2', from: 'n1', to: 'n9', fromSide: null, toSide: null, mid: null },
+    ],
+  } };
+  expect(await page.evaluate(t => importData(t), JSON.stringify(file))).toBe(true);
+  const r = await page.evaluate(() => ({ nodes: state.nodes.map(n => n.id), areas: state.containers.length, edges: state.edges.map(e => e.id),
+    label: document.querySelector('#area-layer .area-label').textContent, bold: document.querySelectorAll('#area-layer .area-label b').length }));
+  expect(r.nodes).toEqual(['n1', 'n2']);
+  expect(r.areas).toBe(1);
+  expect(r.edges).toEqual(['e1']);
+  expect(r.label).toContain('<b>내 VPC</b>');
+  expect(r.bold).toBe(0);
+  await expect(page.locator('#toast')).toContainText('알 수 없는 항목 4개는 뺐어요');
+});

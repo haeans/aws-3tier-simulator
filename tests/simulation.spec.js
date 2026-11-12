@@ -93,7 +93,6 @@ test('캔버스: 사용률별 박스 색, 트래픽이 많을수록 촘촘한 �
   await page.locator('#sim-rps').fill('100');
   await expect(page.locator('.node.sim-ok')).toHaveCount(3);
   await page.waitForFunction(() => simDots.length > 0);
-  const dots100 = await page.evaluate(() => simDots.length);
   expect(await page.evaluate(() => simDots.some(d => d.fail))).toBe(false);
 
   await page.locator('#sim-rps').fill('300');
@@ -110,7 +109,8 @@ test('캔버스: 사용률별 박스 색, 트래픽이 많을수록 촘촘한 �
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator('#tooltip.show .tt-sim')).toContainText('사용률 150%');
   await expect(page.locator('#tooltip.show .tt-desc')).toBeVisible();   // 원래 서비스 설명도 같은 팝업에
-  expect(await page.evaluate(() => simDots.length)).toBeGreaterThan(dots100);   // 요청이 많으면 점이 더 촘촘
+  // (요청이 많을수록 점이 촘촘해지고 화면 전체 상한에서 멈추는 것은 아래 38번 테스트가 확인한다.
+  //  여기서 100 → 300요청/초의 점 수를 비교하면 둘 다 상한에 닿아, 선이 점으로 차기 전에 세었을 때만 통과했다)
   // LB → EC2로 나오는 점의 1/3이 실패 (150 중 50): 나오는 순서대로 3개 중 1개
   const fail = await page.evaluate(() => {
     const ec2 = state.nodes.find(n => n.type === 'ec2').id;
@@ -182,6 +182,7 @@ test('트래픽 점 줄이기(38번): 요청이 많으면 화면 전체 점 수�
   expect(high.label).toBe(String(Math.round(high.per)));
   expect(high.dots).toBeLessThanOrEqual(high.max + 8);   // 상한 근처 (선 끝의 점·사라지는 실패 점만큼 여유)
   expect(high.dots).toBeGreaterThan(high.max / 2);       // 너무 줄지도 않음
+  expect(high.dots).toBeGreaterThan(low.dots);           // 요청이 많으면 점이 더 촘촘
   expect(high.ratio).toBeCloseTo(high.amountRatio, 5);   // 점 간격은 요청량에 반비례 (비율 유지)
 });
 
