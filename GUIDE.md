@@ -44,6 +44,8 @@
 - 잘한 점: 좋은 구성이 실제로 있으면 근거 태그와 함께 칭찬 (판정 5개·제안 9개 규칙에 짝지음). 문제 다음, 제안 앞에 표시
 - 판정·제안마다 Well-Architected 기준 태그와 "왜 그런지" 근거, 근거 문서 링크(자세히) 표시
 - 서비스 설명·연결 안내는 AWS 공식 문서 기준 (설명 패널에서 공식 문서 열기)
+- 흐름 단계 해설 (v1.55): 점이 박스에 닿을 때마다 결과 패널에 그 박스가 하는 일 한 줄 + 네트워크 한 줄(라우팅 테이블·보안 그룹), 박스는 파란 테두리로 강조.
+  [◀ 이전] [⏸ 멈춤] [다음 ▶]으로 멈춘 채 한 단계씩 넘김. [사용자 요청]·[서버 통신] 두 보기 모두
 - 검증 후 요청 방향 화살표 + 사용자부터 한 구간씩 차례로 흐르는 점 (초록=정상, 노랑=병목, 빨강=오류)
   요청 점(채운 원)이 끝까지 간 뒤 응답 점(파랑 큰 원)이 같은 길로 돌아옴. 캐시가 있으면 캐시에 없는/있는 요청을 번갈아. [사용자 요청]/[서버 통신] 보기 전환 (v1.49)
   Route 53(주소 묻기)은 왕복, WAF(요청 검사)는 박스 반짝임으로 표시
@@ -102,7 +104,7 @@ aws-3tier-simulator/
 ├─ tsconfig.json              타입 검사 설정 (@ts-check 파일 검사, 기본 강도)
 ├─ scripts/setup-icons.js     AWS 아이콘 패키지에서 필요한 아이콘을 icons/로 복사 (npm run icons, 개발 도구)
 ├─ icons/                     AWS 공식 아이콘 (커밋하지 않음. 없으면 글자 박스)
-├─ criteria/                  판정 근거 조사 (README.md 기준표·양식, entry·server·data·ops·container.md 묶음별 조사, PROGRESS.md 진행표). 앱에는 넣지 않음
+├─ criteria/                  판정 근거 조사 (README.md 기준표·양식, entry·server·data·ops·container.md 묶음별 조사, flow.md 흐름 단계 해설 근거, PROGRESS.md 진행표). 앱에는 넣지 않음
 ├─ tests/                     자동 테스트 (helpers.js, placement/edges/validation/simulation.spec.js)
 │   ├─ regression.spec.js     리팩터링 기준선: 여러 구성의 판정·제안·잘한 점·시뮬레이션 결과를 스냅샷과 비교
 │   └─ regression.spec.js-snapshots/  기준선 스냅샷 (판정을 일부러 바꿀 때만 다시 저장)
@@ -114,7 +116,8 @@ aws-3tier-simulator/
 │   │   ├─ guide.js           설명 패널 내용 (SERVICE_GUIDE: 연결 상대·오가는 요청·연결하면 안 되는 상대)
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
-│   │   └─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA, 고쳐 보세요용 EXAMPLE_MISTAKES)
+│   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA, 고쳐 보세요용 EXAMPLE_MISTAKES)
+│   │   └─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
 │   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
@@ -283,6 +286,12 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
   - VPC를 옮기면 함께 움직이고, AZ를 옮겨도 그대로 있다.
   - 예전 Auto Scaling 박스가 저장 데이터에 있으면 불러올 때 지우고 안내한다. (기본 틀에는 넣지 않음)
 - ElastiCache는 RDS 앞의 중계기가 아니다. EC2가 캐시와 DB에 각각 연결한다.
+- 흐름 단계 해설 (40번, v1.55): 점의 움직임만으로는 "요청이 박스마다 무슨 일을 겪는지"를 알 수 없어서 더했다.
+  흐름(요청 하나의 왕복)을 같은 때에 출발하는 구간들로 묶어 단계로 나누고(flowStepsOf, js/ui/result.js), 단계마다 점이 닿는 박스의 해설을 패널에 적고 박스를 강조한다.
+  자동으로 흐르다가 [멈춤]·[이전]·[다음]을 누르면 멈춘 채 한 단계씩 본다 (처음부터 멈춰 두면 검증 직후 화면이 멈춰 보여서 자동 재생을 기본으로, 사용자 결정).
+  해설은 캔버스의 말풍선이 아니라 패널에 둔다 (박스·선을 가리지 않고 갈림길에서 겹치지 않게, 사용자 결정).
+  네트워크 한 줄(라우팅 테이블·보안 그룹)은 문구만 더한다. 앱은 이 설정을 그리지 않으므로 판정과는 무관하다 (ROADMAP [후보] G의 ①단계).
+  문구는 공식 문서에서 확인한 내용만 쓰고(criteria/flow.md), 일부만 확인된 것은 확인된 만큼만 쓴다.
 - 응답 흐름 (27번, v1.49): 예전에는 "응답까지 그리면 점이 왕복해 헷갈려서" 요청만 그렸다. 응답을 같은 시간에 섞지 않고,
   요청이 끝까지 간 뒤에 응답이 출발하도록(시간을 거울처럼 뒤집어) 한 요청의 왕복만 보여 줘서 헷갈림을 피한다. 응답 점은 파랑 큰 원 (빈 원·연한 색은 흰 바탕에서 안 보였고, 단계 색과 같으면 요청과 구별이 안 됨 — 사용자 피드백).
   - 캐시: "캐시에 없는 요청 → ElastiCache에 있는 요청 → CloudFront에 있는 요청"을 번갈아 (사용자 결정). 점을 갈라 동시에 보여 주면 복잡해서

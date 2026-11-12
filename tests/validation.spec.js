@@ -962,3 +962,88 @@ test('NAT-04: IGW와 이어지지 않은 NAT가 있으면 제안 20, NAT 칭찬(
   const ids = await page.evaluate(() => validation.suggestions.find(s => s.rule.id === 20).nodeIds);
   expect(ids).toEqual([await page.evaluate(() => state.nodes.filter(n => n.type === 'nat')[1].id)]);
 });
+
+// ----- 40번: 흐름 단계 해설 -----
+test('40번: 흐름 점이 닿는 박스의 해설이 패널에 나오고, [다음]·[이전]으로 멈춘 채 한 단계씩 넘기며 그 박스가 강조된다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.click('#btn-validate');
+  // 자동 재생: 해설과 단계 번호가 채워짐
+  await expect(page.locator('#flow-step-text .fs-line').first()).toBeVisible();
+  await expect(page.locator('#flow-count')).toHaveText(/^\d+ \/ \d+$/);
+  await expect(page.locator('#flow-pause')).toHaveText('⏸ 멈춤');
+  expect(await page.evaluate(() => flowPaused)).toBe(false);
+
+  // [다음]을 실제로 눌러 Load Balancer 단계까지: 멈춘 채 한 단계씩 넘어감
+  const click = async sel => { const b = await page.locator(sel).boundingBox(); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); };
+  const total = await page.evaluate(() => flowSteps.length);
+  let seenLb = false;
+  for (let i = 0; i < total && !seenLb; i++) {
+    const before = await page.locator('#flow-count').textContent();
+    await click('#flow-next');
+    await expect(page.locator('#flow-count')).not.toHaveText(before);
+    seenLb = (await page.locator('#flow-step-text').textContent()).includes('Load Balancer');
+  }
+  expect(seenLb).toBe(true);
+  await expect(page.locator('#flow-pause')).toHaveText('▶ 이어서 재생');
+  await expect(page.locator('#flow-step-text')).toContainText('정상 서버만 골라');
+  // 강조된 박스 = 지금 단계에서 점이 닿는 박스(Load Balancer)
+  const r = await page.evaluate(() => ({
+    on: [...document.querySelectorAll('.node.flow-step-on')].map(el => findNode(/** @type {HTMLElement} */ (el).dataset.id).type),
+    idx: flowStepIdx, count: document.getElementById('flow-count').textContent, n: flowSteps.length,
+  }));
+  expect(r.on).toEqual(['lb']);
+  expect(r.count).toBe(`${r.idx + 1} / ${r.n}`);
+  // 멈춘 동안에는 단계가 저절로 넘어가지 않음
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => flowStepIdx)).toBe(r.idx);
+  // [이전]: 한 단계 앞으로
+  await click('#flow-prev');
+  await expect(page.locator('#flow-count')).toHaveText(`${r.idx} / ${r.n}`);
+  // [이어서 재생]: 다시 자동으로 흐름
+  await click('#flow-pause');
+  await expect(page.locator('#flow-pause')).toHaveText('⏸ 멈춤');
+  expect(await page.evaluate(() => flowPaused)).toBe(false);
+  // 검증을 끝내면 강조도 사라짐
+  await page.click('#btn-validate');
+  await expect(page.locator('.node.flow-step-on')).toHaveCount(0);
+});
+
+test('40번: 응답이 출발하는 단계에 보안 그룹 한 줄, [서버 통신] 보기에는 NAT·라우팅 테이블 해설이 나온다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.click('#btn-validate');
+  await page.waitForFunction(() => flowSteps.length > 0);
+  const req = await page.evaluate(() => flowSteps.map(s => s.lines.map(l => `${l.name}|${l.text}|${l.net}`).join(' / ')));
+  expect(req.some(t => t.includes('보안 그룹은 들어오도록 허용한 요청을 기억'))).toBe(true);
+  expect(req.some(t => t.includes('IGW') && t.includes('퍼블릭 서브넷이에요'))).toBe(true);
+  expect(req[req.length - 1]).toContain('응답이 사용자에게 도착했어요');
+  // 단계는 시간 순서이고, 요청 단계가 응답 단계보다 먼저
+  const order = await page.evaluate(() => flowSteps.map(s => ({ start: s.start, back: s.hops.some(f => f.response) })));
+  expect(order.map(o => o.start)).toEqual([...order.map(o => o.start)].sort((a, b) => a - b));
+  expect(order.findIndex(o => o.back)).toBeGreaterThan(0);
+
+  // 서버 통신: 고가용성 예시(EC2 → NAT → IGW, EC2 → Session Manager 선이 있음)
+  await page.click('#btn-validate');
+  await page.evaluate(() => loadExample('ha'));
+  await page.click('#btn-validate');
+  await page.locator('.flow-view button[data-view="server"]').click();
+  await page.waitForFunction(() => flowView === 'server' && flowSteps.length > 0);
+  const srv = await page.evaluate(() => flowSteps.map(s => s.lines.map(l => `${l.name}|${l.text}|${l.net}`).join(' / ')));
+  expect(srv.some(t => t.includes('NAT') && t.includes('프라이빗 서브넷의 라우팅 테이블이'))).toBe(true);
+  expect(srv.some(t => t.includes('밖에서 먼저 시작한 연결은 들어올 수 없어요'))).toBe(true);
+});
+
+test('40번: 해설 문구의 근거 주소는 모두 AWS 공식 문서이고, 문구가 없는 박스는 기본 문구로 나온다', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => {
+    const refs = [];
+    Object.values(FLOW_STEP_TEXT).forEach(e => Object.values(e).forEach(v => { if (v.ref) refs.push(v.ref); }));
+    refs.push(FLOW_STEP_NET.stateful.ref);
+    const unknownTypes = Object.keys(FLOW_STEP_TEXT).filter(t => !SVC_MAP[t]);
+    return { refs, unknownTypes };
+  });
+  expect(r.refs.length).toBeGreaterThan(10);
+  r.refs.forEach(u => expect(u).toMatch(/^https:\/\/docs\.aws\.amazon\.com\/.+\.html$/));
+  expect(r.unknownTypes).toEqual([]);
+});

@@ -495,6 +495,19 @@ body {
 /* 동적 흐름 점 (검증 후 표시) */
 .flow-dot { stroke: #fff; stroke-width: 1.2; pointer-events: none; }
 /* WAF 검사 중: 요청이 CloudFront·LB에 도착하면 WAF 박스가 초록빛으로 반짝임 */
+/* 40번: 흐름 단계 해설 — 지금 설명하는 박스 강조, 패널의 해설 줄 */
+.node.flow-step-on { outline: 3px solid #1a73e8; outline-offset: 3px; border-radius: 8px; }
+.flow-step { flex-basis: 100%; width: 100%; margin-top: 4px; display: flex; gap: 10px; align-items: flex-start; }
+.flow-ctl { display: inline-flex; gap: 4px; align-items: center; flex: none; }
+.flow-ctl .btn { padding: 1px 8px; font-size: 12px; }
+.flow-ctl #flow-pause { min-width: 96px; }
+.flow-ctl b { min-width: 44px; text-align: center; color: var(--text, #232f3e); font-size: 12px; }
+.flow-step-text { flex: 1; min-width: 0; font-size: 12.5px; color: #232f3e; line-height: 1.5; }
+.flow-step-text .fs-line { display: block; }
+.flow-step-text .fs-line b { margin-right: 6px; color: #1a4fa0; }
+.flow-step-text .fs-net { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; background: #eef4ff; color: #2a4b8d; }
+.flow-step-text .fs-net::before { content: '네트워크 '; font-weight: 700; }
+.flow-step-text .ref { margin-left: 6px; }
 .node.flow-inspect { animation: inspect-glow .4s ease-in-out infinite alternate; }
 @keyframes inspect-glow {
   from { box-shadow: 0 0 0 2px rgba(46, 158, 71, .35); }

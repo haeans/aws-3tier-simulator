@@ -138,7 +138,93 @@ function stopFlow() {
   flowFor = null;
   flowDots = [];
   $flowG.innerHTML = '';
-  elMap.forEach(el => el.classList.remove('flow-inspect'));
+  elMap.forEach(el => el.classList.remove('flow-inspect', 'flow-step-on'));
+  flowSteps = [];
+  flowStepIdx = -1;
+  flowPaused = false;
+  flowJump = 0;
+}
+
+// ----- 40번: 흐름 단계 해설 -----
+// 흐름(요청 하나의 왕복)을 "같은 때에 출발하는 구간들"로 묶어 단계로 나눈다. 단계마다 점이 닿는 박스가 하는 일을 한 줄로 설명한다.
+// 자동으로 흐르는 동안에는 해설이 따라 바뀌고, [멈춤]·[이전]·[다음]으로 멈춘 채 한 단계씩 볼 수 있다.
+// 문구는 js/data/flow-steps.js (FLOW_STEP_TEXT, AWS 공식 문서 근거)
+let flowSteps = [];        // 지금 흐름의 단계: { start, end, hops, nodes(강조할 박스 id), lines(해설) }
+let flowStepIdx = -1;      // 지금 단계 번호 (-1: 아직 없음)
+let flowPaused = false;    // 멈춘 채 보는 중
+let flowHold = 0;          // 멈췄을 때 시간이 더 가지 않는 지점(초)
+let flowJump = 0;          // 버튼으로 요청한 이동 (+1 다음, -1 이전). 다음 화면에서 처리
+
+// 이 구간에서 점이 닿는 박스: 응답 구간은 요청 구간을 거꾸로 가므로 출발 박스(src)에 닿는다
+const flowArrive = f => (f.response ? f.src : f.dst);
+
+function flowStepsOf(hops, view) {
+  const groups = new Map();
+  hops.forEach(f => {
+    const key = f.start.toFixed(3);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  });
+  const steps = [...groups.values()].map(list => {
+    const lines = [];
+    list.forEach(f => {
+      const line = flowStepLine(f, view);
+      if (!lines.some(l => l.key === line.key)) lines.push(line);
+    });
+    return { start: list[0].start, end: Math.max(...list.map(f => f.start + f.dur)), hops: list, nodes: [...new Set(list.map(flowArrive))], lines };
+  }).sort((a, b) => a.start - b.start);
+  // 응답이 출발하는 첫 단계에 네트워크 한 줄: 응답 길을 따로 열지 않아도 되는 이유 (보안 그룹)
+  const firstBack = steps.find(s => s.hops.some(f => f.response));
+  if (firstBack) firstBack.lines.push({ key: 'net-stateful', name: '', ...FLOW_STEP_NET.stateful });
+  return steps;
+}
+
+// 구간 하나의 해설: 점이 닿는 박스(dst)의 종류와 구간의 성격(요청·응답·주소 묻기·검사)으로 고른다
+function flowStepLine(f, view) {
+  const type = typeOfId(flowArrive(f)), name = SVC_MAP[type].name;
+  const entry = FLOW_STEP_TEXT[type] || {};
+  const kind = f.inspect ? 'inspect' : f.roundTrip ? 'lookup' : f.response ? 'response' : view === 'server' && entry.server ? 'server' : 'request';
+  const fallback = kind === 'response' ? FLOW_STEP_TEXT_DEFAULT.response : FLOW_STEP_TEXT_DEFAULT.request;
+  const picked = entry[kind] || fallback;
+  return { key: `${type}|${kind}`, name, text: picked.text, net: picked.net || '', ref: picked.ref || '' };
+}
+
+// 지금 단계의 해설을 패널에 적고, 그 단계에서 점이 닿는 박스를 강조한다
+function showFlowStep() {
+  elMap.forEach(el => el.classList.remove('flow-step-on'));
+  const step = flowSteps[flowStepIdx];
+  if (step) step.nodes.forEach(id => { const el = elMap.get(id); if (el) el.classList.add('flow-step-on'); });
+  const $count = document.getElementById('flow-count');
+  const $text = document.getElementById('flow-step-text');
+  const $pause = document.getElementById('flow-pause');
+  if ($pause) $pause.textContent = flowPaused ? '▶ 이어서 재생' : '⏸ 멈춤';
+  if (!$count || !$text) return;
+  $count.textContent = step ? `${flowStepIdx + 1} / ${flowSteps.length}` : '';
+  $text.innerHTML = '';
+  if (!step) return;
+  step.lines.forEach(l => {
+    const row = document.createElement('span');
+    row.className = 'fs-line';
+    if (l.name) row.appendChild(Object.assign(document.createElement('b'), { textContent: l.name }));
+    row.appendChild(document.createTextNode(l.text));
+    if (l.net) row.appendChild(Object.assign(document.createElement('span'), { className: 'fs-net', textContent: l.net }));
+    if (l.ref) row.appendChild(Object.assign(document.createElement('a'), { className: 'ref', textContent: '자세히 ↗', href: l.ref, target: '_blank', rel: 'noopener' }));
+    $text.appendChild(row);
+  });
+}
+
+// [멈춤 / 이어서 재생]
+function toggleFlowPause() {
+  flowPaused = !flowPaused;
+  if (flowPaused) flowHold = -1;   // -1: 지금 자리에서 바로 멈춤 (다음 화면에서 그때의 시각으로 정함)
+  showFlowStep();
+}
+// [이전]·[다음]: 멈춘 채 한 단계씩
+function flowStepBy(d) {
+  if (!flowSteps.length) return;
+  flowPaused = true;
+  flowJump = d;
+  showFlowStep();
 }
 
 // 응답: 요청 구간마다 같은 길을 거꾸로. 끝(가장 늦게 도착한 곳)에서 먼저 출발하도록 시간을 거울처럼 뒤집는다
@@ -216,15 +302,16 @@ function syncFlow() {
   if (flowFor === validation) {   // 이미 이 결과로 흐르는 중 (결과 패널을 다시 그렸으면 설명만 다시 채움)
     const $now = document.getElementById('flow-now');
     if ($now) $now.textContent = flowLabel;
+    showFlowStep();   // 다시 그린 패널·박스에 지금 단계 해설과 강조를 다시 채움
     return;
   }
   stopFlow();
   flowFor = validation;
   const cycles = flowView === 'server' ? serverCycles(validation.nodeLevels) : requestCycles(validation.nodeLevels);
-  let ci = -1, cycleLen = 0, t0 = 0;
-  const startCycle = (k, now) => {
-    ci = k % cycles.length;
-    t0 = now;
+  let ci = -1, cycleLen = 0, t = 0, lastNow = 0;
+  const startCycle = k => {
+    ci = ((k % cycles.length) + cycles.length) % cycles.length;
+    t = 0;
     flowDots = [];
     $flowG.innerHTML = '';
     elMap.forEach(el => el.classList.remove('flow-inspect'));
@@ -242,12 +329,47 @@ function syncFlow() {
     flowLabel = cycles[ci].label;
     const $now = document.getElementById('flow-now');
     if ($now) $now.textContent = flowLabel;
+    flowSteps = flowStepsOf(hops, flowView);
+    flowStepIdx = -1;
+  };
+  // 40번: 단계로 이동 (멈춘 채 그 단계가 시작해서 박스에 닿을 때까지만 보여 준다)
+  const gotoStep = i => {
+    flowStepIdx = i;
+    t = flowSteps[i].start;
+    flowHold = flowSteps[i].end;
+    showFlowStep();
+    // 버튼으로 넘겼을 때만: 그 단계의 박스가 화면 밖(결과 패널 아래 등)이면 보이는 곳까지 화면을 옮김
+    const el = elMap.get(flowSteps[i].nodes[0]);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   };
   const tick = now => {
-    if (ci < 0 || (now - t0) / 1000 >= cycleLen) startCycle(ci + 1, now);
-    const t = (now - t0) / 1000;
+    const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;   // 탭이 가려졌다 돌아와도 건너뛰지 않게
+    lastNow = now;
+    if (ci < 0) startCycle(0);
+    if (flowJump) {   // [이전]·[다음]: 흐름(요청 종류)의 끝을 넘으면 다음·이전 흐름으로
+      const d = flowJump;
+      flowJump = 0;
+      if (flowSteps.length) {
+        let i = Math.max(flowStepIdx, 0) + d;
+        if (i >= flowSteps.length) { startCycle(ci + 1); i = 0; }
+        else if (i < 0) { startCycle(ci - 1); i = flowSteps.length - 1; }
+        if (flowSteps.length) gotoStep(i);
+      }
+    } else if (flowPaused) {
+      if (flowHold < 0) flowHold = t;
+      t = Math.min(t + dt, flowHold);
+    } else {
+      t += dt;
+      if (t >= cycleLen) startCycle(ci + 1);
+      // 지금 단계: 이미 시작한 단계 가운데 마지막
+      let i = -1;
+      flowSteps.forEach((s, k) => { if (s.start <= t) i = k; });
+      if (i !== flowStepIdx) { flowStepIdx = i; showFlowStep(); }
+    }
+    const held = flowPaused && flowSteps[flowStepIdx] ? flowSteps[flowStepIdx].hops : [];
     flowDots.forEach(({ f, dot }) => {
-      const k = (t - f.start) / f.dur;    // 이 구간에서 지나간 비율 (0~1일 때만 보임)
+      let k = (t - f.start) / f.dur;    // 이 구간에서 지나간 비율 (0~1일 때만 보임)
+      if (held.includes(f)) k = Math.min(k, 0.999);   // 멈춘 단계의 점은 도착한 자리에 남겨 둠
       if (!dot) {   // 검사 중인 동안 WAF 박스 반짝임
         const el = elMap.get(f.dst);
         if (el) el.classList.toggle('flow-inspect', k >= 0 && k < 1);
@@ -264,6 +386,7 @@ function syncFlow() {
     flowRaf = requestAnimationFrame(tick);
   };
   flowRaf = requestAnimationFrame(tick);
+  showFlowStep();   // 버튼 글자를 먼저 채움 (해설은 첫 단계가 시작되면)
 }
 
 // 문제 있는 박스에 빨강/노랑 테두리와 ! 표시
@@ -361,8 +484,17 @@ function renderResult() {
       `<span><i style="background:${FLOW_COLOR.warn}"></i>병목(느림)</span>` +
       `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span>` +
       '<span class="edge-legend">' + Object.entries(EDGE_KINDS).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span>' +
-      '<div id="flow-now" class="flow-now"></div></div>');
+      '<div id="flow-now" class="flow-now"></div>' +
+      // 40번: 단계 해설 (지금 점이 닿는 박스가 하는 일) + 멈춤·이전·다음
+      '<div class="flow-step"><span class="flow-ctl">' +
+      '<button class="btn" id="flow-prev" title="멈추고 앞 단계를 다시 봐요">◀ 이전</button>' +
+      '<button class="btn" id="flow-pause"></button>' +
+      '<button class="btn" id="flow-next" title="멈추고 다음 단계로 넘어가요">다음 ▶</button>' +
+      '<b id="flow-count"></b></span><span id="flow-step-text" class="flow-step-text"></span></div></div>');
     $result.querySelectorAll('.flow-view button').forEach(btn => btn.addEventListener('click', () => setFlowView(btn.getAttribute('data-view'))));
+    document.getElementById('flow-prev').addEventListener('click', () => flowStepBy(-1));
+    document.getElementById('flow-next').addEventListener('click', () => flowStepBy(1));
+    document.getElementById('flow-pause').addEventListener('click', toggleFlowPause);
   }
 
   // 목록 한 줄: 클릭하면 관련 박스로 이동·선택
