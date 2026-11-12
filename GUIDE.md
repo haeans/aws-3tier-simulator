@@ -128,7 +128,7 @@ aws-3tier-simulator/
 │   │   ├─ edit.js            UI-4 추가·삭제·선택·이동·크기 조절
 │   │   ├─ edges.js           UI-5 연결선 (연결점 끌기·경로·손잡이)
 │   │   ├─ render.js          UI-6 그리기, UI-7 줌·화면 이동
-│   │   ├─ storage.js         UI-14 저장·불러오기(형식 고치기 migrateSaved)·화면 설정·실행 취소
+│   │   ├─ storage.js         UI-14 저장·불러오기(형식 고치기 migrateSaved)·파일로 저장/열기(exportData·importData)·화면 설정·실행 취소
 │   │   ├─ result.js          UI-8 검증 결과 표시·동적 흐름
 │   │   ├─ info.js            UI-10 서비스 설명 패널
 │   │   ├─ simulate.js        UI-11 성능 시뮬레이션 패널·시계·그래프
@@ -433,5 +433,8 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 판정·제안·시뮬레이션·장애 엔진은 구성 s를 인자로 받는다 (기본값은 캔버스 state). 규칙 본문은 ctx 도구(ctx.s, ctx.findNode, ctx.linkedNodes 등)를 쓴다. 13번(전후 비교)의 바탕 (R3)
 - 연결 상대 찾기는 edgeOtherEnd 하나. requestReach는 perfDistances 결과를 쓴다 (제안용 ctx 전용) (R4)
 - 저장·되돌리기는 js/ui/storage.js, 예전 저장 형식 고치기는 migrateSaved 한 곳. 기본 틀은 js/ui/examples.js (R5)
+- 파일로 저장·열기 (v1.54, 39번): 브라우저 저장소가 한 칸뿐이라 보관·공유용으로 더했다. 파일에는 구성(박스·영역·연결)만 넣고 화면 시점은 넣지 않는다.
+  이 도구의 파일(app 표시)만 열고, 사람이 고친 파일일 수 있어 알 수 없는 항목·숫자가 아닌 위치·겹치는 id는 빼고 연다.
+  배치 규칙에 어긋난 배치는 저장소에서 불러올 때와 같이 그대로 열고 판정이 알린다. 뒤의 미션·면접 과제(42·43번)에서 과제·모범 답안을 파일로 다루는 바탕
 - 트래픽 계산의 서비스별 동작은 데이터(PERF.edgeHit, PERF_SIDE_ROUTES, PERF_GUARDS, PERF_OFF_PATH). 장애 엔진(Multi-AZ 장애 조치·Auto Scaling)은 AWS 기능 자체의 동작이라 코드에 둔다 (R6, 사용자 결정)
 - 애니메이션 테스트는 실제 시간을 기다리지 않고 시각을 넘겨 그린다 (simDrawDots(t)) (R7)

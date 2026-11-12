@@ -13,7 +13,9 @@
   <div class="load-wrap">
     <button class="btn" id="btn-load">불러오기 ▾</button>
     <div class="load-menu" id="load-menu" hidden></div>
+    <input type="file" id="file-open" accept=".json,application/json" hidden>
   </div>
+  <button class="btn" id="btn-file-save" title="지금 구성을 파일(.json)로 내려받아요. [불러오기 ▾] → [파일에서 열기]로 다시 열 수 있어요">파일로 저장</button>
   <button class="btn" id="btn-reset">초기화</button>
   <button class="btn" id="btn-undo" title="되돌리기 (Ctrl+Z)" disabled>↶ 되돌리기</button>
   <button class="btn" id="btn-redo" title="다시 실행 (Ctrl+Y)" disabled>↷ 다시 실행</button>
