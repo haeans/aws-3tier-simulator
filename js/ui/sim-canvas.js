@@ -122,15 +122,19 @@ function markSimCount(el, id, on) {
 // 요청이 지나가는 연결선마다 점이 계속 흐른다.
 // - 모든 선에서 같은 속도(초당 120px)로 움직인다. 긴 선은 오래 걸리고 짧은 선은 금방 지나간다.
 // - 점은 요청량에 비례해 나온다 (25요청/초마다 1초에 점 1개). 그래서 같은 요청량이면 선 길이와 상관없이 점 간격이 같다.
+// - 화면 전체의 점이 SIM_MAX_DOTS개를 넘을 만큼 요청이 많으면, 점 1개가 나타내는 요청 수를 모든 선에서 같은 비율로 키운다 (38번).
+//   선마다 많고 적음의 비율은 그대로이고, 점 수만 줄어든다. 지금 점 1개가 몇 요청인지는 패널(#sim-dot-per)에 적는다.
 // - 도착 박스에서 실패하는 비율만큼의 점은 박스 앞 40px에서 빨갛게 변하고, 박스에 닿으면 0.4초 동안 커지며 사라진다.
 //   (선 길이와 상관없이 똑같이 보이도록 거리·시간으로 정함)
 const SIM_SPEED = 120;        // 점이 움직이는 속도(px/초)
-const SIM_DOT_PER = 25;       // 점 1개가 나타내는 초당 요청 수
+const SIM_DOT_PER = 25;       // 점 1개가 나타내는 초당 요청 수 (요청이 적을 때. 많으면 simDotPer만큼으로 커짐)
+const SIM_MAX_DOTS = 65;      // 화면 전체 점 수의 상한 (가정: 흐름이 보이면서 움직임이 어지럽지 않은 수)
 const SIM_MIN_GAP = 14;       // 점 사이 최소 간격(px): 너무 많아 막대처럼 붙지 않게
 const SIM_FAIL_ZONE = 40;     // 실패 점이 빨갛게 변하는 거리(박스 앞, px)
 const SIM_BURST = 0.4;        // 실패 점이 박스에 닿은 뒤 사라지는 시간(초)
 let simRaf = null, simDotsSig = '', simT0 = 0;
 let simDots = [];             // 이번 화면에 그린 점 (확인용: { edgeId, virtual, fail })
+let simDotPer = SIM_DOT_PER;  // 지금 점 1개가 나타내는 초당 요청 수
 const simPools = new Map();   // 연결선별 점 요소 묶음 (다시 만들지 않고 재사용)
 const simVirtualPts = new Map();   // 가상의 길(EC2 → 새 본체 Standby) 경로
 const $simG = svgEl('g', { id: 'sim-g' });
@@ -179,6 +183,15 @@ function simTick(now) {
   simRaf = requestAnimationFrame(simTick);
 }
 
+// 패널에 "점 1개 ≈ N요청/초"를 적음 (값이 바뀔 때만)
+let simDotPerShown = '';
+function simShowDotPer() {
+  const text = String(Math.round(simDotPer));
+  const el = document.getElementById('sim-dot-per');
+  if (!el || (text === simDotPerShown && el.textContent === text)) return;
+  simDotPerShown = el.textContent = text;
+}
+
 // 점이 흐르기 시작한 지 t초 뒤의 모습을 그림: 연결선마다 "지금까지 나온 점"들의 위치를 계산
 // (R7: 시계와 떼어 두어, 테스트가 실제 시간을 기다리지 않고 원하는 순간을 그려 볼 수 있다)
 function simDrawDots(t) {
@@ -186,19 +199,27 @@ function simDrawDots(t) {
   const linger = SIM_BURST * SIM_SPEED;  // 사라지는 동안을 거리로 환산
   const seen = new Set();
   simDots = [];
-  simResult.links.forEach(l => {
-    if (l.amount <= 0) return;
+  // 요청이 지나가는 선과 그 길 (요청이 가는 방향으로)
+  const lines = simResult.links.filter(l => l.amount > 0).map(l => {
+    const pts = l.virtual ? simVirtualPts.get(l.edgeId) : edgePoints.get(l.edgeId);
+    if (!pts) return { l, path: null, len: 0 };
+    const e = state.edges.find(x => x.id === l.edgeId);
+    const path = e && e.from !== l.src ? [...pts].reverse() : pts;
+    return { l, path, len: polyLength(path) };
+  });
+  // 점 1개가 나타내는 요청 수: 평소 값으로 그렸을 때 화면의 점이 상한을 넘으면 그 비율만큼 키움
+  // (선 하나의 점 수 = 길이 ÷ 간격 = 길이 × 요청량 ÷ (속도 × 점 1개의 요청 수))
+  const want = lines.reduce((sum, x) => sum + x.len * x.l.amount, 0) / (SIM_SPEED * SIM_DOT_PER);
+  simDotPer = SIM_DOT_PER * Math.max(1, want / SIM_MAX_DOTS);
+  simShowDotPer();
+  lines.forEach(({ l, path, len }) => {
     const key = `${l.edgeId}|${l.src}`;
     seen.add(key);
     let pool = simPools.get(key);
     if (!pool) simPools.set(key, pool = []);
-    const pts = l.virtual ? simVirtualPts.get(l.edgeId) : edgePoints.get(l.edgeId);
     let used = 0;
-    if (pts) {
-      const e = state.edges.find(x => x.id === l.edgeId);
-      const path = e && e.from !== l.src ? [...pts].reverse() : pts;   // 요청이 가는 방향으로
-      const len = polyLength(path);
-      const gap = Math.max(SIM_MIN_GAP, SIM_SPEED * SIM_DOT_PER / l.amount);
+    if (path) {
+      const gap = Math.max(SIM_MIN_GAP, SIM_SPEED * simDotPer / l.amount);
       const rate = simFailRate(l.dst);
       const end = path[path.length - 1];
       for (let n = Math.floor(head / gap); ; n--) {   // 가장 최근에 나온 점부터 거꾸로

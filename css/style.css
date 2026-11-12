@@ -641,6 +641,7 @@ body.fault-mode .del, body.fault-mode .resize { display: none !important; }   /*
 .sim-stats { display: flex; gap: 18px; flex-wrap: wrap; }
 .sim-stats b { margin-left: 4px; }
 .sim-stats b.bad { color: #b0260e; }
+.sim-dot-legend { color: #5f6b7a; }
 .sim-bottleneck:empty { display: none; }
 .sim-bottleneck { padding: 6px 10px; border-left: 4px solid; border-radius: 4px; }
 .sim-bottleneck.busy { background: #fffaea; border-color: #f2b600; }

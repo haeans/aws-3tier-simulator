@@ -152,6 +152,39 @@ test('트래픽 점: 모든 선에서 같은 속도, 같은 요청량이면 선 
   r.lens.forEach((len, i) => expect(Math.abs(r.counts[i] - len / r.gap)).toBeLessThanOrEqual(1.5));   // 간격이 같음
 });
 
+test('트래픽 점 줄이기(38번): 요청이 많으면 화면 전체 점 수가 상한을 넘지 않고, 선마다 많고 적음의 비율은 그대로', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('ha'));
+  await page.locator('#result .tab[data-tab="sim"]').click();
+  await page.locator('#sim-play').click();
+  // 흐르기 시작한 지 60초 뒤(모든 선이 점으로 찬 상태)를 직접 그려서 센다
+  const at = async rps => {
+    await page.locator('#sim-rps').fill(String(rps));
+    await expect(page.locator('#sim-rps-val')).toHaveText(rps.toLocaleString());
+    return page.evaluate(() => {
+      cancelAnimationFrame(simRaf);
+      simDrawDots(60);
+      // 요청량이 가장 많은 선과 가장 적은 선의 점 간격 (최소 간격에 걸리지 않은 선끼리 비교)
+      const links = simResult.links.filter(l => l.amount > 0 && !l.virtual);
+      const gapOf = l => SIM_SPEED * simDotPer / l.amount;
+      const free = links.filter(l => gapOf(l) > SIM_MIN_GAP).sort((a, b) => a.amount - b.amount);
+      return { dots: simDots.length, per: simDotPer, max: SIM_MAX_DOTS, base: SIM_DOT_PER,
+        label: document.getElementById('sim-dot-per').textContent,
+        ratio: gapOf(free[0]) / gapOf(free[free.length - 1]), amountRatio: free[free.length - 1].amount / free[0].amount };
+    });
+  };
+  const low = await at(50);
+  expect(low.per).toBe(low.base);                    // 요청이 적으면 점 1개 = 25요청/초 그대로
+  expect(low.label).toBe(String(low.base));
+  expect(low.dots).toBeLessThanOrEqual(low.max);
+  const high = await at(1000);
+  expect(high.per).toBeGreaterThan(high.base);       // 요청이 많으면 점 1개가 나타내는 요청 수가 커짐
+  expect(high.label).toBe(String(Math.round(high.per)));
+  expect(high.dots).toBeLessThanOrEqual(high.max + 8);   // 상한 근처 (선 끝의 점·사라지는 실패 점만큼 여유)
+  expect(high.dots).toBeGreaterThan(high.max / 2);       // 너무 줄지도 않음
+  expect(high.ratio).toBeCloseTo(high.amountRatio, 5);   // 점 간격은 요청량에 반비례 (비율 유지)
+});
+
 test('캔버스: RDS와 연결되지 않은 EC2는 "연결 끊김"으로 표시하고, 그쪽으로 가는 점은 모두 실패', async ({ page }) => {
   await openApp(page);
   await buildValidArch(page);

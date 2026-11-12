@@ -98,6 +98,7 @@ function renderSimPanel(head) {
     '<span>처리 <b id="sim-served"></b></span>' +
     '<span>성공률 <b id="sim-success"></b></span>' +
     '<span>평균 응답 시간 <b id="sim-latency"></b></span>' +
+    '<span class="sim-dot-legend" title="요청이 많아지면 화면이 점으로 가득 차지 않도록, 점 1개가 나타내는 요청 수가 커져요">● 점 1개 ≈ <b id="sim-dot-per">' + SIM_DOT_PER + '</b>요청/초</span>' +
     '</div>' +
     '<div class="sim-charts">' +
     '<figure><figcaption>응답 시간 (최근 5분)</figcaption><svg id="sim-chart-lat" viewBox="0 0 300 70"></svg></figure>' +
