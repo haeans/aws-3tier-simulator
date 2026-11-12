@@ -41,7 +41,7 @@ async function paletteDrop(page, name, wx, wy) {
   await drag(page, { x: box.x + box.width / 2, y: box.y + box.height / 2 }, await toScreen(page, wx, wy), 12);
 }
 
-// 기본 틀 + 정상 3-Tier 구성 (사용자→IGW→LB→EC2 2대→RDS, NAT, RDS Standby)
+// 기본 틀 + 정상 3-Tier 구성 (사용자→IGW→LB→EC2 2대→RDS, NAT—IGW, RDS Standby)
 // 기본 틀을 예전 위치(VPC 왼쪽 위 280, 80)에 만든다. 기존 테스트의 캔버스 좌표가 이 위치 기준이다
 // (실제 버튼은 캔버스 한가운데에 만든다: placement.spec.js의 기본 틀 위치 테스트)
 const loadTemplateAt = page => page.evaluate(() => loadTemplate({ x: 280, y: 80 }));
@@ -55,6 +55,7 @@ async function buildValidArch(page) {
     const E = (a, b) => state.edges.push({ id: newId('e'), from: a.id, to: b.id, fromSide: null, toSide: null, mid: null });
     E(T('pc')[0], T('igw')[0]); E(T('igw')[0], T('lb')[0]); E(T('lb')[0], T('ec2')[0]); E(T('lb')[0], T('ec2')[1]);
     E(T('rds')[0], T('ec2')[0]);   // 일부러 RDS→EC2 순서로 저장 (방향 없는 연결 확인용)
+    E(T('nat')[0], T('igw')[0]);   // NAT는 IGW로 나간다 (37번 NAT-04: 없으면 제안 20)
     render();
   });
 }

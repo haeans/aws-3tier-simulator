@@ -182,6 +182,8 @@ const VALIDATION_RULES = [
       const all = ctx.ofType('nat');
       const nats = all.filter(n => ctx.zoneOf(n) === 'public');
       if (!nats.length || nats.length < all.length || !ctx.ofType(...APP_TYPES).some(n => ctx.zoneOf(n) === 'private')) return [];
+      // 근거: NAT-04 — IGW와 이어지지 않은 NAT가 있으면 밖으로 나갈 길이 없어 보이므로 칭찬하지 않는다 (제안 20이 알림)
+      if (all.some(n => !ctx.neighborsOf(n, 'igw').length)) return [];
       return [{ nodeIds: nats.map(n => n.id),
         text: 'NAT를 퍼블릭 서브넷에 두었어요. 앱 서버는 숨긴 채로 업데이트처럼 밖으로 나가는 연결만 할 수 있어요.' }];
     },

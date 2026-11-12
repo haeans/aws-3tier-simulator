@@ -520,4 +520,20 @@ const SUGGESTION_RULES = [
       return issues;
     },
   },
+  {
+    // 근거: NAT-04 (등급 C, 37번) — 퍼블릭 NAT는 IGW로 나간다. 문서 문장이 "must"가 아닌 설명이라 제안
+    id: 20, kind: 'improve', title: 'NAT에서 IGW로',
+    pillars: ['operations'],
+    basis: '퍼블릭 NAT는 서버가 보낸 요청을 IGW로 넘겨 인터넷에 내보내요. NAT에서 IGW로 가는 길이 없으면 서버가 NAT를 거쳐도 인터넷에 닿지 않아요.',
+    ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html',
+    check(ctx) {
+      const bare = ctx.ofType('nat').filter(n => !ctx.neighborsOf(n, 'igw').length);
+      if (!bare.length) return [];
+      return [{
+        nodeIds: bare.map(n => n.id),
+        reason: 'NAT가 IGW와 이어져 있지 않아요. NAT는 받은 요청을 IGW로 넘겨 인터넷에 내보내므로, 이대로면 서버가 밖으로 나갈 수 없어 보여요.',
+        action: 'NAT를 IGW와 연결하세요. (서버 — NAT — IGW)',
+      }];
+    },
+  },
 ];
