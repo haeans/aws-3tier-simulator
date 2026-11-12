@@ -135,7 +135,7 @@ function collect() {
   // Auto Scaling 그룹: 한 AZ만 / 두 AZ에 걸침
   build({ ...VALID, areas: [['asg', 340, 370, 400, 120]] }); out.push(verdictLine('valid+asgA'));
   build({ ...VALID, areas: [['asg', 340, 370, 880, 120]] }); out.push(verdictLine('valid+asgAB'));
-  // 컨테이너만 있는 앱 계층 (EC2 없음, CTR-05 현재 동작 기록)
+  // 컨테이너만 있는 앱 계층 (EC2 없음, 36번 CTR-05부터 앱 서버로 인정)
   build({ nodes: [['pc', 120, 300], ['igw', 290, 300], ['lb', 780, 270], ['ecs', 400, 430], ['fargate', 880, 430], ['rds', 400, 590], ['rds-standby', 880, 590], ['ecr', 1400, 460]],
     edges: [['pc', 'igw'], ['igw', 'lb'], ['lb', 'ecs'], ['ecs', 'fargate'], ['ecs', 'rds'], ['ecs', 'ecr']] });
   out.push(verdictLine('container-only', true));

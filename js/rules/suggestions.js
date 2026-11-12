@@ -21,7 +21,7 @@ const SUGGESTION_RULES = [
       const ec2s = ctx.ofType(...APP_TYPES).filter(e => ctx.neighborsOf(e, 'elasticache').length);
       if (!ec2s.length) return [];
       return [{ nodeIds: [...ec2s, ...ec2s.flatMap(e => ctx.neighborsOf(e, 'elasticache'))].map(n => n.id),
-        text: 'EC2가 ElastiCache에서 자주 쓰는 데이터를 먼저 찾아요. DB 부담이 줄고 응답이 빨라져요.' }];
+        text: '앱 서버가 ElastiCache에서 자주 쓰는 데이터를 먼저 찾아요. DB 부담이 줄고 응답이 빨라져요.' }];
     },
     check(ctx) {
       const caches = ctx.ofType('elasticache');
@@ -30,10 +30,10 @@ const SUGGESTION_RULES = [
       if (ctx.ofType(...APP_TYPES).some(e => ctx.neighborsOf(e, 'elasticache').length)) return [];
       return [{
         nodeIds: [...new Set(pairs.flat().map(n => n.id))],
-        reason: 'EC2가 RDS를 직접 조회하고 있어요. 같은 데이터를 반복해서 읽으면 DB 부담이 커지고 응답이 느려져요.',
+        reason: '앱 서버가 RDS를 직접 조회하고 있어요. 같은 데이터를 반복해서 읽으면 DB 부담이 커지고 응답이 느려져요.',
         action: caches.length
-          ? 'ElastiCache가 있지만 EC2와 연결되어 있지 않아요. EC2와 연결해 자주 쓰는 데이터를 캐싱하세요.'
-          : 'ElastiCache를 DB 서브넷에 두고 EC2와 연결해 자주 쓰는 데이터를 캐싱하세요.',
+          ? 'ElastiCache가 있지만 앱 서버와 연결되어 있지 않아요. 앱 서버(EC2·컨테이너)와 연결해 자주 쓰는 데이터를 캐싱하세요.'
+          : 'ElastiCache를 DB 서브넷에 두고 앱 서버(EC2·컨테이너)와 연결해 자주 쓰는 데이터를 캐싱하세요.',
       }];
     },
   },
@@ -51,11 +51,11 @@ const SUGGESTION_RULES = [
     check(ctx) {
       const users = ctx.ofType(...USER_TYPES);
       if (!users.length) return [];
-      // 사용자가 S3나 EC2에 바로 붙어 있는 경우
+      // 사용자가 S3나 앱 서버에 바로 붙어 있는 경우
       const direct = users.filter(u => ctx.neighborsOf(u, 's3', ...APP_TYPES).length);
       if (direct.length) return [{
         nodeIds: direct.flatMap(u => [u.id, ...ctx.neighborsOf(u, 's3', ...APP_TYPES).map(n => n.id)]),
-        reason: '사용자가 S3나 EC2에서 파일을 직접 받아가요. 멀리 있는 사용자는 느리고, 서버가 모든 전송을 떠안아요.',
+        reason: '사용자가 S3나 앱 서버에서 파일을 직접 받아가요. 멀리 있는 사용자는 느리고, 서버가 모든 전송을 떠안아요.',
         action: '정적 파일은 S3에 두고 CloudFront를 거쳐 전달하세요. (사용자 — CloudFront — S3 / IGW)',
       }];
       // 진입 경로에 CloudFront가 전혀 없는 경우
@@ -88,7 +88,7 @@ const SUGGESTION_RULES = [
         const names = [...new Set(bare.map(ctx.nameOf))].join('·');
         issues.push({
           nodeIds: [e.id, ...bare.map(n => n.id)],
-          reason: `프라이빗 서브넷의 EC2가 ${names}에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.`,
+          reason: `프라이빗 서브넷의 ${ctx.nameOf(e)}가 ${names}에 가려면 NAT와 IGW를 거쳐야 하고, NAT가 처리한 데이터만큼 요금도 들어요.`,
           action: `VPC Endpoints를 VPC 안(서브넷 밖)에 두고 ${names}와 연결하세요. (엔드포인트는 서비스마다 따로 필요해요)`,
         });
       });
@@ -353,16 +353,16 @@ const SUGGESTION_RULES = [
       const lbs = ctx.ofType('lb').filter(lb => new Set(ctx.neighborsOf(lb, ...APP_TYPES).map(ctx.azOf).filter(Boolean)).size > 1);
       if (!lbs.length) return [];
       return [{ nodeIds: lbs.map(n => n.id),
-        text: 'Load Balancer 하나가 여러 AZ의 EC2에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
+        text: 'Load Balancer 하나가 여러 AZ의 앱 서버에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
     },
     check(ctx) {
-      // 22번: LB의 AZ = 연결된 EC2의 AZ. 한 AZ만 맡는 LB가 여럿이고 서로 다른 AZ를 맡으면 "AZ마다 따로"
+      // 22번: LB의 AZ = 연결된 앱 서버의 AZ. 한 AZ만 맡는 LB가 여럿이고 서로 다른 AZ를 맡으면 "AZ마다 따로"
       const lbs = ctx.ofType('lb').filter(lb => lbAzsOf(ctx, lb).length === 1);
       if (new Set(lbs.map(lb => lbAzsOf(ctx, lb)[0])).size < 2) return [];
       return [{
         nodeIds: lbs.map(n => n.id),
         reason: 'Load Balancer가 AZ마다 따로 있어요. 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지 못해요.',
-        action: 'Load Balancer를 하나만 두고, 두 AZ의 EC2를 모두 그 Load Balancer와 연결하세요.',
+        action: 'Load Balancer를 하나만 두고, 두 AZ의 앱 서버를 모두 그 Load Balancer와 연결하세요.',
       }];
     },
   },
@@ -400,7 +400,7 @@ const SUGGESTION_RULES = [
       if (!dbs.length) return [];
       return [{
         nodeIds: dbs.map(n => n.id),
-        reason: 'DB가 앱 서버(EC2)와 같은 프라이빗 서브넷에 있어요. 서브넷 단위로 접근을 따로 좁히기 어려워요.',
+        reason: 'DB가 앱 서버와 같은 프라이빗 서브넷에 있어요. 서브넷 단위로 접근을 따로 좁히기 어려워요.',
         action: 'DB 서브넷을 만들어 DB를 옮기세요. 앱 서버가 있는 서브넷과 계층이 나뉘어요.',
       }];
     },

@@ -54,7 +54,7 @@ const VALIDATION_RULES = [
     // 근거: IGW-01, SRV-08
     id: 2, level: 'error', message: '계층 배치',
     pillars: ['security'],
-    basis: '계층마다 네트워크를 나눠 보호해요. 인터넷 요청을 받는 Load Balancer는 AZ마다 퍼블릭 서브넷에 노드를 두고, 앱 서버(EC2)는 프라이빗 서브넷에 둬요.',
+    basis: '계층마다 네트워크를 나눠 보호해요. 인터넷 요청을 받는 Load Balancer는 AZ마다 퍼블릭 서브넷에 노드를 두고, 앱 서버(EC2·컨테이너)는 프라이빗 서브넷에 둬요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_create_layers.html',
     check(ctx) {
       const issues = [];
@@ -67,7 +67,7 @@ const VALIDATION_RULES = [
         if (ctx.zoneOf(n) !== 'vpc') issues.push({ nodeIds: [n.id],
           message: 'Load Balancer는 여러 AZ에 걸쳐 쓰는 서비스라 서브넷 밖에 둬요. VPC 안, 두 AZ의 퍼블릭 서브넷 사이로 옮겨주세요.' });
       });
-      // 근거: LB-01 — LB가 쓰는 AZ마다 그 AZ의 서브넷을 지정해야 한다 (LB가 쓰는 AZ = 연결된 EC2가 있는 AZ)
+      // 근거: LB-01 — LB가 쓰는 AZ마다 그 AZ의 서브넷을 지정해야 한다 (LB가 쓰는 AZ = 연결된 앱 서버가 있는 AZ)
       ctx.ofType('lb').forEach(lb => {
         lbAzsOf(ctx, lb).filter(az => !ctx.subnetsIn(az).length).forEach(az => issues.push({
           nodeIds: [lb.id, ...ctx.neighborsOf(lb, ...APP_TYPES).filter(e => ctx.azOf(e) === az).map(n => n.id)],
@@ -77,7 +77,7 @@ const VALIDATION_RULES = [
       // 근거: SRV-08 — 퍼블릭 서브넷의 EC2는 문서가 금지하지 않으므로 오류가 아니라 경고(규칙 11). 서브넷 밖·DB 서브넷은 오류 유지
       ctx.ofType(...APP_TYPES).forEach(n => {
         if (!['private', 'public'].includes(ctx.zoneOf(n))) issues.push({ nodeIds: [n.id],
-          message: 'EC2 앱 서버는 프라이빗 서브넷에 두어야 외부에서 직접 접근할 수 없어요.' });
+          message: `${SVC_MAP[n.type].name} 앱 서버는 프라이빗 서브넷에 두어야 외부에서 직접 접근할 수 없어요.` });
       });
       return issues;
     },
@@ -88,22 +88,22 @@ const VALIDATION_RULES = [
       if (ec2s.some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
       if (ec2s.some(e => ctx.zoneOf(e) !== 'private')) return [];
       return [{ nodeIds: [...lbs, ...ec2s].map(n => n.id),
-        text: '요청은 Load Balancer가 받고, EC2는 프라이빗 서브넷에 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
+        text: '요청은 Load Balancer가 받고, 앱 서버는 프라이빗 서브넷에 두었어요. 앱 서버를 인터넷에서 숨겼어요.' }];
     },
   },
   {
-    // 근거: SRV-05 (Auto Scaling 그룹의 EC2도 LB와 이어져야 한다)
+    // 근거: SRV-05 (Auto Scaling 그룹의 EC2도 LB와 이어져야 한다), CTR-05 (컨테이너도 앱 서버로 인정)
     id: 3, level: 'error', message: '흐름 연결',
     pillars: ['reliability'],
-    basis: 'Load Balancer가 여러 EC2에 요청을 나누고 상태 확인으로 정상인 EC2에만 보내야, 한 서버가 멈춰도 서비스가 이어져요.',
+    basis: 'Load Balancer가 여러 앱 서버(EC2·컨테이너)에 요청을 나누고 상태 확인으로 정상인 곳에만 보내야, 한 서버가 멈춰도 서비스가 이어져요.',
     ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html',
     check(ctx) {
       const lbs = ctx.ofType('lb'), ec2s = ctx.ofType(...APP_TYPES);
-      if (!lbs.length && !ec2s.length) return [{ message: 'Load Balancer와 EC2가 없어요.' }];
-      if (!lbs.length)  return [{ message: 'Load Balancer가 없어요. 요청을 EC2로 나눠줄 Load Balancer가 필요해요.' }];
-      if (!ec2s.length) return [{ message: 'EC2(앱 서버)가 없어요. 요청을 처리할 EC2가 필요해요.' }];
+      if (!lbs.length && !ec2s.length) return [{ message: 'Load Balancer와 앱 서버(EC2나 ECS·EKS·Fargate 컨테이너)가 없어요.' }];
+      if (!lbs.length)  return [{ message: 'Load Balancer가 없어요. 요청을 앱 서버로 나눠줄 Load Balancer가 필요해요.' }];
+      if (!ec2s.length) return [{ message: '앱 서버가 없어요. 요청을 처리할 EC2나 컨테이너(ECS·EKS·Fargate)가 필요해요.' }];
       if (!lbs.some(lb => ctx.neighborsOf(lb, ...APP_TYPES).length)) {
-        return [{ message: 'Load Balancer와 EC2가 연결되어 있지 않아요. Load Balancer가 받은 요청을 EC2로 넘기도록 연결해주세요.' }];
+        return [{ message: 'Load Balancer와 앱 서버(EC2·컨테이너)가 연결되어 있지 않아요. Load Balancer가 받은 요청을 앱 서버로 넘기도록 연결해주세요.' }];
       }
       return [];
     },
@@ -121,7 +121,7 @@ const VALIDATION_RULES = [
         if (!['db', 'private', 'public'].includes(ctx.zoneOf(db))) issues.push({ nodeIds: [db.id],
           message: `${eunNeun(name)} 서브넷 안에 있어야 해요. DB 서브넷(없으면 프라이빗 서브넷)에 놓아 인터넷에서 숨겨요.` });
         ctx.neighborsOf(db, ...USER_TYPES, 'igw').forEach(other => issues.push({ nodeIds: [db.id, other.id],
-          message: `DB가 인터넷에 직접 노출돼 있어요. ${name} — ${ctx.nameOf(other)} 연결을 지우고 앱 서버(EC2)를 거치도록 연결해주세요.` }));
+          message: `DB가 인터넷에 직접 노출돼 있어요. ${name} — ${ctx.nameOf(other)} 연결을 지우고 앱 서버(EC2·컨테이너)를 거치도록 연결해주세요.` }));
         ctx.neighborsOf(db, 'dbadmin').forEach(admin => issues.push({ nodeIds: [db.id, admin.id],
           message: `DB 관리자가 ${name}에 직접 연결돼 있어요. Client VPN을 거쳐서 접속하도록 연결해주세요.` }));
       });
@@ -143,15 +143,15 @@ const VALIDATION_RULES = [
   {
     id: 5, level: 'error', message: '앱-DB 연결',
     pillars: [],
-    basis: '앱 계층(EC2)이 데이터 계층(RDS)에 접속해야 세 계층이 이어져요. 같은 VPC의 EC2 앱 서버가 RDS를 쓰는 것이 기본 구성이에요.',
+    basis: '앱 계층(EC2·컨테이너)이 데이터 계층(RDS)에 접속해야 세 계층이 이어져요. 같은 VPC의 앱 서버가 RDS를 쓰는 것이 기본 구성이에요.',
     ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.Scenarios.html',
     check(ctx) {
       const ec2s = ctx.ofType(...APP_TYPES), rdss = ctx.ofType('rds');
-      if (!ec2s.length && !rdss.length) return [{ message: 'EC2와 RDS가 없어요.' }];
+      if (!ec2s.length && !rdss.length) return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 없어요.' }];
       if (!rdss.length) return [{ message: 'RDS가 없어요. 앱 서버가 데이터를 저장할 RDS가 필요해요.' }];
-      if (!ec2s.length) return [{ message: 'EC2(앱 서버)가 없어요. RDS를 사용할 EC2가 필요해요.' }];
+      if (!ec2s.length) return [{ message: '앱 서버가 없어요. RDS를 사용할 EC2나 컨테이너(ECS·EKS·Fargate)가 필요해요.' }];
       if (!ec2s.some(n => ctx.neighborsOf(n, 'rds').length)) {
-        return [{ message: 'EC2와 RDS가 연결되어 있지 않아요. 앱 서버가 DB를 쓸 수 있도록 연결해주세요.' }];
+        return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 연결되어 있지 않아요. 앱 서버가 DB를 쓸 수 있도록 연결해주세요.' }];
       }
       return [];
     },
@@ -162,7 +162,8 @@ const VALIDATION_RULES = [
     basis: '퍼블릭 서브넷의 NAT 게이트웨이를 쓰면 프라이빗 서버는 밖으로 연결할 수 있고, 밖에서 먼저 들어오는 연결은 받지 않아요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html',
     check(ctx) {
-      const privateEc2 = ctx.ofType(...APP_TYPES).filter(n => ctx.zoneOf(n) === 'private');
+      // 컨테이너가 밖으로 나가는 길(이미지 받기)은 규칙 18이 NAT 또는 VPC Endpoints로 따로 본다 (36번)
+      const privateEc2 = ctx.ofType('ec2').filter(n => ctx.zoneOf(n) === 'private');
       if (!privateEc2.length) return [];
       const nats = ctx.ofType('nat');
       // 근거: NAT-01 — NAT는 모두 퍼블릭 서브넷에 있어야 한다 (하나만 맞아도 통과시키지 않음)
@@ -189,26 +190,26 @@ const VALIDATION_RULES = [
     // 근거: SRV-02, LB-02, DB-04, SRV-05
     id: 7, level: 'warn', message: '고가용성',
     pillars: ['reliability'],
-    basis: '운영 중인 서비스는 최소 두 AZ에 나눠 둬요. RDS는 Multi-AZ를 켜야 다른 AZ에 예비본이 생겨, 한 AZ에 장애가 나도 이어갈 수 있어요.',
+    basis: '운영 중인 서비스는 최소 두 AZ에 나눠 둬요. 앱 서버(EC2·컨테이너)도 마찬가지예요. RDS는 Multi-AZ를 켜야 다른 AZ에 예비본이 생겨, 한 AZ에 장애가 나도 이어갈 수 있어요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_fault_isolation_multiaz_region_system.html',
     check(ctx) {
       const issues = [];
-      // EC2: 서로 다른 AZ에 2개 이상
+      // 앱 서버(EC2·컨테이너): 서로 다른 AZ에 2개 이상
       const ec2s = ctx.ofType(...APP_TYPES);
       const ec2Azs = new Set(ec2s.map(ctx.azOf).filter(Boolean));
       if (ec2Azs.size < 2) issues.push({
         nodeIds: ec2s.map(n => n.id),
         message: ec2Azs.size === 0
-          ? 'EC2가 AZ 안에 없어요. 서로 다른 AZ에 EC2를 2개 이상 두면 한 AZ에 장애가 나도 서비스가 계속돼요.'
-          : 'EC2가 한 AZ에만 있어요. 다른 AZ에도 EC2를 두면 한 AZ에 장애가 나도 서비스가 계속돼요.',
+          ? '앱 서버(EC2·컨테이너)가 AZ 안에 없어요. 서로 다른 AZ에 앱 서버를 2개 이상 두면 한 AZ에 장애가 나도 서비스가 계속돼요.'
+          : '앱 서버(EC2·컨테이너)가 한 AZ에만 있어요. 다른 AZ에도 앱 서버를 두면 한 AZ에 장애가 나도 서비스가 계속돼요.',
       });
-      // 근거: LB-02 — Load Balancer와 연결된 EC2가 서로 다른 AZ 2곳 이상 (연결이 있는 LB만 본다. 연결이 없으면 규칙 3이 알림)
+      // 근거: LB-02 — Load Balancer와 연결된 앱 서버가 서로 다른 AZ 2곳 이상 (연결이 있는 LB만 본다. 연결이 없으면 규칙 3이 알림)
       ctx.ofType('lb').forEach(lb => {
         const targets = ctx.neighborsOf(lb, ...APP_TYPES);
         if (!targets.length || new Set(targets.map(ctx.azOf).filter(Boolean)).size >= 2) return;
         issues.push({
           nodeIds: [lb.id, ...targets.map(n => n.id)],
-          message: 'Load Balancer와 연결된 EC2가 한 AZ에만 있어요. Load Balancer는 여러 AZ에 걸쳐 쓰는 것이니, 다른 AZ의 EC2도 같은 Load Balancer와 연결해주세요.',
+          message: 'Load Balancer와 연결된 앱 서버가 한 AZ에만 있어요. Load Balancer는 여러 AZ에 걸쳐 쓰는 것이니, 다른 AZ의 앱 서버도 같은 Load Balancer와 연결해주세요.',
         });
       });
       // RDS: RDS와 RDS Standby가 서로 다른 AZ
@@ -237,20 +238,20 @@ const VALIDATION_RULES = [
       return issues;
     },
     praise: ctx => [{ nodeIds: ctx.ofType(...APP_TYPES, 'rds', 'rds-standby').map(n => n.id),
-      text: 'EC2와 DB(RDS·Standby)를 두 AZ에 나눠 두었어요. 한 AZ에 장애가 나도 서비스가 이어져요.' }],
+      text: '앱 서버와 DB(RDS·Standby)를 두 AZ에 나눠 두었어요. 한 AZ에 장애가 나도 서비스가 이어져요.' }],
   },
   {
     // 근거: IGW-02 (등급 A), SRV-07
     id: 8, level: 'error', message: '서버 경로',
     pillars: ['security'],
-    basis: '프라이빗 서브넷에는 IGW로 가는 경로가 없어서, 서버(EC2)를 IGW에 바로 이을 수 없어요. 인터넷 요청은 Load Balancer가 AZ마다 퍼블릭 서브넷에 둔 노드로 받아 서버로 넘겨요.',
+    basis: '프라이빗 서브넷에는 IGW로 가는 경로가 없어서, 서버(EC2·컨테이너)를 IGW에 바로 이을 수 없어요. 인터넷 요청은 Load Balancer가 AZ마다 퍼블릭 서브넷에 둔 노드로 받아 서버로 넘겨요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html',
     check(ctx) {
       const issues = [];
       ctx.ofType(...APP_TYPES).forEach(e => {
         if (!['private', 'db'].includes(ctx.zoneOf(e))) return;   // 서브넷 밖·퍼블릭 위치는 규칙 2가 알림
         ctx.neighborsOf(e, 'igw').forEach(igw => issues.push({ nodeIds: [e.id, igw.id],
-          message: 'EC2가 IGW에 바로 연결돼 있어요. 프라이빗 서브넷의 서버는 IGW로 인터넷과 통신할 수 없어요. 이 연결을 지우고 IGW → Load Balancer → EC2로 이어주세요.' }));
+          message: `${SVC_MAP[e.type].name}가 IGW에 바로 연결돼 있어요. 프라이빗 서브넷의 서버는 IGW로 인터넷과 통신할 수 없어요. 이 연결을 지우고 IGW → Load Balancer → ${SVC_MAP[e.type].name}로 이어주세요.` }));
       });
       return issues;
     },
@@ -259,12 +260,12 @@ const VALIDATION_RULES = [
     // 근거: IGW-03 (등급 B), SRV-07
     id: 9, level: 'warn', message: '서버 노출',
     pillars: ['security'],
-    basis: '서버(EC2)는 공개 IP 없이 Load Balancer 뒤에 두는 것이 안전해요. 사용자가 서버에 바로 닿으면 공격받을 곳이 늘어요.',
+    basis: '서버(EC2·컨테이너)는 공개 IP 없이 Load Balancer 뒤에 두는 것이 안전해요. 사용자가 서버에 바로 닿으면 공격받을 곳이 늘어요.',
     ref: 'https://docs.aws.amazon.com/securityhub/latest/userguide/ec2-controls.html',
     check(ctx) {
       const issues = [];
       ctx.ofType(...APP_TYPES).forEach(e => ctx.neighborsOf(e, ...USER_TYPES).forEach(u => issues.push({ nodeIds: [e.id, u.id],
-        message: `${ctx.nameOf(u)}가 EC2에 바로 연결돼 있어요. 서버가 인터넷에 드러나요. 이 연결을 지우고 사용자 → IGW → Load Balancer → EC2로 이어주세요.` })));
+        message: `${ctx.nameOf(u)}가 ${SVC_MAP[e.type].name}에 바로 연결돼 있어요. 서버가 인터넷에 드러나요. 이 연결을 지우고 사용자 → IGW → Load Balancer → ${SVC_MAP[e.type].name}로 이어주세요.` })));
       return issues;
     },
   },
@@ -312,7 +313,7 @@ const VALIDATION_RULES = [
     check(ctx) {
       const issues = [];
       ctx.ofType('rds-standby').forEach(s => ctx.neighborsOf(s, ...APP_TYPES).forEach(e => issues.push({ nodeIds: [s.id, e.id],
-        message: 'EC2가 RDS Standby에 바로 연결돼 있어요. Standby는 읽기·쓰기를 받지 않아요. 이 연결을 지우고 EC2 — RDS(본체)로 연결해주세요.' })));
+        message: `${SVC_MAP[e.type].name}가 RDS Standby에 바로 연결돼 있어요. Standby는 읽기·쓰기를 받지 않아요. 이 연결을 지우고 ${SVC_MAP[e.type].name} — RDS(본체)로 연결해주세요.` })));
       return issues;
     },
   },

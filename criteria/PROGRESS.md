@@ -22,7 +22,7 @@
 | 3h | 반영 | 접근 규칙 + 테스트 | 〃 | ☑ v1.35 |
 | 3i | 조사 | 운영 (CloudTrail, CloudWatch, CloudFormation) | ops.md | ☑ (고칠 곳 1개: CT-02) |
 | 3j | 반영 | 운영 규칙 + 테스트 | 〃 | ☑ v1.36 |
-| 3k | 조사 | 컨테이너·CI/CD | container.md | ☑ (고칠 곳 4개 + 보류 1개: CTR-05) |
+| 3k | 조사 | 컨테이너·CI/CD | container.md | ☑ (고칠 곳 4개 + 보류 1개: CTR-05 → 36번 v1.51에 반영) |
 | 3l | 반영 | 컨테이너·CI/CD 규칙 + 테스트 | 〃 | ☑ v1.37 |
 | 4 | 문서 정리 | GUIDE.md 설계 결정, ROADMAP.md 갱신 | 문서 | ☑ v1.37.1 |
 

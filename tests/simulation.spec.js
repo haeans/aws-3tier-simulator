@@ -686,3 +686,24 @@ test('R3: 캔버스와 다른 구성을 넘겨 판정·시뮬레이션·장애�
   expect(r.v3).toBe('error');
   expect(r.canvasV).not.toBe('error');
 });
+
+test('36번: 컨테이너(ECS·Fargate)도 앱 서버로 계산한다 — LB가 고르게 나누고, 1개당 초당 100요청(가정)', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => {
+    const [a, b] = state.nodes.filter(n => n.type === 'ec2');
+    a.type = 'ecs'; b.type = 'fargate';
+    state.edges.push({ id: newId('e'), from: b.id, to: state.nodes.find(n => n.type === 'rds').id, fromSide: null, toSide: null, mid: null });
+    render();
+  });
+  const res = await page.evaluate(() => {
+    const r = simulateTraffic(300);
+    const of = t => r.nodes.get(state.nodes.find(n => n.type === t).id);
+    return { served: r.served, ecs: of('ecs').load, fargate: of('fargate').load, cap: of('fargate').capacity, rds: of('rds').load };
+  });
+  expect(res.ecs).toBe(150);
+  expect(res.fargate).toBe(150);
+  expect(res.cap).toBe(100);
+  expect(res.served).toBe(200);
+  expect(res.rds).toBe(200);
+});

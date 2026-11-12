@@ -73,7 +73,7 @@ function buildContext(includeAll = false, s = state) {
   };
 }
 
-// 컨테이너 박스 (ECS·EKS·Fargate는 검증 대상이 아니라 ctx에 없어 직접 찾는다)
+// 컨테이너 박스 (ECS·EKS·Fargate)
 function containerNodes(s = state) {
   return s.nodes.filter(n => ['ecs', 'eks', 'fargate'].includes(n.type));
 }

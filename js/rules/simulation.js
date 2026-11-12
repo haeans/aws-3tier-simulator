@@ -91,8 +91,9 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     // 다음 박스: PERF_ROUTES의 앞 종류부터, 더 먼 쪽에 연결된 박스에 고르게
     const route = PERF_ROUTES[USER_TYPES.includes(n.type) ? 'user' : n.type];
     const farther = adj.get(id).map(x => findNode(x, s)).filter(m => dist.get(m.id) > dist.get(id));
-    const nextType = (route || []).find(t => farther.some(m => m.type === t));
-    let next = nextType ? farther.filter(m => m.type === nextType) : [];
+    const isType = (m, t) => Array.isArray(t) ? t.includes(m.type) : m.type === t;   // 칸이 배열이면 종류 묶음
+    const nextType = (route || []).find(t => farther.some(m => isType(m, t)));
+    let next = nextType ? farther.filter(m => isType(m, nextType)) : [];
     // LB는 상태 확인으로 뺀 EC2에는 보내지 않음. 모두 빠졌으면 모두에게 보냄 (fail open, ALB 문서)
     const healthy = next.filter(m => !F.excluded.has(m.id) && countOf(m.id) > 0);
     if (healthy.length) next = healthy;
