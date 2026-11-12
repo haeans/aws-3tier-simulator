@@ -359,7 +359,7 @@ test('LB-02: LB와 연결된 EC2가 한 AZ에만 있으면 경고한다', async 
   expect(r.issues).toContain(7);
   expect(r.status).toBe('warn');
   expect(r.praises).not.toContain('V7');
-  expect(r.msgs.join(' ')).toContain('Load Balancer와 연결된 EC2가 한 AZ에만 있어요');
+  expect(r.msgs.join(' ')).toContain('Load Balancer와 연결된 앱 서버가 한 AZ에만 있어요');
 });
 
 test('LB-05: IGW와 이어지지 않은 LB가 하나 더 있으면 "한 입구" 칭찬이 사라진다', async ({ page }) => {
@@ -900,4 +900,41 @@ test('EGR-01: 프라이빗 서버가 먼저 여는 연결(CloudWatch 에이전�
   await connect(page, 'ecs', 'nat');
   r = await verdict(page);
   expect(r.sug).not.toContain(19);
+});
+
+// 36번: 기본 구성의 EC2 두 대를 ECS(AZ A)·Fargate(AZ B)로 바꾼 컨테이너 앱 구성
+async function buildContainerArch(page) {
+  await buildValidArch(page);
+  await page.evaluate(() => {
+    const [a, b] = state.nodes.filter(n => n.type === 'ec2');
+    a.type = 'ecs'; b.type = 'fargate';
+    state.edges.push({ id: newId('e'), from: b.id, to: state.nodes.find(n => n.type === 'rds').id, fromSide: null, toSide: null, mid: null });
+    render();
+  });
+}
+
+test('CTR-05: EC2 없이 컨테이너(ECS·Fargate)가 앱 서버인 구성도 정상이고, 잘한 점도 나온다', async ({ page }) => {
+  await openApp(page);
+  await buildContainerArch(page);
+  let r = await verdict(page);
+  expect(r.status).not.toBe('error');
+  expect(r.issues).not.toContain(3);
+  expect(r.issues).not.toContain(5);
+  expect(r.issues).not.toContain(7);
+  expect(r.praises).toContain('V2');                       // 앱 서버를 프라이빗 서브넷에 숨김
+  expect(r.praises).toContain('V7');                       // 앱 서버·DB를 두 AZ에
+  // LB—Fargate 연결을 지우면: LB의 앱 서버가 한 AZ에만 → 경고
+  await page.evaluate(() => {
+    const lb = state.nodes.find(n => n.type === 'lb'), f = state.nodes.find(n => n.type === 'fargate');
+    state.edges = state.edges.filter(e => !([e.from, e.to].includes(lb.id) && [e.from, e.to].includes(f.id)));
+    render();
+  });
+  r = await verdict(page);
+  expect(r.issues).toContain(7);
+  expect(r.msgs.join(' ')).toContain('Load Balancer와 연결된 앱 서버가 한 AZ에만 있어요');
+  // 앱 서버(EC2·컨테이너)가 하나도 없으면 오류
+  await page.evaluate(() => { state.nodes.filter(n => ['ecs', 'fargate'].includes(n.type)).forEach(n => deleteNode(n.id)); render(); });
+  r = await verdict(page);
+  expect(r.status).toBe('error');
+  expect(r.msgs.join(' ')).toContain('앱 서버가 없어요');
 });

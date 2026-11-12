@@ -39,12 +39,13 @@
 - 반영 규칙: SUGGESTION #16 Fargate 짝
 - 상태: 반영됨 (v1.37)
 
-### CTR-05 · 등급 — 보류 (ROADMAP 13번으로)
+### CTR-05 · 등급 A(문서보다 엄격한 판정을 고침) ★ 고칠 곳
 - 요약: 컨테이너 앱(LB—ECS·EKS·Fargate—RDS)은 문서가 지원하는 구성이다(ALB·NLB가 Fargate 작업에 요청 분산). 그런데 앱의 기존 판정(규칙 2·3·5 등)은 앱 계층을 EC2로만 보아, EC2 없이 컨테이너만 있으면 "EC2가 없어요" 오류가 난다 — 문서보다 엄격
 - 근거: [ECS 서비스 로드 밸런싱](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
 - 인용: "Amazon ECS services hosted on AWS Fargate support the Application Load Balancers, Network Load Balancers"
-- 표현 방식: "앱 서버 = EC2 또는 ECS·EKS·Fargate"로 판정 전체를 넓히는 큰 변경이라 이번 칸에서 하지 않는다. 13번(마이그레이션 설계: 옮기기 전후 비교)에서 컨테이너 구성을 정상으로 다룰 때 함께 설계한다
-- 상태: 보류
+- 표현 방식: "앱 서버 = EC2 또는 ECS·EKS·Fargate" (APP_TYPES). 세 박스 모두 앱 서버로 센다 (사용자 결정 2026-11-12). EC2만의 기능(Auto Scaling 그룹·Session Manager·Bastion·서버 위치 판정 11·NAT 없음 판정 6)은 EC2만
+- 반영 규칙: APP_TYPES 확장(js/data/services.js) — 판정 2·3·5·7·8·9·13, 제안 1·2·3·11 등이 함께 넓어짐. 성능 시뮬레이션(PERF·PERF_ROUTES)도
+- 상태: 반영됨 (v1.51, ROADMAP 36번)
 
 ### CTR-06 · 등급 X
 - 요약: ECR은 이미지 저장소(리전 서비스)라 VPC 밖에 둔다(현재 배치 규칙 유지). ECR—ECS·EKS·Fargate(이미지 받기), ECR—CodeBuild(이미지 올리기)는 문서가 설명하는 정상 관계라 오류가 아니다. ECR의 필수 연결은 문서에 없다
@@ -71,3 +72,4 @@
 | PLACEMENT `appSubnet` (ECS·EKS·Fargate: 퍼블릭·프라이빗 서브넷) | CTR-01 |
 | VALIDATION #17 컨테이너 위치(경고), #18 컨테이너 이미지 경로(경고), #19 EKS 서브넷 AZ(오류) | CTR-01·02·03 |
 | SUGGESTION #16 Fargate 짝 | CTR-04 |
+| APP_TYPES에 ECS·EKS·Fargate (앱 서버 인정, 36번) | CTR-05 |

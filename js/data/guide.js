@@ -15,9 +15,15 @@ const USER_GUIDE = {
     { to: ['igw'], text: '웹 요청은 인터넷 게이트웨이(IGW)를 지나 Load Balancer로 들어가요.' },
   ],
   avoid: [
-    { to: ['ec2', 'elasticache', ...RDS_TYPES], text: '서버와 DB는 인터넷에서 직접 닿지 않게 숨겨요. IGW → Load Balancer를 거치게 하세요.' },
+    { to: [...APP_TYPES, 'elasticache', ...RDS_TYPES], text: '서버와 DB는 인터넷에서 직접 닿지 않게 숨겨요. IGW → Load Balancer를 거치게 하세요.' },
   ],
 };
+
+// 컨테이너(ECS·EKS·Fargate)도 앱 서버라 EC2와 같은 이유로 피할 연결 (36번)
+const CONTAINER_AVOID = [
+  { to: USER_TYPES, text: '사용자에게 바로 노출하지 마세요. IGW → Load Balancer를 거치게 하세요.' },
+  { to: ['rds-standby'], text: 'Standby(예비본)는 읽기·쓰기를 받지 않아요. 앱은 RDS(본체)나 Read Replica에 접속해요.' },   // 근거: DB-02
+];
 
 const SERVICE_GUIDE = {
   smartphone: USER_GUIDE,
@@ -60,12 +66,13 @@ const SERVICE_GUIDE = {
     ],
     avoid: [
       { to: RDS_TYPES, text: 'DB를 인터넷 입구에 바로 연결하면 인터넷에서 DB에 닿을 수 있어요.' },
-      { to: ['ec2'], text: '앱 서버를 바로 연결하면 Load Balancer 없이 인터넷에 노출돼요. LB를 거치세요.' },
+      { to: APP_TYPES, text: '앱 서버를 바로 연결하면 Load Balancer 없이 인터넷에 노출돼요. LB를 거치세요.' },
     ],
   },
   nat: {
     links: [
       { to: ['ec2'], text: '프라이빗 서브넷의 EC2가 업데이트 등으로 밖에 연결할 때 거쳐요. 밖에서 먼저 연결을 시작할 수는 없어요.' },
+      { to: ['ecs', 'eks', 'fargate'], text: '프라이빗 서브넷의 컨테이너가 ECR에서 이미지를 받는 등 밖에 연결할 때 거쳐요. ECR용 VPC Endpoints로 대신할 수도 있어요.' },
       { to: ['igw'], text: '퍼블릭 NAT는 퍼블릭 서브넷에 두고, 나가는 요청을 IGW로 보내 인터넷에 내보내요.' },
     ],
     avoid: [
@@ -78,9 +85,10 @@ const SERVICE_GUIDE = {
       { to: ['igw'], text: 'IGW를 지나 들어온 인터넷 요청을 받는 입구예요.' },
       { to: ['waf'], text: 'Load Balancer(ALB)에 WAF를 붙이면, EC2로 보내기 전에 위험한 요청을 걸러내요.' },
       { to: ['ec2'], text: '여러 AZ의 EC2에 요청을 나눠요. 상태 확인으로 정상인 EC2에만 보내서, 한 곳이 멈춰도 버텨요. 연결된 EC2가 있는 AZ마다 그 AZ의 퍼블릭 서브넷에 Load Balancer 노드가 생겨요.' },
+      { to: ['ecs', 'eks', 'fargate'], text: '여러 AZ의 컨테이너(ECS 작업·EKS Pod)에 요청을 나눠요. 상태 확인으로 정상인 컨테이너에만 보내요. 연결된 컨테이너가 있는 AZ마다 그 AZ의 퍼블릭 서브넷에 Load Balancer 노드가 생겨요.' },
     ],
     avoid: [
-      { to: RDS_TYPES, text: 'Load Balancer는 앱 서버 앞에 둬요. DB에는 EC2가 접속해요.' },
+      { to: RDS_TYPES, text: 'Load Balancer는 앱 서버 앞에 둬요. DB에는 앱 서버(EC2·컨테이너)가 접속해요.' },
       { to: ['nat'], text: 'Load Balancer와 NAT 사이에는 오가는 요청이 없어요. 연결하지 마세요.' },
     ],
   },
@@ -114,20 +122,20 @@ const SERVICE_GUIDE = {
   },
   rds: {
     links: [
-      { to: ['ec2'], text: '앱 서버(EC2)가 DB에 접속해 데이터를 읽고 써요. 보안 그룹으로 EC2에서 오는 접속만 허용해요.' },
+      { to: APP_TYPES, text: '앱 서버(EC2·컨테이너)가 DB에 접속해 데이터를 읽고 써요. 보안 그룹으로 앱 서버에서 오는 접속만 허용해요.' },
       { to: ['rds-standby'], text: '다른 AZ의 예비본에 데이터를 동기식으로 복제해요(Multi-AZ). 장애가 나면 예비본으로 넘어가요.' },
       { to: ['rds-replica'], text: '변경 내용을 읽기 복제본에 비동기식으로 복사해요. 조회(읽기) 요청을 복제본으로 나눠 부담을 줄여요.' },
       { to: ['clientvpn'], text: '관리자는 VPN을 거쳐 접속해요.' },
     ],
     avoid: [
-      { to: [...USER_TYPES, 'igw', 'cloudfront', 'dbadmin'], text: 'DB가 인터넷에서 직접 닿으면 안 돼요. EC2나 Client VPN을 거치게 하세요.' },
-      { to: ['elasticache'], text: '캐시와 DB는 서로 직접 잇지 않아요. EC2가 캐시와 DB에 각각 접속해요.' },
+      { to: [...USER_TYPES, 'igw', 'cloudfront', 'dbadmin'], text: 'DB가 인터넷에서 직접 닿으면 안 돼요. 앱 서버나 Client VPN을 거치게 하세요.' },
+      { to: ['elasticache'], text: '캐시와 DB는 서로 직접 잇지 않아요. 앱 서버가 캐시와 DB에 각각 접속해요.' },
     ],
   },
   'rds-replica': {
     links: [
       { to: ['rds'], text: '원본 DB의 변경 내용을 비동기식으로 받아요.' },
-      { to: ['ec2'], text: '앱의 조회(읽기) 요청만 받아요. 쓰기는 원본 DB로 보내요.' },
+      { to: APP_TYPES, text: '앱의 조회(읽기) 요청만 받아요. 쓰기는 원본 DB로 보내요.' },
     ],
     avoid: [
       { to: [...USER_TYPES, 'igw'], text: '복제본도 DB예요. 인터넷에서 직접 닿으면 안 돼요.' },
@@ -143,16 +151,16 @@ const SERVICE_GUIDE = {
   },
   elasticache: {
     links: [
-      { to: ['ec2'], text: '앱이 캐시를 먼저 확인하고, 없으면 DB에서 읽어 캐시에 넣어요. 다음 요청은 캐시에서 빠르게 꺼내요.' },
+      { to: APP_TYPES, text: '앱이 캐시를 먼저 확인하고, 없으면 DB에서 읽어 캐시에 넣어요. 다음 요청은 캐시에서 빠르게 꺼내요.' },
     ],
     avoid: [
-      { to: RDS_TYPES, text: '캐시가 DB에 직접 붙어 대신 읽어 오지 않아요. 앱(EC2)이 캐시와 DB에 각각 접속해요.' },
+      { to: RDS_TYPES, text: '캐시가 DB에 직접 붙어 대신 읽어 오지 않아요. 앱 서버가 캐시와 DB에 각각 접속해요.' },
     ],
   },
   s3: {
     links: [
       { to: ['cloudfront'], text: 'CloudFront의 원본(오리진)이 되어, 정적 파일을 사용자 가까이에서 전달하게 해요.' },
-      { to: ['ec2', 'vpce'], text: '앱이 파일을 저장하고 꺼내요. 게이트웨이 엔드포인트를 거치면 NAT 없이 접속해요.' },
+      { to: [...APP_TYPES, 'vpce'], text: '앱이 파일을 저장하고 꺼내요. 게이트웨이 엔드포인트를 거치면 NAT 없이 접속해요.' },
     ],
     avoid: [
       { to: USER_TYPES, text: '사용자가 S3에서 직접 받으면 먼 곳에서는 느려요. CloudFront를 거치게 하세요.' },
@@ -160,7 +168,7 @@ const SERVICE_GUIDE = {
   },
   dynamodb: {
     links: [
-      { to: ['ec2', 'vpce'], text: '앱이 키로 데이터를 빠르게 읽고 써요. 게이트웨이 엔드포인트를 거치면 NAT 없이 접속해요.' },
+      { to: [...APP_TYPES, 'vpce'], text: '앱이 키로 데이터를 빠르게 읽고 써요. 게이트웨이 엔드포인트를 거치면 NAT 없이 접속해요.' },
     ],
     avoid: [],
   },
@@ -178,7 +186,7 @@ const SERVICE_GUIDE = {
       { to: ['fargate'], text: '서버를 관리하지 않고 컨테이너를 실행하려면 Fargate를 함께 써요.' },
       { to: ['rds', 'rds-replica'], text: '컨테이너의 앱이 DB(RDS 본체나 Read Replica)에 접속해요.' },
     ],
-    avoid: [],
+    avoid: CONTAINER_AVOID,
   },
   eks: {
     links: [
@@ -187,14 +195,16 @@ const SERVICE_GUIDE = {
       { to: ['fargate'], text: 'Pod를 서버(노드) 관리 없이 실행하려면 Fargate를 함께 써요.' },
       { to: ['rds', 'rds-replica'], text: '컨테이너의 앱이 DB(RDS 본체나 Read Replica)에 접속해요.' },
     ],
-    avoid: [],
+    avoid: CONTAINER_AVOID,
   },
   fargate: {
     links: [
       { to: ['ecs', 'eks'], text: 'ECS 작업이나 EKS Pod를 EC2를 관리하지 않고 실행해 줘요.' },
       { to: ['ecr'], text: '실행할 컨테이너 이미지를 가져와요.' },
+      { to: ['lb'], text: 'Load Balancer가 Fargate에서 도는 작업(task)들에 요청을 나눠 줘요.' },
+      { to: ['rds', 'rds-replica'], text: '컨테이너의 앱이 DB(RDS 본체나 Read Replica)에 접속해요.' },
     ],
-    avoid: [],
+    avoid: CONTAINER_AVOID,
   },
   codecommit: {
     links: [

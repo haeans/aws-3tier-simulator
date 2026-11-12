@@ -22,6 +22,10 @@ const PERF = {
   igw:        { capacity: null, latency: 1 },    // 대역폭 제한 없음 (IGW 문서)
   lb:         { capacity: null, latency: 5 },    // 트래픽에 맞춰 자동 확장 (ELB 문서)
   ec2:        { capacity: 100,  latency: 30 },   // EC2 1대가 초당 100요청을 처리한다고 가정
+  // 컨테이너 박스 1개(작업·Pod 묶음)도 EC2 1대와 같은 양을 처리한다고 가정 (36번, CTR-05)
+  ecs:        { capacity: 100,  latency: 30 },
+  eks:        { capacity: 100,  latency: 30 },
+  fargate:    { capacity: 100,  latency: 30 },
   rds:        { capacity: 300,  latency: 10 },   // RDS 1대가 초당 300요청(쿼리)을 처리한다고 가정
   'rds-standby': { capacity: 300, latency: 10 }, // 장애 조치 후 본체가 되면 RDS와 같은 성능
   'rds-replica': { capacity: 300, latency: 10 }, // 읽기 전용 복사본 (RDS와 같은 성능)
@@ -29,15 +33,19 @@ const PERF = {
 };
 
 // 요청을 다음 박스로 넘기는 방식: 앞에 적힌 종류부터 찾아, 연결된 그 종류의 박스들에 고르게 나눈다.
+//   한 칸이 배열이면 그 종류들을 한 묶음으로 본다 (36번: 앱 서버 = EC2·ECS·EKS·Fargate를 함께 고르게)
 //   사용자: CloudFront가 있으면 CloudFront로, 없으면 IGW로
-//   Load Balancer: 연결된 EC2에 고르게 (기본 라운드 로빈, ELB 문서)
-//   EC2: 요청 하나마다 RDS에 한 번 조회
+//   Load Balancer: 연결된 앱 서버(EC2·컨테이너)에 고르게 (기본 라운드 로빈, ELB 문서)
+//   앱 서버: 요청 하나마다 RDS에 한 번 조회
 const PERF_ROUTES = {
   user:       ['cloudfront', 'igw'],
   cloudfront: ['igw'],
   igw:        ['lb'],
-  lb:         ['ec2'],
+  lb:         [APP_TYPES],
   ec2:        ['rds'],
+  ecs:        ['rds'],
+  eks:        ['rds'],
+  fargate:    ['rds'],
 };
 
 // 옆길 (R6): 본 대상(키 종류)으로 갈 요청 중 일부를, 함께 연결된 다른 종류가 대신 받는다 (적힌 순서대로)

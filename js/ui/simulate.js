@@ -5,7 +5,7 @@
    UI-11. 성능 시뮬레이션 (계산은 js/rules/simulation.js)
    - 결과 영역의 [성능 시뮬레이션] 탭. 시뮬레이션 시계가 1초씩 흐르며, 그 순간의 트래픽으로 다시 계산한다.
    - 재생·멈춤·배속(1x/5x/10x), 시나리오(평소·급증·장애), 최근 5분 응답 시간·성공률 그래프
-   - 장애 넣기: [⚡ 장애 넣기]를 켜고 EC2·RDS 박스나 AZ 영역을 누르면 고장/복구. 자동 복구 과정은 사건 기록에 남는다
+   - 장애 넣기: [⚡ 장애 넣기]를 켜고 앱 서버(EC2·컨테이너)·RDS 박스나 AZ 영역을 누르면 고장/복구. 자동 복구 과정은 사건 기록에 남는다
    - 검증 오류가 있으면 요청이 끝까지 가지 못하므로 실행하지 않는다 (경고는 허용).
    - 재생 중에 구성을 바꿔도 시계·그래프는 이어진다 (바꾼 전후를 그래프로 비교할 수 있게).
    --------------------------------------------------------- */
@@ -24,10 +24,10 @@ const firstOf = (...types) => state.nodes.find(n => types.includes(n.type));
 const SIM_SCENARIOS = {
   steady: { label: '평소 (일정)', rps: base => base },
   surge:  { label: '급증 (3배)',  rps: (base, t) => { const c = t % 60; return c >= 15 && c < 35 ? base * 3 : base; } },
-  ec2:    { label: 'EC2 장애', rps: base => base, events: {
+  ec2:    { label: '앱 서버 장애', rps: base => base, events: {
     10:  f => { const n = firstOf(...APP_TYPES); if (n) setFault(f, n.id, true); },
     100: f => { const n = firstOf(...APP_TYPES); if (n) setFault(f, n.id, false); } } },
-  az:     { label: 'AZ 장애', rps: base => base, events: {   // DB 본체가 있는 AZ (없으면 첫 EC2의 AZ)
+  az:     { label: 'AZ 장애', rps: base => base, events: {   // DB 본체가 있는 AZ (없으면 첫 앱 서버의 AZ)
     10:  f => { const az = scenarioAz(); if (az) setAzFault(f, az.id, true); },
     130: f => { const az = scenarioAz(); if (az) setAzFault(f, az.id, false); } } },
   attack: { label: '공격 (봇 트래픽)', rps: base => base,   // 60초마다 15~45초: 기본 트래픽의 3배만큼 봇 요청이 함께 들어옴 (반복)
@@ -61,7 +61,7 @@ function setAzFault(f, azId, on) {
   if (f.downAzs.has(azId) === on) return;
   if (on) f.downAzs.add(azId); else f.downAzs.delete(azId);
   const az = findContainer(azId);
-  f.log.push({ t: simT, text: `${az ? az.label : 'AZ'} 전체 ${on ? '장애 (안의 EC2·DB·캐시가 모두 멈춤)' : '복구'}` });
+  f.log.push({ t: simT, text: `${az ? az.label : 'AZ'} 전체 ${on ? '장애 (안의 앱 서버·DB·캐시가 모두 멈춤)' : '복구'}` });
 }
 const clockText = t => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 
@@ -155,7 +155,7 @@ function setSimFaultMode(on) {
   simFaultMode = on;
   if (on) {
     select(null);
-    showToast('고장 낼 EC2·RDS 박스나 AZ 영역을 누르세요. 다시 누르면 복구돼요. (끄기: Esc)');
+    showToast('고장 낼 앱 서버(EC2·컨테이너)·RDS 박스나 AZ 영역을 누르세요. 다시 누르면 복구돼요. (끄기: Esc)');
   }
   syncSimControls();
 }
@@ -271,7 +271,7 @@ function simDiagnose(r, busiest, stuck, blocked) {
   if (blocked.length) {
     const lost = blocked.reduce((sum, [, s]) => sum + s.load, 0);
     const dbStuck = [...simFaults.db.values()].some(d => d.phase === 'down');
-    const ec2 = blocked.find(([id]) => APP_TYPES.includes(findNode(id).type));
+    const ec2 = blocked.find(([id]) => findNode(id).type === 'ec2');
     return { level: 'over',
       msg: `장애: ${blocked.map(([id]) => simNodeName(id)).join(', ')}에 보낸 ${fmt(lost)}요청/초가 실패하고 있어요.`,
       fix: dbStuck ? '다른 AZ에 RDS Standby를 두면 장애 조치로 이어져요 (판정 7 고가용성)'
@@ -281,7 +281,7 @@ function simDiagnose(r, busiest, stuck, blocked) {
   if (stuck.length) {
     const type = findNode(stuck[0][0]).type, name = SVC_MAP[type].name;
     const lost = stuck.reduce((sum, [, s]) => sum + s.stuck, 0);
-    const need = (PERF_ROUTES[USER_TYPES.includes(type) ? 'user' : type] || []).map(t => SVC_MAP[t].name).join('/');
+    const need = (PERF_ROUTES[USER_TYPES.includes(type) ? 'user' : type] || []).flat().map(t => SVC_MAP[t].name).join('/');
     return { level: 'over', msg: `연결 끊김: ${name} → ${need} 연결이 없는 박스가 ${stuck.length}개 있어서, ${fmt(lost)}요청/초가 처리 도중 실패해요.`,
       fix: '다음 단계와 연결해주세요.' };
   }
@@ -292,7 +292,10 @@ function simDiagnose(r, busiest, stuck, blocked) {
     ? `병목: ${name}가 감당할 수 있는 양보다 ${fmt(s.load - s.capacity)}요청/초 더 들어와서, 넘친 요청은 실패해요.`
     : `거의 꽉 참: ${name} 사용률이 ${Math.round(s.util * 100)}%예요. 조금만 더 늘면 느려지고 실패하기 시작해요.`;
   let fix = '';
-  if (APP_TYPES.includes(type)) {
+  if (APP_TYPES.includes(type) && type !== 'ec2') {
+    // 컨테이너: 이 도구는 Auto Scaling 그룹을 EC2에만 쓴다 (작업 수 자동 조절은 다루지 않음)
+    fix = `다른 AZ에도 ${SVC_MAP[type].name} 박스를 두고 Load Balancer와 연결해 요청을 나누세요`;
+  } else if (APP_TYPES.includes(type)) {
     const g = inAsg(id);
     const cdn = has('cloudfront') ? '' : ' · CloudFront를 두면 정적 요청을 엣지에서 처리해 서버로 오는 요청이 줄어요 (제안 2 CDN 사용)';
     fix = !g ? 'EC2를 Auto Scaling 그룹에 넣으면 바쁠 때 자동으로 늘어나요 (제안 4 자동 확장)' + cdn
@@ -331,12 +334,12 @@ $world.addEventListener('pointerdown', e => {
   e.preventDefault();
   const n = findNode(id);
   if (n) {
-    if (!FAULT_TYPES.includes(n.type)) { showToast('장애는 EC2·RDS·ElastiCache 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
+    if (!FAULT_TYPES.includes(n.type)) { showToast('장애는 앱 서버(EC2·컨테이너)·RDS·ElastiCache 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
     setFault(simFaults, id, !simFaults.down.has(id));
   } else {
     let c = findContainer(id);
     while (c && c.type !== 'az') c = findContainer(c.parentContainer);
-    if (!c) { showToast('장애는 EC2·RDS·ElastiCache 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
+    if (!c) { showToast('장애는 앱 서버(EC2·컨테이너)·RDS·ElastiCache 박스나 AZ 영역에 넣을 수 있어요.', 'warn'); return; }
     setAzFault(simFaults, c.id, !simFaults.downAzs.has(c.id));
   }
   computeSim();
