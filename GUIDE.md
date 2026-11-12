@@ -40,7 +40,7 @@
 ### 검증
 - [검증하기]: 정상 / 경고 / 오류 3단계 판정 + 문제 박스 강조 (규칙 19개)
 - 검증 중에는 버튼이 [검증 종료]로 바뀜. 누르면 결과를 지우고 검증 전 화면으로 (구성은 그대로)
-- 개선·제거 제안 (판정과 별개, 규칙 19개)
+- 개선·제거 제안 (판정과 별개, 규칙 20개)
 - 잘한 점: 좋은 구성이 실제로 있으면 근거 태그와 함께 칭찬 (판정 5개·제안 9개 규칙에 짝지음). 문제 다음, 제안 앞에 표시
 - 판정·제안마다 Well-Architected 기준 태그와 "왜 그런지" 근거, 근거 문서 링크(자세히) 표시
 - 서비스 설명·연결 안내는 AWS 공식 문서 기준 (설명 패널에서 공식 문서 열기)
@@ -120,7 +120,7 @@ aws-3tier-simulator/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등). 구성 s를 인자로 받음 (R3)
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
-│   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 19개)
+│   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 20개)
 │   │   └─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
 │   ├─ ui/
 │   │   ├─ core.js            UI-1 화면 상태·공통 유틸(DOM 참조·좌표 변환), UI-2 소속 판정·동작 검사
@@ -398,6 +398,8 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
   AZ 테두리 박스를 늘리는 A안(Auto Scaling 그룹 같은 영역)은 연결선을 영역에 붙여야 해서 조작·코드가 복잡해져 고르지 않았다.
   LB-01 중 "AZ마다 서브넷"은 문서가 못 박아 오류(판정 2), "그 서브넷이 퍼블릭"은 문서 문장이 없어 제안 17로 둔다.
 - NAT 박스는 public NAT(퍼블릭 서브넷에 두고 IGW로 나감)로 간주. Private NAT(온프레미스·다른 VPC 연결용)는 표현하지 않는다.
+  (37번, v1.52) NAT—IGW 선이 없으면 제안 20 (NAT-04, 문서가 설명 문장이라 C). 그런 NAT가 있으면 판정 6 칭찬도 막는다.
+  서버—NAT 선은 요구하지 않는다: 판정 6이 라우팅 테이블을 가정해 "NAT가 있으면 서버가 쓴다"고 보므로, 서버 연결까지 요구하면 그 가정과 어긋난다 (사용자 결정 2026-11-12).
 - 근거 등급과 앱의 표시 수준이 다를 수 있다: WAF 연결(B등급)은 "정상"의 의미를 흔들지 않도록 제안으로 두고, WAF·Route 53 같은 검증 대상이 아닌 서비스(validated:false)의 오류급 근거(A등급)도 제안(제거)으로 반영한다.
 - CloudFront—EC2, Route 53—EC2는 문서가 허용하는 구성(VPC origin, 공개 IP)이라 오류로 보지 않는다. 앱이 안내하는 기본 구조(사용자 → CloudFront → IGW → Load Balancer)와 다를 때만 제안한다.
 - EC2를 퍼블릭 서브넷에 두는 것은 오류가 아니라 경고다 (문서가 금지하지 않고 프라이빗 서브넷을 권장할 뿐). 서브넷 밖·DB 서브넷은 위치가 성립하지 않아 오류로 둔다.

@@ -938,3 +938,27 @@ test('CTR-05: EC2 없이 컨테이너(ECS·Fargate)가 앱 서버인 구성도 �
   expect(r.status).toBe('error');
   expect(r.msgs.join(' ')).toContain('앱 서버가 없어요');
 });
+
+test('NAT-04: IGW와 이어지지 않은 NAT가 있으면 제안 20, NAT 칭찬(판정 6)도 나오지 않는다', async ({ page }) => {
+  await openApp(page);
+  await buildValidArch(page);
+  await page.evaluate(() => {                                // NAT—IGW 선을 지워 NAT가 아무것과도 이어지지 않게
+    const nat = state.nodes.find(n => n.type === 'nat');
+    state.edges = state.edges.filter(e => e.from !== nat.id && e.to !== nat.id); render();
+  });
+  let r = await verdict(page);
+  expect(r.sug).toContain(20);
+  expect(r.praises).not.toContain('V6');
+  expect(r.msgs.join(' ')).toContain('NAT가 IGW와 이어져 있지 않아요');
+  await connect(page, 'nat', 'igw');
+  r = await verdict(page);
+  expect(r.sug).not.toContain(20);
+  expect(r.praises).toContain('V6');
+  // AZ B에 IGW와 안 이은 NAT를 더 두면 그 NAT만 짚는다
+  await page.evaluate(() => { addNode('nat', 880, 270); });
+  r = await verdict(page);
+  expect(r.sug).toContain(20);
+  expect(r.praises).not.toContain('V6');
+  const ids = await page.evaluate(() => validation.suggestions.find(s => s.rule.id === 20).nodeIds);
+  expect(ids).toEqual([await page.evaluate(() => state.nodes.filter(n => n.type === 'nat')[1].id)]);
+});

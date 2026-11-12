@@ -134,8 +134,9 @@ Route 53 · CloudFront · WAF는 아래에 이어서 씀 (2c, 2026-10-27).
 - 근거: [NAT 게이트웨이](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
 - 인용: "You route traffic from the NAT gateway to the internet gateway for the VPC."
 - 주의: 문장이 "must"가 아니라 설명이고, IGW 대신 TGW·VGW로 나가는 구성도 있다 → C로 둠
-- 반영 규칙: (아직 없음) SUGGESTION 후보 (우선순위 낮음)
-- 상태: 조사됨
+- 표현 방식: IGW와 이어지지 않은 NAT가 있으면 제안 (서버와의 연결은 보지 않음 — 판정이 라우팅 테이블을 가정해 NAT가 있으면 서버가 쓴다고 보므로). 그런 NAT가 있으면 판정 6의 칭찬도 막는다 (사용자 결정 2026-11-12)
+- 반영 규칙: SUGGESTION #20 NAT에서 IGW로, 칭찬 6 좁힘
+- 상태: 반영됨 (v1.52, ROADMAP 37번)
 
 ## WAF (2c)
 
