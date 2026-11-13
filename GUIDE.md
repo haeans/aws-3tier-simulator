@@ -25,7 +25,7 @@
 - 팔레트 추천 묶음: 박스를 하나 고르면 팔레트 맨 위에 연결하기 좋은 서비스(이미 연결된 것은 ✓). 거기서 끌어 놓으면 고른 박스와 바로 연결 (v1.40)
 - [불러오기 ▾] 메뉴 (v1.43)
   - 기본 틀: VPC 1 + AZ 2 + AZ별 퍼블릭/프라이빗/DB 서브넷. 캔버스 한가운데에 만들고 화면도 그곳으로 이동 (v1.39)
-  - 예시: 기본 3-Tier(정상, 제안 있음) / 고가용성(정상, 제안 0개) / 고쳐 보세요(흔한 실수 2개를 매번 랜덤으로). 불러오면 전체가 보이게 줌을 맞춤
+  - 예시: 기본 3-Tier(정상, 제안 있음) / 고가용성(정상, 제안 0개) / 컨테이너(ECS + Fargate, 정상, 이미지는 VPC Endpoints → ECR) / 고쳐 보세요(흔한 실수 2개를 매번 랜덤으로). 불러오면 전체가 보이게 줌을 맞춤
 
 ### 연결
 - 박스에 마우스를 올리면 네 변에 연결점이 보이고, 연결점을 다른 박스로 끌어 놓으면 양방향 직각 화살표 연결 (v1.38)
@@ -116,7 +116,7 @@ aws-3tier-simulator/
 │   │   ├─ guide.js           설명 패널 내용 (SERVICE_GUIDE: 연결 상대·오가는 요청·연결하면 안 되는 상대)
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
-│   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA, 고쳐 보세요용 EXAMPLE_MISTAKES)
+│   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA·EXAMPLE_CONTAINER, 고쳐 보세요용 EXAMPLE_MISTAKES)
 │   │   └─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
 │   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/
@@ -381,6 +381,11 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
   예시는 기본 틀을 만든 뒤 그 VPC 위치 기준 상대 좌표로 놓는다 (기본 틀이 캔버스 가운데라 위치가 화면 크기와 무관하게 같음).
   "고쳐 보세요"는 매번 랜덤으로 실수 2개 (반복 연습용). 실수는 서로 부딪히지 않는 것만 두고, 테스트가 실수마다·모든 두 개 조합마다 판정 문제가 생기는지 확인한다.
   무엇이 틀렸는지는 알려주지 않는다 (찾는 것이 연습). 컨테이너 예시는 36번(CTR-05)으로 판정이 받쳐 주게 되었고, 예시 추가는 ROADMAP 후보 D.
+- 컨테이너 예시 (v1.56, 41번, 사용자 결정): 예시는 1개만, CI/CD 박스는 넣지 않는다 (판정 규칙이 없어 선만 그려지는 부분이 생김, CICD-01).
+  기본 3-Tier와 나란히 비교되도록 최소 구성으로 둔다: EC2 → Fargate(두 AZ), NAT → VPC Endpoints—ECR. 제안 5개가 남는다 (미션의 "개선해 보기" 재료).
+  ECS 박스는 하나만 두고 두 Fargate와 설정 관계 선으로 잇는다 (실제 ECS 서비스 하나가 여러 AZ에 작업을 둠. Fargate 짝 제안 16을 피함).
+  이미지 길은 앱의 기존 약속대로 Fargate—ECR 선 + VPC Endpoints—ECR 선으로 그린다 (서버—S3 + VPC Endpoints—S3와 같은 방식, 판정 18).
+  새 규칙·criteria 항목은 없다 (CTR-01·02·04·05로 충분).
   불러온 뒤 전체가 보이게 줌을 맞춘다(fitView): 고가용성은 VPC 위·옆에 서비스가 있어 100%에서는 노트북 화면을 넘는다.
 - 시뮬레이션 중 고른 박스의 지금 상태는 설명 패널 맨 위에 둔다 (v1.42, 사용자 결정). 새 패널을 만들지 않아 화면을 더 가리지 않는다.
   내용은 마우스를 올릴 때의 설명(simTooltip)을 그대로 쓰고, 계산할 때마다(computeSim) updateInfoSim()이 이 칸만 다시 그린다 (패널 스크롤 유지).

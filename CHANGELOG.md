@@ -13,6 +13,16 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.56.0] 2026-11-13  예시 구성 확장: 컨테이너 (41번)
+  추가: [불러오기 ▾] 메뉴에 "예시: 컨테이너 (ECS + Fargate)" — 기본 3-Tier의 EC2 자리에 Fargate(두 AZ), NAT 자리에 VPC Endpoints → ECR.
+        박스 10개(PC·IGW·Load Balancer·ECS·Fargate 2·RDS·RDS Standby·VPC Endpoints·ECR). 판정 "정상", 제안은 기본 3-Tier와 같은 5개가 남음
+  추가: 테스트 — 컨테이너 예시가 EC2·NAT 없이 정상, VPC Endpoints—ECR 선을 지우면 판정 18 경고 (tests/validation.spec.js)
+  변경: 예시 key → 구성 데이터를 EXAMPLE_SPECS 표로 찾음 (js/data/examples.js). 예시를 더할 때 불러오기 코드를 고치지 않아도 됨
+  비고: 사용자 결정 — 이번에는 컨테이너 예시 1개만(CI/CD 박스 없음), 이미지 받는 길은 VPC Endpoints, 제안이 남는 최소 구성, ECS 박스는 하나
+  비고: 새 판정 규칙·criteria 항목 없음. 기존 criteria/container.md CTR-01·02·04·05로 충분함을 예시를 불러와 확인
+  비고: 직접 정한 것 — 메뉴 자리(고가용성과 고쳐 보세요 사이), VPC Endpoints·ECR 높이(퍼블릭과 프라이빗 서브넷 사이: 초록 선이 서브넷 이름표를 가리지 않게).
+        "고쳐 보세요"에 컨테이너 실수는 넣지 않음
+
 [1.55.0] 2026-11-12  흐름 단계 해설 (40번)
   추가: 검증 후 흐름 점이 박스에 닿을 때마다 결과 패널에 "그 박스가 하는 일" 한 줄 해설과 단계 번호(예: 5 / 13)를 보여 줌.
         지금 설명하는 박스는 캔버스에서 파란 테두리로 강조

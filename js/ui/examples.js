@@ -22,7 +22,7 @@ function loadExample(key, picks) {
   if (key === 'template') { loadTemplate(); return; }
   const ex = EXAMPLES.find(e => e.key === key);
   if (!ex) return;
-  const spec = key === 'ha' ? EXAMPLE_HA : EXAMPLE_BASIC;
+  const spec = EXAMPLE_SPECS[key];
   let nodes = spec.nodes, edges = spec.edges;
   if (key === 'fix') {
     const chosen = picks || pickRandom(EXAMPLE_MISTAKES.map(m => m.key), EXAMPLE_MISTAKE_COUNT);

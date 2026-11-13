@@ -800,7 +800,7 @@ test('설명 패널: 접으면 제목 줄만 남고, 다른 박스를 골라도 
 test('[불러오기 ▾] 메뉴: 예시 "기본 3-Tier"는 정상, "고가용성"은 정상에 제안이 하나도 없다', async ({ page }) => {
   await openApp(page);
   await page.click('#btn-load');
-  await expect(page.locator('#load-menu .load-item')).toHaveCount(5);   // 기본 틀 + 예시 3개 + 파일에서 열기(39번)
+  await expect(page.locator('#load-menu .load-item')).toHaveCount(6);   // 기본 틀 + 예시 4개 + 파일에서 열기(39번)
   await page.click('#load-menu .load-item[data-key="basic"]');
   await expect(page.locator('#load-menu')).toBeHidden();
   await expect(page.locator('#toast')).toContainText('기본 3-Tier');
@@ -814,6 +814,33 @@ test('[불러오기 ▾] 메뉴: 예시 "기본 3-Tier"는 정상, "고가용성
   expect(v.status).toBe('ok');
   expect(v.sug).toEqual([]);
   expect(await page.evaluate(() => state.containers.some(c => c.type === 'asg'))).toBe(true);
+});
+
+test('41번: 예시 "컨테이너 (ECS + Fargate)"는 EC2·NAT 없이 정상이고, VPC Endpoints—ECR 선을 지우면 이미지 경로 경고가 난다', async ({ page }) => {
+  await openApp(page);
+  await page.click('#btn-load');
+  await page.click('#load-menu .load-item[data-key="container"]');
+  await expect(page.locator('#toast')).toContainText('컨테이너');
+  let v = await verdict(page);
+  expect(v.status).toBe('ok');
+  expect(v.issues).toEqual([]);
+  expect(v.sug).toEqual([1, 2, 5, 8, 9]);                                   // 기본 3-Tier와 같은 제안만 (Fargate 짝 16·서버 통신 19 없음)
+  const types = await page.evaluate(() => state.nodes.map(n => n.type));
+  expect(types).toHaveLength(10);
+  expect(types.filter(t => t === 'fargate')).toHaveLength(2);
+  expect(types.some(t => t === 'ec2' || t === 'nat')).toBe(false);
+  // 두 Fargate는 서로 다른 AZ의 프라이빗 서브넷에 있다
+  const zones = await page.evaluate(() => state.nodes.filter(n => n.type === 'fargate').map(n => zoneOf(n) + '/' + azOf(n).id));
+  expect(zones.every(z => z.startsWith('private/'))).toBe(true);
+  expect(new Set(zones).size).toBe(2);
+  // 근거: CTR-02 — 이미지 받는 길(VPC Endpoints—ECR)이 없으면 판정 18 경고
+  await page.evaluate(() => {
+    const T = t => state.nodes.find(n => n.type === t).id;
+    state.edges = state.edges.filter(e => !([e.from, e.to].includes(T('vpce')) && [e.from, e.to].includes(T('ecr'))));
+    render();
+  });
+  v = await verdict(page);
+  expect(v.issues).toEqual([18, 18]);
 });
 
 test('예시 "고쳐 보세요": 실수마다 판정 문제가 생기고, 어떤 두 개를 골라도 문제가 2개 이상이다', async ({ page }) => {

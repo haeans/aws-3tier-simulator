@@ -7,7 +7,7 @@
      AZ A: x 40~480 (서브넷 60~460), AZ B: x 520~960 (서브넷 540~940)
      퍼블릭 y 120~260, 프라이빗 280~420, DB 440~580. VPC 밖은 음수나 1000 넘는 값
    - nodes: [키, 종류, x, y] / edges: [키, 키] / asg: Auto Scaling 그룹 영역 { x, y, width, height } (상대 좌표)
-   - 판정·제안 결과는 tests/validation.spec.js의 예시 테스트가 지킨다 (기본: 정상, 고가용성: 정상·제안 0개)
+   - 판정·제안 결과는 tests/validation.spec.js의 예시 테스트가 지킨다 (기본·컨테이너: 정상, 고가용성: 정상·제안 0개)
    --------------------------------------------------------- */
 
 // 기본 3-Tier: 판정 "정상"이 나오는 최소 구성 (제안은 여러 개 남음 → 고가용성과 비교해 보기)
@@ -43,6 +43,28 @@ const EXAMPLE_HA = {
   asg: { x: 40, y: 280, width: 900, height: 140 },
 };
 
+// 컨테이너 (ECS + Fargate): 기본 3-Tier의 EC2 자리에 Fargate, NAT 자리에 VPC Endpoints → ECR (41번)
+// 판정 "정상", 제안은 기본 3-Tier와 같은 것이 남는다. 근거: criteria/container.md CTR-01·02·04·05
+const EXAMPLE_CONTAINER = {
+  nodes: [
+    ['pc', 'pc', 500, -150], ['igw', 'igw', 500, 0], ['lb', 'lb', 500, 190],
+    // ECS(서비스)는 하나, 실제로 요청을 처리하는 Fargate 작업은 두 AZ에 (CTR-04: Fargate는 ECS와 함께 쓴다)
+    ['ecs', 'ecs', 140, 350], ['fga', 'fargate', 320, 350], ['fgb', 'fargate', 740, 350],
+    ['rds', 'rds', 260, 510], ['sb', 'rds-standby', 740, 510],
+    // 이미지 받는 길: NAT 없이 VPC Endpoints로 (CTR-02). VPC Endpoints는 VPC 왼쪽 경계, ECR은 VPC 밖
+    // y 270 = 퍼블릭과 프라이빗 서브넷 사이 → Fargate에서 오는 초록 선이 서브넷 이름표를 가리지 않음
+    ['vpce', 'vpce', 0, 270], ['ecr', 'ecr', -180, 270],
+  ],
+  edges: [
+    ['pc', 'igw'], ['igw', 'lb'], ['lb', 'fga'], ['lb', 'fgb'], ['fga', 'rds'], ['fgb', 'rds'], ['rds', 'sb'],
+    ['ecs', 'fga'], ['ecs', 'fgb'],                       // 실행 방식 (설정 관계 선)
+    ['fga', 'ecr'], ['fgb', 'ecr'], ['vpce', 'ecr'],      // 이미지 받기: Fargate → ECR, 그 길은 VPC Endpoints
+  ],
+};
+
+// 예시 key → 구성 데이터 ("고쳐 보세요"는 기본 3-Tier에 실수를 더해 쓴다)
+const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC };
+
 // "고쳐 보세요": 기본 3-Tier에 흔한 실수 2개를 랜덤으로 넣는다.
 // rule: 그 실수를 잡는 판정 근거(criteria ID). 테스트는 실수마다 판정 문제(오류·경고)가 새로 생기는지 확인한다
 // edges: 더할 연결 / move: 박스를 옮길 자리
@@ -62,6 +84,8 @@ const EXAMPLES = [
     toast: '예시 "기본 3-Tier"를 불러왔어요. [검증하기]를 눌러 결과와 제안을 확인해 보세요.' },
   { key: 'ha', name: '예시: 고가용성', desc: '제안이 하나도 없는 모범 구성이에요',
     toast: '예시 "고가용성"을 불러왔어요. [성능 시뮬레이션]에서 장애를 넣어 버티는지 확인해 보세요.' },
+  { key: 'container', name: '예시: 컨테이너 (ECS + Fargate)', desc: 'EC2 대신 컨테이너로 만든 3-Tier예요',
+    toast: '예시 "컨테이너"를 불러왔어요. [검증하기] 뒤 [서버 통신] 보기에서 이미지를 받는 길을 확인해 보세요.' },
   { key: 'fix', name: '예시: 고쳐 보세요', desc: '흔한 실수 2개가 숨어 있어요 (매번 달라져요)',
     toast: '문제 2개가 숨어 있어요. [검증하기]로 찾아서 고쳐 보세요.' },
 ];
