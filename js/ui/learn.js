@@ -2,7 +2,7 @@
 // js/ui/learn.js — UI-16 오른쪽 학습 패널: [미션]·[문제] 탭 (43번)
 // 검증·성능 시뮬레이션은 아래 결과 패널, 배우는 기능(미션·문제)은 캔버스 오른쪽 이 패널에 둔다.
 // 툴바 [학습]으로 열고 닫는다. 열림 여부와 고른 탭은 uiPrefs(js/ui/storage.js)에 저장한다.
-// 미션 내용은 js/ui/mission.js(renderMissionPanel)가 그린다.
+// 미션 내용은 js/ui/mission.js(renderMissionPanel), 문제 내용은 js/ui/problem.js(renderProblemPanel)가 그린다.
 
 const $learn = document.getElementById('learn-panel');
 const $learnBtn = document.getElementById('btn-learn');
@@ -43,8 +43,3 @@ function renderLearn() {
   else renderMissionPanel(body);
 }
 
-// [문제] 탭: 면접식 설계 문제 (43-2에서 채운다)
-function renderProblemPanel(body) {
-  body.innerHTML = '<div class="learn-msg">면접식 설계 문제</div>' +
-    '<div class="mission-title"><b>준비 중이에요</b><span>요구 사항을 읽고 직접 설계한 뒤, 모범 답안과 비교해 보는 문제가 곧 추가돼요.</span></div>';
-}

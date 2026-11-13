@@ -650,6 +650,25 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .learn-panel .mission-list li span { order: 9; flex-basis: 100%; padding-left: 26px; font-size: 12px; }
 .learn-panel .mission-list li.mission-group span { padding-left: 0; }
 .learn-panel .mission-title { flex-direction: column; gap: 2px; }
+/* [문제] 탭 (43번): 요구 사항 ✓/✗, 못 채운 요구의 "모범 답안에는 있는 것" */
+.problem-sub { font-weight: 700; font-size: 12px; color: var(--accent); margin-bottom: -4px; }
+.problem-reqs i { border-radius: 50%; color: var(--muted); }
+.problem-reqs li.done i { color: #fff; }
+.problem-reqs li.fail { background: #fdf3f1; border-color: #f2c4bb; color: #9b2412; }
+.problem-reqs li.fail i { background: #d13212; border-color: #d13212; color: #fff; }
+.problem-note { padding: 6px 10px; border-radius: 6px; background: #f7f9fb; border: 1px dashed var(--line); color: var(--muted); }
+.problem-score { padding: 6px 10px; border-radius: 6px; background: #fff8e1; border: 1px solid #f0d98a; color: #8a6400; font-weight: 700; }
+.problem-miss { padding: 6px 10px; border-radius: 6px; border: 1px solid #f2c4bb; background: #fff; }
+.problem-miss > b { color: #9b2412; }
+.problem-miss-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.problem-miss ul { margin: 4px 0 0; padding-left: 16px; display: grid; gap: 4px; }
+.problem-miss li b { display: block; }
+.problem-miss li span { color: var(--muted); font-size: 12px; }
+.problem-answer { padding: 6px 10px; border-radius: 6px; background: #eef6fc; border: 1px solid #b9d8f0; color: #10507a; }
+.problem-level { font-style: normal; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 8px; flex-shrink: 0; }
+.problem-level.easy { background: #e6f4ea; color: #1d6b2f; }
+.problem-level.normal { background: #fff3e0; color: #c45500; }
+.problem-level.hard { background: #fdecea; color: #b3261e; }
 /* 성능 시뮬레이션 패널 */
 .sim-panel { margin-top: 8px; display: grid; gap: 6px; }
 .sim-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
