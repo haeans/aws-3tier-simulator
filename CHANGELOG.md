@@ -13,6 +13,23 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.64.0] 2026-11-13  비용: 대략적인 월 비용 (47번)
+  추가: 결과 패널 네 번째 탭 [비용] — 머리 줄에 "월 약 $287" 합계, 표에 항목·개수·1개 월·월 합계·[가격 ↗](AWS 공식 가격 페이지)
+        서울(ap-northeast-2) 온디맨드 가격 × 730시간. 2026-11-13에 AWS 공식 가격 데이터(Price List)에서 확인한 값
+        EC2 t3.*(크기별)·RDS db.t3.*(크기별, Standby는 Multi-AZ로 늘어난 몫)·ElastiCache cache.t3.medium·NAT·ALB·
+        VPC 인터페이스 엔드포인트(이은 서비스 수 × AZ 2곳)·Client VPN·Fargate(작업 크기별 vCPU·메모리)·EKS 클러스터·WAF·Route 53 호스팅 영역
+  추가: "사용량에 따라"(CloudFront·S3·CloudWatch 등, 합계에 넣지 않음)·"무료"(IGW·ECS)·"넣지 않은 것"(저장 공간·데이터 전송·처리량 요금) 안내
+  추가: Auto Scaling 그룹 안 EC2는 최소 대수 기준으로 계산하고 "늘어나면 그만큼 더" 표시
+  추가: [비교] 탭에 "월 비용 (대략)" 줄 (늘면 빨강, 줄면 초록). 판정이 오류인 구성도 비용은 계산
+  추가: 서버·DB 설정 칸에 "이 크기로 1대 월 약 $38" 한 줄
+  추가: 근거 문서 criteria/cost.md (C1~C12: 값·데이터 위치·가격 페이지 주소·별도 요금). 가격표 js/data/cost.js, 계산 js/rules/cost.js(costOf·nodeMonthlyCost)
+  변경: Auto Scaling 그룹이 처음 띄우는 박스별 대수를 asgStartCounts로 나눔 (시뮬레이션과 비용이 함께 씀)
+  추가: 테스트 tests/cost.spec.js — 기본 3-Tier 합계, 크기·Multi-AZ·Auto Scaling·Fargate·엔드포인트·월 고정 요금, [비용] 탭·[비교] 줄·설정 칸
+  비고: 사용자 결정 — 서울 지역 공식 가격 바탕(조사 날짜·"대략" 표시), 결과 패널 [비용] 탭
+  비고: 직접 정한 것 — 가격 조사는 AWS Price List(가격 페이지가 쓰는 공식 데이터)를 직접 받아 확인 (가격 페이지는 숫자를 화면에서 불러와서 본문 읽기로는 안 보임),
+        RDS는 MySQL, ElastiCache는 Redis(45번 보안 그룹 포트와 맞춤), Fargate 작업 크기(0.25/0.5/1 vCPU, 가정), 인터페이스 엔드포인트는 AZ 2곳(가정),
+        WAF는 웹 ACL 1개 + 규칙 1개(가정), Client VPN은 서브넷 연결 1개(가정)
+
 [1.63.0] 2026-11-13  간단한 설정값: 서버·DB 크기, Auto Scaling 최소·최대·목표 (46번)
   추가: EC2·ECS·EKS·Fargate를 고르면 설명 패널 맨 위 "설정" 칸에 서버 크기 [작게][보통][크게] — 1대 처리량 50 / 100 / 200 요청/초 (가정)
   추가: RDS·Read Replica·Standby는 DB 크기 [작게][보통][크게] — 150 / 300 / 600 쿼리/초 (가정). 예시 이름(t3.small 등)도 가정이라고 표시

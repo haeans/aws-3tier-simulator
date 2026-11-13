@@ -705,6 +705,14 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .ip-net tr.bad td:first-child { font-weight: 700; }
 .ip-net-notes { margin: 6px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
 .ip-net-note { margin-top: 4px; font-size: 11px; color: var(--muted); }
+/* [비용] 탭 (47번) */
+.cost-panel { margin-top: 8px; display: grid; gap: 8px; }
+.cost-total { color: var(--text); font-size: 14px; }
+.cost-table td a { font-size: 12px; color: var(--select); }
+.cost-row-note { display: block; font-size: 11px; color: var(--muted); }
+.cost-table tr.cost-sum td { font-weight: 700; border-top: 2px solid var(--line); }
+.cost-note { color: var(--muted); }
+.cost-notes b { min-width: 110px; }
 /* 성능 시뮬레이션 패널 */
 .sim-panel { margin-top: 8px; display: grid; gap: 6px; }
 .sim-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

@@ -288,6 +288,11 @@ function perfCapacity(n) {
   if (!p || p.capacity === null) return null;
   return p.capacity * (sizeGroupOf(n.type) ? SIZE_FACTOR[nodeSize(n)] : 1);
 }
+// 그룹이 처음 띄우는 박스별 대수: 박스마다 1대, 최소가 박스 수보다 크면 남는 대수를 박스에 돌아가며 (47번 비용도 이 대수를 쓴다)
+function asgStartCounts(members, min) {
+  const extra = Math.max(0, min - members.length);
+  return new Map(members.map((m, i) => [m.id, 1 + Math.floor(extra / members.length) + (i < extra % members.length ? 1 : 0)]));
+}
 // Auto Scaling 그룹 설정 { min, max, target(0~1) }. count: 그룹 안 EC2 박스 수
 // 최소는 박스 수 이상(박스 하나 = 서버 1대 이상), 최대는 최소 이상. 값이 없거나 범위를 벗어나면 기본값·경계로
 function asgSettings(area, count) {
@@ -310,9 +315,8 @@ function asgState(f, area) {
   if (!g) {
     g = { min: 0, max: 0, target: ASG_TARGET, running: new Map(), launching: [], highFor: 0, lowFor: 0, maxNoted: false };
     f.asg.set(area.id, g);
-    // 처음에는 최소 대수만큼 띄운다: 박스마다 1대, 남는 대수는 박스에 돌아가며 (46번: 최소를 박스 수보다 크게 정할 수 있음)
-    members.forEach((m, i) => g.running.set(m.id, 1 + Math.floor((set.min - members.length) / members.length) +
-      (i < (set.min - members.length) % members.length ? 1 : 0)));
+    // 처음에는 최소 대수만큼 띄운다 (46번: 최소를 박스 수보다 크게 정할 수 있음)
+    asgStartCounts(members, set.min).forEach((c, id) => g.running.set(id, c));
   }
   members.forEach(m => { if (!g.running.has(m.id)) g.running.set(m.id, 1); });
   [...g.running.keys()].forEach(id => { if (!members.some(m => m.id === id)) g.running.delete(id); });

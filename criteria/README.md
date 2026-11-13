@@ -45,6 +45,7 @@
 | ops.md | VPC Endpoints, Client VPN, Session Manager, IAM, CloudTrail, CloudWatch, CloudFormation |
 | container.md | ECR, ECS, EKS, Fargate, Code 4종 |
 | flow.md | 흐름 단계 해설 문구의 근거 (F1~F22, 40번). 판정 규칙이 아니라 해설 문장용이라 양식이 다름 |
+| cost.md | 월 비용 가격의 근거 (C1~C12, 47번). 서울 온디맨드 가격과 데이터 위치. 판정 규칙이 아니라 비용 계산용 |
 | PROGRESS.md | 진행표 (세션이 이어받는 유일한 입구) |
 
 ## 4. 세션 규칙

@@ -65,6 +65,7 @@ const COMPARE_ROWS = [
   { name: '처리한 요청', get: x => x.traffic && x.traffic.served, text: (x, v) => `${Math.round(v)}/초`, better: 1, diff: d => `${Math.round(Math.abs(d))}/초` },
   { name: '성공률', get: x => x.traffic && x.traffic.successRate, text: (x, v) => pct(v), better: 1, diff: d => `${Math.round(Math.abs(d) * 100)}%p` },
   { name: '평균 응답 시간', get: x => x.traffic && x.traffic.served ? x.traffic.latency : null, text: (x, v) => `${Math.round(v)}ms`, better: -1, diff: d => `${Math.round(Math.abs(d))}ms` },
+  { name: '월 비용 (대략)', get: x => x.cost, text: (x, v) => usd(v), better: -1, diff: d => usd(Math.abs(d)) },
   { name: '한 AZ가 멈추면 (성공률)', get: x => x.az && x.az.rate, text: (x, v) => `${pct(v)} (${x.az.label} 장애)`, better: 1, diff: d => `${Math.round(Math.abs(d) * 100)}%p` },
 ];
 

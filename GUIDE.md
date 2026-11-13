@@ -76,6 +76,11 @@
   RDS와 연결되지 않은 EC2는 빨간 점선 테두리 + "연결 끊김"
 - 숫자는 학습용 가정값 (EC2 1대 초당 100요청, RDS 초당 300요청). LB·IGW·CloudFront는 제한 없음
 
+### 비용 (v1.64, 47번)
+- 결과 패널 [비용] 탭: 대략적인 월 비용 합계와 항목별 내역 (서울 온디맨드 × 730시간, 2026-11-13 확인한 AWS 공식 가격). 항목마다 [가격 ↗] 링크
+- 사용량 요금(CloudFront·S3 등)·저장 공간·데이터 전송은 합계에 넣지 않고 따로 적는다. Auto Scaling은 최소 대수 기준
+- [비교] 탭 "월 비용 (대략)" 줄, 서버·DB 설정 칸에 "1대 월 약 $…"
+
 ### 간단한 설정값 (v1.63, 46번)
 - 서버(EC2·컨테이너)·DB(RDS 종류)를 고르면 설명 패널 맨 위 "설정" 칸에서 크기 [작게][보통][크게]. 처리량이 ½·1·2배 (가정)
 - Auto Scaling 그룹 영역을 고르면 최소·최대 대수와 목표 사용률. 성능 시뮬레이션이 이 값으로 늘리고 줄인다
@@ -155,6 +160,7 @@ aws-3tier-simulator/
 │   │   ├─ guide.js           설명 패널 내용 (SERVICE_GUIDE: 연결 상대·오가는 요청·연결하면 안 되는 상대)
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
+│   │   ├─ cost.js            월 비용 가격표 (COST_PRICE: 서울 온디맨드 시간·월 요금, 사용량 요금·무료 목록. 근거 criteria/cost.md)
 │   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA·EXAMPLE_CONTAINER, 고쳐 보세요용 EXAMPLE_MISTAKES)
 │   │   ├─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
 │   │   ├─ problems.js        면접식 설계 문제 (PROBLEMS: 상황·요구 사항(역할 목록)·모범 답안·설계 이유, PROBLEM_ROLES: 역할(이름·이유·조건))
@@ -166,6 +172,7 @@ aws-3tier-simulator/
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 20개)
 │   │   ├─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
+│   │   ├─ cost.js            월 비용 costOf(구성)·nodeMonthlyCost(박스) (가격표 js/data/cost.js, 근거 criteria/cost.md)
 │   │   ├─ network.js         네트워크 ② 라우팅 테이블 networkRouteTable(서브넷)·보안 그룹 networkSecurityGroup(박스) 계산 (구성 s를 인자로)
 │   │   ├─ compare.js         구성 두 개 비교 compareConfigs(a, b, rps): 판정·트래픽·AZ 장애 요약(compareSummary)·박스 차이·제안 차이
 │   │   ├─ problems.js        문제 채점 gradeProblem(구성 s를 인자로): 요구 사항별 충족·없는 역할. 역할 조회 도구(problem…)
@@ -183,6 +190,7 @@ aws-3tier-simulator/
 │   │   ├─ sim-canvas.js      UI-12 성능 시뮬레이션 캔버스 표시 (박스 색·사용률 막대·트래픽 점)
 │   │   ├─ examples.js        UI-13 [불러오기 ▾] 메뉴·기본 틀(loadTemplate)·구성 데이터 놓기(loadSpec)·예시 불러오기·전체 보기(fitView)
 │   │   ├─ mission.js         UI-15 [미션] 탭: 목록·목표 체크·힌트·진행 저장 (학습 패널 안에 그림)
+│   │   ├─ cost.js            UI-19 결과 패널 [비용] 탭: 합계·내역·가격 링크·별도 요금 안내
 │   │   ├─ compare.js         UI-18 결과 패널 [비교] 탭: A로 담기·비교 표·달라진 점·A 불러오기 (A는 브라우저에 저장)
 │   │   ├─ problem.js         UI-17 [문제] 탭: 목록·[제출] 채점 결과·모범 답안 불러오기·진행 저장
 │   │   └─ learn.js           UI-16 오른쪽 학습 패널: [미션]·[문제] 탭, 열기·닫기(openLearn·renderLearn)
@@ -559,3 +567,14 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 그룹 안 서버 크기가 섞이면 1대 처리량은 살아 있는 서버의 평균으로 본다 (목표 추적 계산)
 - RDS Multi-AZ를 설정으로 만들지 않는다: 이미 RDS Standby 박스로 표현하고 있어 같은 것을 두 가지로 하게 된다
 - 판정·제안은 설정을 보지 않는다 (크기는 성능 문제라 규칙 근거가 없음)
+
+### 비용 (47번, 2026-11-13, v1.64)
+- 사용자 결정: 서울 지역 AWS 공식 가격 바탕 (점수 같은 가정값이 아니라 실제 달러). 조사 날짜와 "대략, 실제와 다를 수 있음"을 화면에 적는다. 보여 주는 곳은 결과 패널 [비용] 탭
+- 근거 조사 방법 (직접 정함): AWS 가격 페이지는 숫자를 화면에서 불러오므로, 그 페이지가 쓰는 공식 가격 데이터(Price List Bulk API·b0.p.awsstatic.com)를 직접 받아 확인했다.
+  값과 데이터 위치는 criteria/cost.md. 가격이 바뀌면 그 파일과 js/data/cost.js를 함께 고친다
+- 월 = 730시간. 시간 요금이 있는 박스만 합계에 넣고, 사용량에 따라 붙는 요금(요청 수·데이터 양)은 금액 없이 이름만 적는다 (요청 수를 입력받지 않아서)
+- RDS Standby 박스 = Multi-AZ로 늘어난 몫 (Multi-AZ 요금은 Single-AZ의 정확히 2배라 같은 크기 1대 값)
+- 가정으로 정한 것: Fargate 작업 크기(작게 0.25 vCPU·0.5 GB / 보통 0.5·1 / 크게 1·2), 인터페이스 엔드포인트는 이은 서비스마다 AZ 2곳,
+  WAF는 웹 ACL 1개 + 규칙 1개, Client VPN은 서브넷 연결 1개, ElastiCache는 Redis cache.t3.medium 1노드, RDS는 MySQL
+- Auto Scaling 그룹은 최소 대수로 계산한다 (평소 상태. 시뮬레이션에서 늘어나는 대수는 시간마다 달라서)
+- 판정이 오류인 구성도 비용은 계산한다 (박스가 있으면 요금은 나오므로). 판정·제안은 비용을 보지 않는다
