@@ -22,18 +22,18 @@ function loadExample(key, picks) {
   if (key === 'template') { loadTemplate(); return; }
   const ex = EXAMPLES.find(e => e.key === key);
   if (!ex) return;
-  const spec = EXAMPLE_SPECS[key];
-  let nodes = spec.nodes, edges = spec.edges;
-  if (key === 'fix') {
-    const chosen = picks || pickRandom(EXAMPLE_MISTAKES.map(m => m.key), EXAMPLE_MISTAKE_COUNT);
-    const ms = EXAMPLE_MISTAKES.filter(m => chosen.includes(m.key));
-    nodes = nodes.map(([k, t, x, y]) => {
-      const mv = ms.find(m => m.move && m.move[k]);
-      return mv ? [k, t, ...mv.move[k]] : [k, t, x, y];
-    });
-    edges = [...edges, ...ms.flatMap(m => m.edges || [])];
-  }
-  loadSpec({ nodes, edges, asg: spec.asg }, ex.toast);
+  loadSpec(key === 'fix' ? exampleFixSpec(picks) : EXAMPLE_SPECS[key], ex.toast);
+}
+
+// 기본 3-Tier에 실수를 넣은 구성 데이터. picks: 넣을 실수 key 목록 (없으면 랜덤 2개). 고치기 미션도 함께 쓴다
+function exampleFixSpec(picks) {
+  const chosen = picks || pickRandom(EXAMPLE_MISTAKES.map(m => m.key), EXAMPLE_MISTAKE_COUNT);
+  const ms = EXAMPLE_MISTAKES.filter(m => chosen.includes(m.key));
+  const nodes = EXAMPLE_BASIC.nodes.map(([k, t, x, y]) => {
+    const mv = ms.find(m => m.move && m.move[k]);
+    return mv ? [k, t, ...mv.move[k]] : [k, t, x, y];
+  });
+  return { nodes, edges: [...EXAMPLE_BASIC.edges, ...ms.flatMap(m => m.edges || [])] };
 }
 
 // 구성 데이터(js/data/examples.js의 형식: nodes·edges·asg)를 기본 틀 위에 놓는다. 놓았으면 true

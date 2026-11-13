@@ -624,6 +624,10 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .mission-list li b { flex-shrink: 0; }
 .mission-list li span { color: var(--muted); flex: 1; }
 .mission-list .btn { padding: 2px 10px; flex-shrink: 0; }
+/* 미션 목록도 넓은 화면에서는 두 칸으로 (11개라 한 줄씩이면 패널을 넘는다). 묶음 제목은 한 줄 전체 */
+.mission-list { grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); }
+.mission-list li.mission-group { grid-column: 1 / -1; border: 0; background: none; padding: 4px 2px 0; }
+.mission-list li.mission-group b { font-size: 12px; color: var(--accent); }
 .mission-hint { padding: 6px 10px; border-radius: 6px; background: #fff8e1; border: 1px solid #f0d98a; }
 .mission-hint b { margin-right: 8px; color: #8a6400; }
 .mission-done { padding: 6px 10px; border-radius: 6px; background: #f0f9f1; border: 1px solid #bfe3c6; color: #1d6b2f; font-weight: 700; }

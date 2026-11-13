@@ -20,15 +20,24 @@ function loadMissionProgress() {
   missionProgress.done = (Array.isArray(data.done) ? data.done : []).filter(known);
 }
 
+// 미션의 시작 구성 데이터 (js/data/missions.js의 start 형식 → { nodes, edges })
+function missionStartSpec(m) {
+  const st = m.start;
+  if (st.mistakes) return exampleFixSpec(st.mistakes === 'random' ? null : st.mistakes);
+  const base = EXAMPLE_SPECS[st.from || 'basic'];
+  const has = k => !st.keys || st.keys.includes(String(k));   // keys가 없으면 그 예시 전부
+  return { nodes: base.nodes.filter(n => has(n[0])),
+    edges: [...base.edges.filter(([a, b]) => has(a) && has(b)), ...(st.edges || [])] };
+}
+
 // 미션 시작. fresh: 시작 구성을 새로 불러온다 (목록의 [시작]). false면 지금 캔버스를 이어 쓴다 ([다음 미션]·[이어 하기])
 function startMission(key, fresh) {
   const m = MISSIONS.find(x => x.key === key);
   if (!m) return;
+  let spec = null;
   if (fresh) {
-    const nodes = EXAMPLE_BASIC.nodes.filter(n => m.start.includes(String(n[0])));
-    const edges = EXAMPLE_BASIC.edges.filter(([a, b]) => m.start.includes(a) && m.start.includes(b));
-    if (!loadSpec({ nodes, edges }, `미션 ${MISSIONS.indexOf(m) + 1} "${m.title}"을 시작해요. 아래 [미션] 탭의 목표를 하나씩 달성해 보세요.`)) return;   // 지울지 묻는 창에서 취소
-    if (!m.start.length) fitView(TEMPLATE_USER_GAP);   // 사용자를 놓을 VPC 왼쪽 빈 곳까지 보이게
+    spec = missionStartSpec(m);
+    if (!loadSpec(spec, `미션 ${MISSIONS.indexOf(m) + 1} "${m.title}"을 시작해요. 아래 [미션] 탭의 목표를 하나씩 달성해 보세요.`)) return;   // 지울지 묻는 창에서 취소
   }
   missionProgress.current = key;
   missionListOpen = false;
@@ -36,6 +45,9 @@ function startMission(key, fresh) {
   saveMissionProgress();
   resultTab = 'mission';
   render();
+  // 패널 내용(목록 → 목표)이 바뀌어 캔버스 크기가 달라졌으므로 그 크기에 맞춰 다시 전체 보기.
+  // 빈 시작 구성(미션 1)은 사용자를 놓을 VPC 왼쪽 빈 곳까지 보이게
+  if (spec) fitView(spec.nodes.length ? 0 : TEMPLATE_USER_GAP);
 }
 
 // [미션] 탭 내용. head: 결과 패널 머리 줄 (접혀 있어도 보이는 한 줄 요약을 넣는다)
@@ -83,7 +95,7 @@ function renderMissionPanel(head) {
   if (grade.done) {
     const done = document.createElement('div');
     done.className = 'mission-done';
-    done.textContent = '✓ 미션 완료! ' + cur.done + (next ? '' : ' 만들기 미션을 모두 마쳤어요.');
+    done.textContent = '✓ 미션 완료! ' + cur.done + (next ? '' : ' 모든 미션을 마쳤어요.');
     panel.appendChild(done);
   } else if (missionHintOn && todo) {
     const hint = document.createElement('div');
@@ -104,7 +116,8 @@ function renderMissionPanel(head) {
     ctl.appendChild(b);
   };
   if (!grade.done) button('mission-hint', missionHintOn ? '힌트 숨기기' : '힌트 보기', false, () => { missionHintOn = !missionHintOn; renderResult(); });
-  if (grade.done && next) button('mission-next', `다음 미션: ${next.title} ▶`, true, () => startMission(next.key, false));
+  // 다음 미션: 이어 가는 미션이면 캔버스 그대로, 아니면 그 미션의 시작 구성을 새로 불러온다 (지울지 묻는 창이 뜸)
+  if (grade.done && next) button('mission-next', `다음 미션: ${next.title} ▶`, true, () => startMission(next.key, !next.continues));
   button('mission-list', '미션 목록', false, () => { missionListOpen = true; renderResult(); });
   panel.appendChild(ctl);
 }
@@ -115,11 +128,19 @@ function renderMissionList(panel, msg) {
   msg.textContent = `단계별 미션 (완료 ${doneCount}/${MISSIONS.length})`;
   const intro = document.createElement('div');
   intro.className = 'mission-title';
-  intro.innerHTML = '<b>단계별 미션</b><span>목표를 하나씩 달성하며 3-Tier 아키텍처를 직접 만들어 보세요. 목표는 캔버스를 바꿀 때마다 자동으로 확인해요.</span>';
+  intro.innerHTML = '<b>단계별 미션</b><span>목표를 하나씩 달성하며 3-Tier 아키텍처를 만들고, 고치고, 다듬어 보세요. 목표는 캔버스를 바꿀 때마다 자동으로 확인해요.</span>';
   panel.appendChild(intro);
   const list = document.createElement('ol');
   list.className = 'mission-list';
   MISSIONS.forEach((m, i) => {
+    if (!i || MISSIONS[i - 1].kind !== m.kind) {   // 종류가 바뀌는 곳에 묶음 제목
+      const group = document.createElement('li');
+      group.className = 'mission-group';
+      group.innerHTML = '<b></b><span></span>';
+      group.querySelector('b').textContent = MISSION_KINDS[m.kind].name;
+      group.querySelector('span').textContent = MISSION_KINDS[m.kind].desc;
+      list.appendChild(group);
+    }
     const done = missionProgress.done.includes(m.key), isCur = m.key === missionProgress.current;
     const li = document.createElement('li');
     li.className = (done ? 'done' : '') + (isCur ? ' current' : '');
