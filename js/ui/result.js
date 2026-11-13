@@ -443,10 +443,11 @@ function renderResult() {
   $result.innerHTML = '';
   const head = document.createElement('div');
   head.className = 'result-head';
-  // 탭: 검증 결과 / 성능 시뮬레이션 (UI-11 simulate.js). 미션·문제는 오른쪽 학습 패널 (UI-16 learn.js, 43번)
+  // 탭: 검증 결과 / 성능 시뮬레이션 (UI-11 simulate.js) / 비교 (UI-18 compare.js, 44번). 미션·문제는 오른쪽 학습 패널 (UI-16 learn.js, 43번)
   head.innerHTML = '<span class="tabs">' +
     '<button class="tab" data-tab="validate">검증 결과</button>' +
-    '<button class="tab" data-tab="sim">성능 시뮬레이션</button></span>';
+    '<button class="tab" data-tab="sim">성능 시뮬레이션</button>' +
+    '<button class="tab" data-tab="compare">비교</button></span>';
   head.querySelectorAll('.tab').forEach(b => {
     const tab = b.getAttribute('data-tab');
     b.classList.toggle('active', tab === resultTab);
@@ -461,6 +462,7 @@ function renderResult() {
   $result.appendChild(head);
   if (resultTab === 'sim') { renderSimPanel(head); return; }
   stopSimAll();
+  if (resultTab === 'compare') { renderComparePanel(head); return; }
 
   if (!validation) {
     head.insertAdjacentHTML('beforeend', `<span class="msg">${resultNote}</span>`);
