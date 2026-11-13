@@ -1,5 +1,6 @@
 // @ts-check
 // js/ui/mission.js — UI-15 [미션] 탭: 단계별 미션 목록·목표 체크·힌트·진행 저장 (42번)
+// 43번부터 오른쪽 학습 패널(js/ui/learn.js)의 [미션] 탭에 그린다
 // 미션 데이터는 js/data/missions.js, 채점은 js/rules/missions.js(gradeMission)
 
 // 진행 상태: current = 진행 중인 미션 key (없으면 null), done = 완료한 미션 key 목록. 배치와 따로 저장한다
@@ -37,28 +38,30 @@ function startMission(key, fresh) {
   let spec = null;
   if (fresh) {
     spec = missionStartSpec(m);
-    if (!loadSpec(spec, `미션 ${MISSIONS.indexOf(m) + 1} "${m.title}"을 시작해요. 아래 [미션] 탭의 목표를 하나씩 달성해 보세요.`)) return;   // 지울지 묻는 창에서 취소
+    if (!loadSpec(spec, `미션 ${MISSIONS.indexOf(m) + 1} "${m.title}"을 시작해요. 오른쪽 [미션] 탭의 목표를 하나씩 달성해 보세요.`)) return;   // 지울지 묻는 창에서 취소
   }
   missionProgress.current = key;
   missionListOpen = false;
   missionHintOn = false;
   saveMissionProgress();
-  resultTab = 'mission';
+  uiPrefs.learnOpen = true;
+  uiPrefs.learnTab = 'mission';
+  saveUiPrefs();
   render();
   // 패널 내용(목록 → 목표)이 바뀌어 캔버스 크기가 달라졌으므로 그 크기에 맞춰 다시 전체 보기.
   // 빈 시작 구성(미션 1)은 사용자를 놓을 VPC 왼쪽 빈 곳까지 보이게
   if (spec) fitView(spec.nodes.length ? 0 : TEMPLATE_USER_GAP);
 }
 
-// [미션] 탭 내용. head: 결과 패널 머리 줄 (접혀 있어도 보이는 한 줄 요약을 넣는다)
-function renderMissionPanel(head) {
+// [미션] 탭 내용. box: 학습 패널 몸통 (맨 위에 한 줄 요약 .learn-msg)
+function renderMissionPanel(box) {
   const cur = MISSIONS.find(m => m.key === missionProgress.current);
   const msg = document.createElement('span');
-  msg.className = 'msg';
-  head.appendChild(msg);
+  msg.className = 'learn-msg';
+  box.appendChild(msg);
   const panel = document.createElement('div');
   panel.className = 'mission-panel';
-  $result.appendChild(panel);
+  box.appendChild(panel);
 
   if (!cur || missionListOpen) { renderMissionList(panel, msg); return; }
 
@@ -115,10 +118,10 @@ function renderMissionPanel(head) {
     b.addEventListener('click', onClick);
     ctl.appendChild(b);
   };
-  if (!grade.done) button('mission-hint', missionHintOn ? '힌트 숨기기' : '힌트 보기', false, () => { missionHintOn = !missionHintOn; renderResult(); });
+  if (!grade.done) button('mission-hint', missionHintOn ? '힌트 숨기기' : '힌트 보기', false, () => { missionHintOn = !missionHintOn; renderLearn(); });
   // 다음 미션: 이어 가는 미션이면 캔버스 그대로, 아니면 그 미션의 시작 구성을 새로 불러온다 (지울지 묻는 창이 뜸)
   if (grade.done && next) button('mission-next', `다음 미션: ${next.title} ▶`, true, () => startMission(next.key, !next.continues));
-  button('mission-list', '미션 목록', false, () => { missionListOpen = true; renderResult(); });
+  button('mission-list', '미션 목록', false, () => { missionListOpen = true; renderLearn(); });
   panel.appendChild(ctl);
 }
 

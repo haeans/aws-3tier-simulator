@@ -67,6 +67,7 @@ document.addEventListener('keydown', e => {
 });
 
 document.getElementById('btn-validate').addEventListener('click', runValidation);
+$learnBtn.addEventListener('click', () => openLearn(!uiPrefs.learnOpen));
 document.getElementById('btn-undo').addEventListener('click', undo);
 document.getElementById('btn-redo').addEventListener('click', redo);
 // 마우스를 누르고 있는 동안(드래그 중)에는 되돌리기를 막기 위해 누름 상태를 기록

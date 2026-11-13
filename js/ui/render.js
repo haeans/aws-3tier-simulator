@@ -152,6 +152,7 @@ function render() {
   $emptyHint.classList.toggle('hidden', state.nodes.length + state.containers.length > 0);
   applyValidationMarks();
   renderResult();
+  renderLearn();
   syncFlow();
   saveState();
   renderInfo();

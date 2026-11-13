@@ -1,4 +1,4 @@
-// 단계별 미션 테스트 (42번): [미션] 탭, 목표 자동 체크, 힌트, 다음 미션, 진행 저장, 고치기·개선 미션(42-2)
+// 단계별 미션 테스트 (42번): [미션] 탭(43번부터 오른쪽 학습 패널), 목표 자동 체크, 힌트, 다음 미션, 진행 저장, 고치기·개선 미션(42-2)
 const { test, expect } = require('@playwright/test');
 const { openApp, toScreen, drag, paletteDrop } = require('./helpers');
 
@@ -14,15 +14,20 @@ const centerScreen = async (page, type) => {
   const c = await page.evaluate(t => centerOf(state.nodes.find(n => n.type === t)), type);
   return toScreen(page, c.x, c.y);
 };
+// 오른쪽 학습 패널을 열고(닫혀 있으면 툴바 [학습]) [미션] 탭으로
+async function openMissionTab(page) {
+  if (await page.locator('#learn-panel').isHidden()) await page.click('#btn-learn');
+  await page.click('.learn-tab[data-learn="mission"]');
+}
 const goalMarks = page => page.locator('.mission-goals li').evaluateAll(els => els.map(e => e.classList.contains('done')));
 
 test('미션 1을 실제 마우스로 끝까지: 놓고 이을 때마다 목표가 체크되고, 완료하면 다음 미션이 캔버스를 이어 쓴다', async ({ page }) => {
   await openApp(page);
-  await page.click('.tab[data-tab="mission"]');
+  await openMissionTab(page);
   await expect(page.locator('.mission-list li:not(.mission-group)')).toHaveCount(11);
   await expect(page.locator('.mission-list li.mission-group b')).toHaveText(['만들기', '고치기', '개선']);
   await page.click('.mission-list button[data-key="entry"]');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 1/11 · 입구 만들기 (목표 0/5)');
+  await expect(page.locator('.learn-msg')).toContainText('미션 1/11 · 입구 만들기 (목표 0/5)');
   expect(await page.evaluate(() => [state.nodes.length, state.containers.length])).toEqual([0, 9]);   // 기본 틀만
 
   // 힌트: 아직 못 채운 첫 목표의 힌트
@@ -47,7 +52,7 @@ test('미션 1을 실제 마우스로 끝까지: 놓고 이을 때마다 목표�
 
   // 다음 미션: 캔버스는 그대로
   await page.click('#mission-next');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 2/11 · 앱 서버 놓기 (목표 0/2)');
+  await expect(page.locator('.learn-msg')).toContainText('미션 2/11 · 앱 서버 놓기 (목표 0/2)');
   expect(await page.evaluate(() => [state.nodes.length, state.edges.length])).toEqual([3, 2]);
 
   // 선을 지우면 체크가 다시 풀린다 (미션 1로 돌아가 확인)
@@ -64,7 +69,7 @@ test('만들기 미션마다 시작 구성은 앞 미션까지만 완성돼 있�
   for (let i = 0; i < keys.length; i++) {
     const r = await page.evaluate(i => {
       startMission(MISSIONS[i].key, true);
-      return { grades: MISSIONS.slice(0, 5).map(m => gradeMission(m)), tab: resultTab, cur: missionProgress.current };
+      return { grades: MISSIONS.slice(0, 5).map(m => gradeMission(m)), tab: uiPrefs.learnOpen && uiPrefs.learnTab, cur: missionProgress.current };
     }, i);
     expect(r.tab).toBe('mission');
     expect(r.cur).toBe(keys[i]);
@@ -78,13 +83,14 @@ test('만들기 미션마다 시작 구성은 앞 미션까지만 완성돼 있�
   expect(all).toEqual([true, true, true, true, true]);
 });
 
-test('마지막 만들기 미션: 검증 결과 "정상"까지 자동으로 확인하고, [미션] 탭에서 [검증하기]를 누르면 검증 결과 탭으로 옮긴다', async ({ page }) => {
+test('마지막 만들기 미션: 검증 결과 "정상"까지 자동으로 확인하고, [검증하기]를 누르면 아래 검증 결과에 판정이 보인다', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => startMission('egress', true));
-  await expect(page.locator('.result-head .msg')).toContainText('미션 5/11');
+  await expect(page.locator('.learn-msg')).toContainText('미션 5/11');
   expect(await goalMarks(page)).toEqual([false, false, false, false]);            // NAT가 없어 판정이 경고 → "정상" 목표도 아직
   await page.click('#btn-validate');
-  await expect(page.locator('.tab.active')).toHaveText('검증 결과');
+  await expect(page.locator('.result-head .tab.active')).toHaveText('검증 결과');
+  await expect(page.locator('.learn-tab.active')).toHaveText('미션');                // 학습 패널은 [미션] 그대로
   await expect(page.locator('.result-head .status')).toHaveText('경고');
   await page.click('#btn-validate');                                               // 검증 종료
   // NAT를 놓고 잇는다
@@ -98,28 +104,28 @@ test('마지막 만들기 미션: 검증 결과 "정상"까지 자동으로 확�
     link(nat.id, state.nodes.find(n => n.type === 'igw').id);
     commit(before, null);
   });
-  await page.click('.tab[data-tab="mission"]');
+  await openMissionTab(page);
   expect(await goalMarks(page)).toEqual([true, true, true, true]);
   await expect(page.locator('.mission-done')).toContainText('기본 3-Tier 아키텍처를 직접 완성했어요');
   // 다음은 고치기 미션: 이어 가는 미션이 아니라 시작 구성을 새로 불러온다 (지울지 묻는 창은 자동 승인)
   await page.click('#mission-next');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 6/11 · 잘못 이은 선 찾기');
+  await expect(page.locator('.learn-msg')).toContainText('미션 6/11 · 잘못 이은 선 찾기');
   expect(await page.evaluate(() => state.nodes.some(n => n.type === 'nat'))).toBe(true);
   expect(await page.evaluate(() => validateArchitecture().status)).toBe('error');
 });
 
-test('미션 진행은 브라우저에 저장되어 다시 열어도 이어지고, 다른 탭에 있을 때는 완료로 기록하지 않는다', async ({ page }) => {
+test('미션 진행은 브라우저에 저장되어 다시 열어도 이어지고, [미션] 탭이 아닐 때는 완료로 기록하지 않는다', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => startMission('app', true));
-  // 검증 결과 탭에서 예시를 불러와도(목표는 모두 충족) 미션 완료로 기록하지 않는다
-  await page.click('.tab[data-tab="validate"]');
+  // [문제] 탭에 있을 때 예시를 불러와도(목표는 모두 충족) 미션 완료로 기록하지 않는다
+  await page.click('.learn-tab[data-learn="problem"]');
   await page.evaluate(() => loadExample('basic'));
   expect(await page.evaluate(() => missionProgress.done)).toEqual([]);
-  await page.click('.tab[data-tab="mission"]');
+  await openMissionTab(page);
   expect(await page.evaluate(() => missionProgress.done)).toEqual(['app']);
   await page.reload();
-  await page.click('.tab[data-tab="mission"]');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 2/11 · 앱 서버 놓기 (목표 2/2 · 완료)');
+  await openMissionTab(page);
+  await expect(page.locator('.learn-msg')).toContainText('미션 2/11 · 앱 서버 놓기 (목표 2/2 · 완료)');
   await page.click('#mission-list');
   await expect(page.locator('.mission-list li.done b')).toHaveText('앱 서버 놓기');
   await expect(page.locator('.mission-list li.current button')).toHaveText(['이어 하기', '처음부터']);
@@ -145,9 +151,9 @@ const goalTexts = page => page.locator('.mission-goals li span').allTextContents
 
 test('고치기 미션 "잘못 이은 선 찾기": 남은 문제 수만 보여 주고, 선을 실제로 지우면 줄어들어 완료된다', async ({ page }) => {
   await openApp(page);
-  await page.click('.tab[data-tab="mission"]');
+  await openMissionTab(page);
   await page.click('.mission-list button[data-key="fix-lines"]');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 6/11 · 잘못 이은 선 찾기 (목표 0/2)');
+  await expect(page.locator('.learn-msg')).toContainText('미션 6/11 · 잘못 이은 선 찾기 (목표 0/2)');
   expect(await goalTexts(page)).toEqual(['검증의 "오류"를 모두 없애기 (지금 2개 남음)', '검증의 "경고"를 모두 없애기 (지금 1개 남음)']);
   // 힌트: 남은 문제 하나를 판정 문구로
   await page.click('#mission-hint');
@@ -167,7 +173,7 @@ test('고치기 미션 "잘못 이은 선 찾기": 남은 문제 수만 보여 �
   expect(await page.evaluate(() => validateArchitecture().status)).toBe('ok');
   // 다음 고치기 미션은 새 구성을 불러온다
   await page.click('#mission-next');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 7/11 · 잘못 놓인 박스 찾기 (목표 1/2)');
+  await expect(page.locator('.learn-msg')).toContainText('미션 7/11 · 잘못 놓인 박스 찾기 (목표 1/2)');
 });
 
 test('고치기 미션 "잘못 놓인 박스 찾기": 박스를 실제로 끌어 제자리에 놓으면 완료되고, 랜덤 미션은 항상 문제가 있는 구성으로 시작한다', async ({ page }) => {
@@ -181,6 +187,7 @@ test('고치기 미션 "잘못 놓인 박스 찾기": 박스를 실제로 끌어
   };
   await dragTo('rds', 'public', 260, 510);                                           // RDS: 퍼블릭 서브넷 → AZ A의 DB 서브넷
   expect(await goalTexts(page)).toEqual(['검증의 "오류"를 모두 없애기', '검증의 "경고"를 모두 없애기 (지금 1개 남음)']);
+  await page.keyboard.press('Escape');                                              // 선택 해제: RDS 설명 패널이 AZ B의 EC2를 가리지 않게 (43번: 학습 패널만큼 캔버스가 좁다)
   await dragTo('ec2', 'public', 740, 350);                                           // EC2: 퍼블릭 서브넷 → AZ B의 프라이빗 서브넷
   expect(await goalMarks(page)).toEqual([true, true]);
 
@@ -220,9 +227,9 @@ test('개선 미션: 시작 구성마다 그 미션의 제안만 남아 있고, 
 
 test('개선 미션 "더 빠르게 만들기": ElastiCache를 실제로 놓고 이으면 목표가 체크되고, 다음 개선 미션은 캔버스를 이어 쓴다', async ({ page }) => {
   await openApp(page);
-  await page.click('.tab[data-tab="mission"]');
+  await openMissionTab(page);
   await page.click('.mission-list button[data-key="faster"]');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 9/11 · 더 빠르게 만들기 (목표 1/3)');
+  await expect(page.locator('.learn-msg')).toContainText('미션 9/11 · 더 빠르게 만들기 (목표 1/3)');
   const vpc = await page.evaluate(() => state.containers.find(c => c.type === 'vpc'));
   await paletteDrop(page, 'ElastiCache', vpc.x + 400, vpc.y + 510);
   const ec2s = await page.evaluate(() => state.nodes.filter(n => n.type === 'ec2').map(n => n.id));
@@ -248,6 +255,39 @@ test('개선 미션 "더 빠르게 만들기": ElastiCache를 실제로 놓고 �
   expect(await goalMarks(page)).toEqual([true, true, true]);
   const count = await page.evaluate(() => state.nodes.length);
   await page.click('#mission-next');
-  await expect(page.locator('.result-head .msg')).toContainText('미션 10/11 · 더 안전하게 운영하기');
+  await expect(page.locator('.learn-msg')).toContainText('미션 10/11 · 더 안전하게 운영하기');
   expect(await page.evaluate(() => state.nodes.length)).toBe(count);                // 캔버스 그대로
+});
+
+// ----- 43-1: 오른쪽 학습 패널 -----
+test('툴바 [학습]으로 오른쪽 학습 패널을 열고 닫으며, 미션은 아래 결과 패널에서 빠졌다', async ({ page }) => {
+  await openApp(page);
+  await expect(page.locator('#learn-panel')).toBeHidden();                          // 처음에는 닫혀 있다
+  await expect(page.locator('.result-head .tab')).toHaveText(['검증 결과', '성능 시뮬레이션']);
+  const before = await page.locator('#canvas-wrap').boundingBox();
+  await page.click('#btn-learn');
+  await expect(page.locator('#learn-panel')).toBeVisible();
+  await expect(page.locator('.learn-tab')).toHaveText(['미션', '문제']);
+  await expect(page.locator('.learn-tab.active')).toHaveText('미션');
+  await expect(page.locator('.mission-list li:not(.mission-group)')).toHaveCount(11);
+  const after = await page.locator('#canvas-wrap').boundingBox();
+  expect(Math.round(before.width - after.width)).toBe(300);                        // 캔버스가 패널 폭만큼 좁아진다
+  // [문제] 탭은 아직 준비 중 안내
+  await page.click('.learn-tab[data-learn="problem"]');
+  await expect(page.locator('.learn-panel .mission-title b')).toHaveText('준비 중이에요');
+  // 연 상태와 고른 탭은 다시 열어도 유지된다
+  await page.reload();
+  await expect(page.locator('#learn-panel')).toBeVisible();
+  await expect(page.locator('.learn-tab.active')).toHaveText('문제');
+  await page.click('.learn-close');
+  await expect(page.locator('#learn-panel')).toBeHidden();
+  await expect(page.locator('#btn-learn')).toHaveText('학습 ◂');
+});
+
+test('미션 목록에서 [시작]을 누르면 학습 패널이 [미션] 탭으로 열린 채 시작된다', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { uiPrefs.learnTab = 'problem'; uiPrefs.learnOpen = false; startMission('entry', true); });
+  await expect(page.locator('#learn-panel')).toBeVisible();
+  await expect(page.locator('.learn-tab.active')).toHaveText('미션');
+  await expect(page.locator('.learn-msg')).toContainText('미션 1/11 · 입구 만들기');
 });

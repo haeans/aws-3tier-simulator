@@ -21,6 +21,7 @@
   <button class="btn" id="btn-redo" title="다시 실행 (Ctrl+Y)" disabled>↷ 다시 실행</button>
   <div class="spacer"></div>
   <button class="btn primary" id="btn-validate">검증하기</button>
+  <button class="btn" id="btn-learn">학습 ◂</button>
 </header>
 
 <div class="app">
@@ -76,9 +77,10 @@
       박스를 끌어서 옮기고, 선택 후 <b>Delete</b> 키로 지울 수 있어요.<br>
       박스에 마우스를 올리면 보이는 <b>연결점</b>을 다른 박스로 끌면 연결돼요.<br>
       흰 배경을 끌거나 <b>스페이스바</b>를 누른 채 끌면 화면이 움직여요.<br>
-      처음이라면 아래 <b>[미션]</b> 탭에서 목표를 따라 하나씩 만들어 보세요.
+      처음이라면 오른쪽 위 <b>[학습 ◂]</b>을 눌러 <b>[미션]</b>에서 목표를 따라 하나씩 만들어 보세요.
     </div>
   </main>
+  <aside class="learn-panel autohide-scroll" id="learn-panel" hidden></aside>
 </div>
 
 <div class="result-grip" id="result-grip"><div title="끌어서 높이 조절 (두 번 누르면 원래대로)"></div></div>
@@ -114,6 +116,7 @@
 <script src="js/ui/sim-canvas.js"></script>
 <script src="js/ui/examples.js"></script>
 <script src="js/ui/mission.js"></script>
+<script src="js/ui/learn.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
