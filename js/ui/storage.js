@@ -18,9 +18,10 @@ function saveState() {
   } catch (e) { /* 저장소를 쓸 수 없는 환경이면 저장 생략 */ }
 }
 
-// 화면 설정 (결과 패널 접힘·높이, 설명 패널 접힘). 배치와 따로 저장하고 되돌리기 기록에는 넣지 않는다.
+// 화면 설정 (결과 패널 접힘·높이, 설명 패널 접힘, 학습 패널). 배치와 따로 저장하고 되돌리기 기록에는 넣지 않는다.
 const UI_PREFS_KEY = 'aws-3tier-simulator:ui';
-const uiPrefs = { resultFolded: false, resultHeight: 0, infoFolded: false };   // resultHeight 0 = 내용만큼(기본)
+// learnOpen·learnTab: 오른쪽 학습 패널을 열었는지, 고른 탭 'mission' | 'problem' (43번)
+const uiPrefs = { resultFolded: false, resultHeight: 0, infoFolded: false, learnOpen: false, learnTab: 'mission' };   // resultHeight 0 = 내용만큼(기본)
 
 function saveUiPrefs() {
   try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(uiPrefs)); } catch (e) { /* 저장소를 쓸 수 없으면 생략 */ }
@@ -33,6 +34,8 @@ function loadUiPrefs() {
   uiPrefs.resultFolded = data.resultFolded === true;
   uiPrefs.resultHeight = Number(data.resultHeight) > 0 ? Number(data.resultHeight) : 0;
   uiPrefs.infoFolded = data.infoFolded === true;
+  uiPrefs.learnOpen = data.learnOpen === true;
+  uiPrefs.learnTab = data.learnTab === 'problem' ? 'problem' : 'mission';
 }
 
 // 예전 저장 형식을 지금 형식으로 고친다 (R5: 형식 고치기는 모두 여기에 모은다)
