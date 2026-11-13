@@ -100,6 +100,23 @@ const SERVICE_GUIDE = {
     ],
     avoid: [],
   },
+  // ----- 마이그레이션 (49번) -----
+  mgn: {
+    links: [
+      { to: ['onprem-server'], text: '옮길 원본 서버예요. 서버에 설치한 에이전트가 디스크를 TCP 1500으로 계속 복제해 와요. 기본은 인터넷, VPN·Direct Connect로도 보낼 수 있어요.' },
+      { to: ['ec2'], text: '전환(cutover) 때 이 EC2로 띄워요. 먼저 테스트 인스턴스로 확인한 뒤 전환해요.' },
+    ],
+    avoid: [],
+    note: '스테이징용 전용 서브넷에 두는 것이 모범 사례예요.',
+  },
+  dms: {
+    links: [
+      { to: ['onprem-db'], text: '원본 DB예요. 복제 인스턴스가 접속해 데이터를 읽어요 (VPN·Direct Connect 또는 인터넷).' },
+      { to: ['rds'], text: '대상 DB예요. 기존 데이터를 모두 넣은 뒤(전체 로드), 옮기는 동안 생긴 변경(CDC)도 이어서 반영해요.' },
+    ],
+    avoid: [],
+    note: '서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요.',
+  },
   // ----- IDC (48번) -----
   vgw: {
     links: [
@@ -125,6 +142,7 @@ const SERVICE_GUIDE = {
       { to: USER_TYPES, text: '옮기기 전에는 사용자가 IDC의 서버로 바로 들어와요. (IDC의 방화벽·장비는 생략)' },
       { to: ['onprem-db'], text: '서버가 IDC의 DB에 데이터를 읽고 써요.' },
       { to: ['cgw'], text: 'AWS와 통신해야 하면 고객 게이트웨이를 거쳐요.' },
+      { to: ['mgn'], text: 'AWS로 옮길 때 MGN 복제 서버로 디스크를 복제해요.' },
     ],
     avoid: [
       { to: [...APP_TYPES, ...RDS_TYPES, 'lb', 'igw'], text: 'AWS의 박스와 바로 잇지 않아요. 고객 게이트웨이 → VPN·Direct Connect → VGW를 거쳐요.' },
@@ -134,6 +152,7 @@ const SERVICE_GUIDE = {
     links: [
       { to: ['onprem-server'], text: 'IDC의 서버가 이 DB에 접속해요.' },
       { to: ['cgw'], text: 'AWS의 서버가 이 DB를 써야 하면(옮기는 중) 고객 게이트웨이를 거쳐요.' },
+      { to: ['dms'], text: 'AWS로 옮길 때 DMS 복제 인스턴스가 이 DB를 읽어 RDS에 넣어요.' },
     ],
     avoid: [
       { to: [...APP_TYPES, ...RDS_TYPES], text: 'AWS의 박스와 바로 잇지 않아요. 고객 게이트웨이 → VGW를 거쳐요.' },

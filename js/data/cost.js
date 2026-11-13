@@ -28,6 +28,9 @@ const COST_PRICE = {
   waf:  { month: 6, label: '웹 ACL + 규칙 1개', doc: 'https://aws.amazon.com/waf/pricing/' },                    // C10 ($5 + $1)
   route53: { month: 0.5, label: '호스팅 영역', doc: 'https://aws.amazon.com/route53/pricing/' },                 // C11
   // 48번: IDC ↔ VPC 연결 (고객 게이트웨이—VGW 선 하나마다)
+  // 49번: 마이그레이션
+  dms: { hour: 0.112, label: 'dms.t3.medium', doc: 'https://aws.amazon.com/dms/pricing/' },                         // C15 (Single-AZ)
+  mgn: { hour: 0.042, label: '원본 서버 1대 복제', doc: 'https://aws.amazon.com/application-migration-service/pricing/' },   // C16 (서버마다 무료 복제 시간이 있음)
   vpn: { hour: 0.05, label: 'Site-to-Site VPN 연결', doc: 'https://aws.amazon.com/vpn/pricing/' },                 // C13
   dx:  { hour: 0.30, label: 'Direct Connect 1Gbps 전용 포트', doc: 'https://aws.amazon.com/directconnect/pricing/' },   // C14 (포트 속도는 가정)
 };

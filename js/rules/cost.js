@@ -18,6 +18,12 @@ function nodeMonthlyCost(n, s = state) {
       const [cpu, gb] = P.fargate.size[size];
       return { name: `Fargate 작업 ${cpu} vCPU·${gb} GB`, monthly: h(cpu * P.fargate.vcpu + gb * P.fargate.gb), doc: P.fargate.doc };
     }
+    case 'mgn': {   // C16: 원본 서버 1대의 복제 시간 요금 (무료 복제 시간은 빼지 않음). 복제 서버 EC2·EBS는 별도
+      const src = linkedNodesOf(s, n, 'onprem-server').length;
+      if (!src) return null;
+      return { name: `MGN 복제 (원본 서버 ${src}대)`, monthly: h(P.mgn.hour * src), doc: P.mgn.doc };
+    }
+    case 'dms': return { name: `DMS 복제 인스턴스 ${P.dms.label}`, monthly: h(P.dms.hour), doc: P.dms.doc };
     case 'vpce': {   // 이어진 인터페이스형 서비스마다 AZ 수만큼 (C6). S3·DynamoDB(게이트웨이형)는 무료
       const iface = [...new Set(linkedNodesOf(s, n, ...COST_VPCE_IFACE).map(x => x.type))].length;
       if (!iface) return null;
@@ -52,7 +58,9 @@ function costOf(s = state) {
     if (!c) return;
     const key = c.name + (asgIds.has(n.id) ? ' asg' : '');
     const row = rows.get(key) || { name: c.name, count: 0, unit: c.monthly, monthly: 0, doc: c.doc,
-      note: asgIds.has(n.id) ? 'Auto Scaling 최소 대수 기준 (늘어나면 그만큼 더)' : '' };
+      note: asgIds.has(n.id) ? 'Auto Scaling 최소 대수 기준 (늘어나면 그만큼 더)'
+        : n.type === 'mgn' ? '서버마다 처음 일정 기간은 무료 복제예요. 복제 서버 EC2·디스크(EBS) 요금 별도'
+          : n.type === 'dms' ? '옮기는 동안만 쓰고 끝나면 지워요' : '' };
     row.count += counts.get(n.id);
     row.monthly += c.monthly * counts.get(n.id);
     rows.set(key, row);

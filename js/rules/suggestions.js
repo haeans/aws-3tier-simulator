@@ -559,4 +559,24 @@ const SUGGESTION_RULES = [
       }];
     },
   },
+  {
+    // 근거: MG-02 (등급 C, 49번) — 스테이징 영역은 기존 서브넷도 되지만 전용 서브넷을 새로 만드는 것이 모범 사례
+    id: 22, kind: 'improve', title: 'MGN 스테이징 전용 서브넷',
+    pillars: ['security', 'operations'],
+    basis: 'MGN 복제 서버는 스테이징 영역 서브넷에 떠요. 기존 서브넷을 써도 되지만, 전용 서브넷을 따로 두는 것이 모범 사례예요. 운영 중인 서버와 복제 트래픽을 나눠 관리할 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/mgn/latest/ug/Network-Requirements.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('mgn').forEach(m => {
+        const sub = ctx.findContainer(m.parentContainer);
+        if (!sub) return;
+        const shared = ctx.ofType(...APP_TYPES).filter(a => a.parentContainer === sub.id);
+        if (!shared.length) return;
+        issues.push({ nodeIds: [m.id, ...shared.map(a => a.id)],
+          reason: `MGN 복제 서버가 앱 서버(${[...new Set(shared.map(a => SVC_MAP[a.type].name))].join('·')})와 같은 서브넷에 있어요.`,
+          action: '스테이징용 서브넷을 따로 만들어 MGN 복제 서버를 옮기세요. (예: 서브넷을 하나 더 두거나, 앱 서버가 없는 서브넷으로)' });
+      });
+      return issues;
+    },
+  },
 ];

@@ -84,8 +84,24 @@ const EXAMPLE_HYBRID = {
   ],
 };
 
+// 옮기는 중: MGN·DMS (49번). IDC의 서버·DB를 MGN·DMS로 AWS의 EC2·RDS로 복제하는 중. 근거 criteria/migration.md
+// MGN 복제 서버는 앱 서버가 없는 퍼블릭 서브넷 B에(스테이징, MG-02·03), DMS는 대상 RDS와 같은 DB 서브넷 A에(DM-07)
+const EXAMPLE_MIGRATING = {
+  areas: [['idc', 1160, 160, 420, 400]],
+  nodes: [
+    ...EXAMPLE_BASIC.nodes,
+    ['vgw', 'vgw', 1000, 330], ['mgn', 'mgn', 880, 190], ['dms', 'dms', 400, 510],
+    ['cgw', 'cgw', 1240, 330], ['isrv', 'onprem-server', 1460, 240], ['idb', 'onprem-db', 1460, 440],
+  ],
+  edges: [
+    ...EXAMPLE_BASIC.edges,
+    ['vgw', 'cgw', 'dx'], ['vgw', 'cgw', 'vpn'], ['isrv', 'cgw'], ['idb', 'cgw'],
+    ['isrv', 'mgn'], ['mgn', 'ec2a'], ['mgn', 'ec2b'], ['idb', 'dms'], ['dms', 'rds'],
+  ],
+};
+
 // 예시 key → 구성 데이터 ("고쳐 보세요"는 기본 3-Tier에 실수를 더해 쓴다)
-const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC, onprem: EXAMPLE_ONPREM, hybrid: EXAMPLE_HYBRID };
+const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC, onprem: EXAMPLE_ONPREM, hybrid: EXAMPLE_HYBRID, migrating: EXAMPLE_MIGRATING };
 
 // "고쳐 보세요": 기본 3-Tier에 흔한 실수 2개를 랜덤으로 넣는다.
 // rule: 그 실수를 잡는 판정 근거(criteria ID). 테스트는 실수마다 판정 문제(오류·경고)가 새로 생기는지 확인한다
@@ -112,6 +128,8 @@ const EXAMPLES = [
     toast: '예시 "옮기기 전 (온프레미스)"를 불러왔어요. [비교] 탭에 담아 두고 AWS 구성과 비교해 보세요.' },
   { key: 'hybrid', name: '예시: 하이브리드 (AWS 서버 + IDC DB)', desc: '서버는 AWS로 옮기고 DB는 아직 IDC에 있어요',
     toast: '예시 "하이브리드"를 불러왔어요. 고객 게이트웨이—VGW 선 두 줄(Direct Connect + VPN 백업)을 눌러 보세요.' },
+  { key: 'migrating', name: '예시: 옮기는 중 (MGN·DMS)', desc: 'IDC의 서버·DB를 MGN·DMS로 AWS에 복제하는 중이에요',
+    toast: '예시 "옮기는 중"을 불러왔어요. 보라 점선이 복제 흐름이에요 (서버 → MGN → EC2, DB → DMS → RDS).' },
   { key: 'fix', name: '예시: 고쳐 보세요', desc: '흔한 실수 2개가 숨어 있어요 (매번 달라져요)',
     toast: '문제 2개가 숨어 있어요. [검증하기]로 찾아서 고쳐 보세요.' },
 ];

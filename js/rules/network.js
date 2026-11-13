@@ -109,8 +109,15 @@ function networkSecurityGroup(node, s = state) {
   } else if (node.type === 'rds' || node.type === 'rds-replica') {
     fromSg(NET_PORT.db, ctx.neighborsOf(node, ...APP_TYPES).filter(n => n.type !== 'ecs'));
     fromIdc(NET_PORT.db);
+    if (node.type === 'rds' && ctx.neighborsOf(node, 'dms').length) rules.push({ port: NET_PORT.db, source: 'DMS 복제 인스턴스의 보안 그룹', warn: '' });   // DM-05
     if (ctx.neighborsOf(node, ...outside).length) fromInternet(NET_PORT.db, 'DB가 인터넷에 열려요. 앱 서버에서만 접속하게 하세요.');
     if (!rules.length) notes.push('이 DB로 들어오는 연결이 아직 없어요. 앱 서버와 이으면 그 서버의 보안 그룹에서 오는 규칙이 생겨요.');
+  } else if (node.type === 'mgn') {   // MG-03: 원본 서버 → 복제 서버 TCP 1500
+    const src = ctx.neighborsOf(node, 'onprem-server');
+    if (src.length) rules.push({ port: 'TCP 1500 (복제)', source: `원본 서버 (온프레미스${ctx.ofType('vgw').length ? ', VPN·Direct Connect 또는 인터넷' : ', 인터넷'})`, warn: '' });
+    notes.push('복제 서버는 TCP 443으로 MGN·S3·EC2 서비스에 닿아야 해요 (NAT나 공인 IP).');
+  } else if (node.type === 'dms') {   // DM-05: 복제 인스턴스는 나가는 연결만
+    notes.push('DMS 복제 인스턴스로 들어오는 규칙은 필요 없어요. 나가는 연결을 모두 허용해야 원본·대상 DB에 접속해요.');
   } else if (node.type === 'rds-standby') {
     notes.push('Multi-AZ의 Standby는 같은 DB의 예비본이라 본체와 같은 보안 그룹을 써요. 앱은 Standby에 직접 접속하지 않아요.');
   } else if (node.type === 'elasticache') {

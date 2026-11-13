@@ -800,7 +800,7 @@ test('설명 패널: 접으면 제목 줄만 남고, 다른 박스를 골라도 
 test('[불러오기 ▾] 메뉴: 예시 "기본 3-Tier"는 정상, "고가용성"은 정상에 제안이 하나도 없다', async ({ page }) => {
   await openApp(page);
   await page.click('#btn-load');
-  await expect(page.locator('#load-menu .load-item')).toHaveCount(8);   // 기본 틀 + 예시 6개(48번: 옮기기 전·하이브리드) + 파일에서 열기(39번)
+  await expect(page.locator('#load-menu .load-item')).toHaveCount(9);   // 기본 틀 + 예시 7개(48번: 옮기기 전·하이브리드, 49번: 옮기는 중) + 파일에서 열기(39번)
   await page.click('#load-menu .load-item[data-key="basic"]');
   await expect(page.locator('#load-menu')).toBeHidden();
   await expect(page.locator('#toast')).toContainText('기본 3-Tier');

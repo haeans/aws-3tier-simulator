@@ -4,7 +4,7 @@ const { openApp, loadTemplateAt, toScreen, drag, dragWorld, paletteDrop, nodesOf
 
 test('앱이 오류 없이 열리고 팔레트가 채워진다', async ({ page }) => {
   const errors = await openApp(page);
-  await expect(page.locator('.palette .svc')).toHaveCount(36);   // 48번: VGW·온프레미스 서버·DB·고객 게이트웨이
+  await expect(page.locator('.palette .svc')).toHaveCount(38);   // 48번: VGW·온프레미스 서버·DB·고객 게이트웨이, 49번: MGN·DMS
   await expect(page.locator('.palette .area-chip')).toHaveCount(7);   // 48번: IDC
   expect(errors).toEqual([]);
 });
