@@ -86,6 +86,11 @@
 - (v1.66) 라우팅 테이블에 "온프레미스 → VGW (경로 전파)", 보안 그룹에 "온프레미스에서 오는 규칙". 비용에 VPN 연결·DX 포트
 - (v1.66) 예시 "옮기기 전 (온프레미스)"·"하이브리드 (AWS 서버 + IDC DB)". 앱 서버가 VGW로 IDC의 DB를 쓰면 판정 5 통과
 
+### 서버리스: API Gateway·Lambda (v1.68~, 50번)
+- 팔레트 [서버리스]: API Gateway(VPC 밖), Lambda(VPC 밖 또는 프라이빗 서브넷), RDS Proxy(DB·프라이빗 서브넷)
+- 완전 서버리스(사용자 → API Gateway → Lambda → DynamoDB)와 앱만 서버리스(Lambda가 프라이빗 서브넷 → RDS Proxy → RDS)를 모두 정상으로 판정
+- 판정 24: API Gateway에 Lambda 없음 / VPC 밖 Lambda → RDS / VPC 안 Lambda → DynamoDB·S3에 길 없음. 제안 23(Lambda 여러 AZ)·24(RDS Proxy)
+
 ### 마이그레이션: MGN·DMS (v1.67, 49번)
 - 팔레트 [마이그레이션]: MGN 복제 서버(스테이징 서브넷 = 프라이빗·퍼블릭), DMS 복제 인스턴스(DB·프라이빗 서브넷)
 - 복제 선: 온프레미스 서버 → MGN → EC2, 온프레미스 DB → DMS → RDS (보라 점선). IDC에서 MGN·DMS로는 바로 이어도 된다(인터넷 복제)
@@ -185,11 +190,11 @@ aws-3tier-simulator/
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등). 구성 s를 인자로 받음 (R3)
-│   │   ├─ validation.js      VALIDATION_RULES(판정 23개, 20·21은 48번 IDC, 22·23은 49번 마이그레이션), 검증 실행 validateArchitecture
+│   │   ├─ validation.js      VALIDATION_RULES(판정 24개, 20·21은 48번 IDC, 22·23은 49번 마이그레이션, 24는 50번 서버리스), 검증 실행 validateArchitecture
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 20개)
 │   │   ├─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
 │   │   ├─ cost.js            월 비용 costOf(구성)·nodeMonthlyCost(박스) (가격표 js/data/cost.js, 근거 criteria/cost.md)
-│   │   ├─ (validation.js에 48번 판정 20·21과 옮기기 전 구성 ONPREM_RULES·isOnpremOnly, 49번 판정 22·23. suggestions.js에 제안 21·22)
+│   │   ├─ (validation.js에 48번 판정 20·21과 옮기기 전 구성 ONPREM_RULES·isOnpremOnly, 49번 판정 22·23, 50번 판정 24·hasServerlessEntry. suggestions.js에 제안 21~24)
 │   │   ├─ network.js         네트워크 ② 라우팅 테이블 networkRouteTable(서브넷)·보안 그룹 networkSecurityGroup(박스) 계산 (구성 s를 인자로)
 │   │   ├─ compare.js         구성 두 개 비교 compareConfigs(a, b, rps): 판정·트래픽·AZ 장애 요약(compareSummary)·박스 차이·제안 차이
 │   │   ├─ problems.js        문제 채점 gradeProblem(구성 s를 인자로): 요구 사항별 충족·없는 역할. 역할 조회 도구(problem…)
@@ -619,3 +624,13 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 복제는 기본이 공용 인터넷이라(MG-04, DM-02) 판정 20(IDC 박스와 AWS 박스 직접 연결)의 예외로 둔다: 온프레미스 서버 → MGN, 온프레미스 DB → DMS
 - 복제 선은 "복제·전달" 종류라 사용자 요청 흐름·성능 시뮬레이션에 들어가지 않는다
 - 비용: DMS dms.t3.medium 1개(가정), MGN은 이은 원본 서버 1대마다 복제 시간 요금. 무료 복제 시간은 길이를 확인하지 못해 빼지 않고 "처음 일정 기간 무료"라고만 적는다
+
+### 서버리스 (50번, 2026-11-13, v1.68~)
+- 사용자 결정: 완전 서버리스(API Gateway → Lambda → DynamoDB, VPC 없음)와 앱만 서버리스(API Gateway → VPC 안 Lambda → RDS) 둘 다
+- 근거: criteria/serverless.md (SV-01~11). 등급 A는 판정 24, C는 제안 23·24와 제안 9 확장, 권한·보안 그룹의 일반 규칙이 없는 것(SV-05·11)은 설명·45번 표시만
+- 기존 판정은 "서버리스 입구"(hasServerlessEntry: 사용자 또는 사용자 — CloudFront → API Gateway → Lambda)가 있으면 IGW·LB를 요구하지 않는다 (판정 1·3).
+  48번처럼 따로 판정하지 않고 기존 판정을 넓힌 이유: 앱만 서버리스는 VPC·서브넷·RDS가 그대로라 기존 판정(DB 보호·고가용성 RDS 등)을 그대로 받아야 해서
+- Lambda는 APP_TYPES(EC2·컨테이너)에 넣지 않는다: LB 대상·Auto Scaling·NAT·서버 위치 같은 EC2·컨테이너 전용 규칙에 걸리지 않게. 판정 5만 Lambda를 앱 계층으로 본다
+- Lambda 박스 하나 = 한 AZ의 서브넷에 연결된 함수 (실제는 함수 하나에 여러 서브넷). 여러 AZ는 박스를 AZ마다 두어 표현 (제안 23)
+- RDS Proxy는 박스로 넣었다 (직접 정함): 제안 24(SV-07)를 따를 수 있게
+- 칭찬 바로잡기: 판정 1 칭찬은 LB가 있을 때만, 판정 7 칭찬은 앱 서버와 RDS가 있을 때만 (서버리스·하이브리드에서 없는 것을 칭찬하던 것)

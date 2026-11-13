@@ -63,7 +63,10 @@ const SUGGESTION_RULES = [
       return [{
         nodeIds: users.map(u => u.id),
         reason: '사용자 요청이 CDN 없이 바로 서버로 가요. 이미지·정적 파일까지 매번 서버가 처리해요.',
-        action: '사용자와 IGW 사이에 CloudFront를 두세요. (사용자 — CloudFront — IGW)',
+        // 50번: IGW 없이 API Gateway로 들어오는 서버리스 구성이면 그 앞에
+        action: !ctx.ofType('igw').length && ctx.ofType('apigw').length
+          ? '사용자와 API Gateway 사이에 CloudFront를 두세요. (사용자 — CloudFront — API Gateway)'
+          : '사용자와 IGW 사이에 CloudFront를 두세요. (사용자 — CloudFront — IGW)',
       }];
     },
   },
@@ -255,13 +258,13 @@ const SUGGESTION_RULES = [
     basis: 'HTTP(S)로 들어오는 요청은 웹 방화벽(WAF)으로 검사해요. 정한 규칙에 맞는 위험한 요청은 CloudFront나 Load Balancer에 닿기 전에 막아요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_inspection.html',
     praise(ctx) {
-      const wafs = ctx.ofType('waf').filter(w => ctx.neighborsOf(w, 'cloudfront', 'lb').length);
+      const wafs = ctx.ofType('waf').filter(w => ctx.neighborsOf(w, 'cloudfront', 'lb', 'apigw').length);
       if (!wafs.length) return [];
       return [{ nodeIds: wafs.map(n => n.id),
         text: 'WAF로 들어오는 요청을 검사해요. SQL 인젝션 같은 흔한 웹 공격을 앞단에서 막아요.' }];
     },
     check(ctx) {
-      const fronts = ctx.ofType('cloudfront', 'lb');
+      const fronts = ctx.ofType('cloudfront', 'lb', 'apigw');   // 50번: API Gateway(REST API)도 WAF로 보호한다 (SV-10)
       if (!fronts.length || !ctx.ofType(...USER_TYPES).length) return [];
       // 근거: WAF-03 — 입구(CloudFront·Load Balancer)마다 WAF가 있어야 한다 (하나라도 있으면 통과시키지 않음)
       const bare = fronts.filter(f => !ctx.neighborsOf(f, 'waf').length);
@@ -275,8 +278,8 @@ const SUGGESTION_RULES = [
         action: bare.length < fronts.length
           ? `${names}에도 WAF를 연결하세요. (WAF는 입구 하나에 하나씩 연결해요)`
           : ctx.ofType('waf').length
-            ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront나 Load Balancer와 연결하세요.'
-            : 'WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.',
+            ? 'WAF가 있지만 연결되어 있지 않아요. CloudFront·Load Balancer·API Gateway(REST API)와 연결하세요.'
+            : 'WAF를 VPC 밖에 두고 CloudFront·Load Balancer·API Gateway(REST API)와 연결하세요.',
       }];
     },
   },
@@ -557,6 +560,34 @@ const SUGGESTION_RULES = [
           ? '고객 게이트웨이와 VGW를 한 번 더 이어 Site-to-Site VPN 백업을 두거나(선을 눌러 종류 고르기), Direct Connect를 하나 더 두세요.'
           : '고객 게이트웨이와 VGW를 한 번 더 이어 두 번째 연결을 두세요. (예: 주 회선 Direct Connect + 백업 VPN)',
       }];
+    },
+  },
+  {
+    // 근거: SV-03 (등급 C, 50번) — VPC에 연결한 Lambda는 여러 AZ의 서브넷을 지정한다
+    id: 23, kind: 'improve', title: 'Lambda 여러 AZ',
+    pillars: ['reliability'],
+    basis: 'Lambda를 VPC에 연결할 때 여러 AZ의 서브넷을 고르면, 한 AZ에 장애가 나도 다른 AZ에서 함수가 실행돼요.',
+    ref: 'https://docs.aws.amazon.com/lambda/latest/dg/security-resilience.html',
+    check(ctx) {
+      const inVpc = ctx.ofType('lambda').filter(l => ctx.zoneOf(l) === 'private');
+      if (!inVpc.length || new Set(inVpc.map(ctx.azOf).filter(Boolean)).size >= 2) return [];
+      return [{ nodeIds: inVpc.map(n => n.id),
+        reason: 'VPC에 연결한 Lambda가 한 AZ의 서브넷만 써요. 그 AZ에 장애가 나면 함수가 VPC 안에서 실행되지 못해요.',
+        action: '다른 AZ의 프라이빗 서브넷에도 Lambda를 두세요. (실제로는 Lambda 하나에 여러 AZ의 서브넷을 지정해요)' }];
+    },
+  },
+  {
+    // 근거: SV-07 (등급 C, 50번) — 짧은 DB 연결을 자주 여닫는 Lambda에는 RDS Proxy를 권장
+    id: 24, kind: 'improve', title: 'RDS Proxy',
+    pillars: ['reliability', 'performance'],
+    basis: 'Lambda는 요청마다 실행되어 DB 연결을 짧게 자주 열고 닫아요. RDS Proxy가 연결을 모아 써서, 요청이 몰려도 DB 연결이 바닥나지 않게 해요.',
+    ref: 'https://docs.aws.amazon.com/lambda/latest/dg/services-rds.html',
+    check(ctx) {
+      const direct = ctx.ofType('lambda').filter(l => ctx.neighborsOf(l, 'rds').length);
+      if (!direct.length) return [];
+      return [{ nodeIds: [...direct, ...direct.flatMap(l => ctx.neighborsOf(l, 'rds'))].map(n => n.id),
+        reason: 'Lambda가 RDS에 바로 접속해요. 요청이 몰리면 짧은 연결이 한꺼번에 열려 DB 연결이 바닥날 수 있어요.',
+        action: 'RDS Proxy를 DB 서브넷에 두고 Lambda — RDS Proxy — RDS로 이어주세요.' }];
     },
   },
   {

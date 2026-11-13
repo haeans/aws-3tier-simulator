@@ -13,6 +13,23 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.68.0] 2026-11-13  마이그레이션 ③-1: 서버리스 박스·판정 (50번, 50-1)
+  추가: 팔레트 [서버리스] 묶음 — API Gateway(VPC 밖), Lambda(VPC 밖 또는 프라이빗 서브넷, 퍼블릭은 막음), RDS Proxy(DB·프라이빗 서브넷)
+  변경: 판정 1 [진입 경로]·3 [흐름 연결] — LB 없이 사용자(또는 CloudFront) → API Gateway → Lambda 입구가 있으면 IGW·LB를 요구하지 않음 (SV-04)
+  변경: 판정 5 [앱-DB 연결] — Lambda → RDS·RDS Proxy → RDS·DynamoDB도 앱-DB 연결 (SV-07·08)
+  변경: 판정 7 [고가용성] — 앱 서버(EC2·컨테이너) 없이 Lambda만 있으면 "앱 서버 2 AZ" 검사를 건너뜀 (Lambda는 제안 23)
+  수정: 판정 1 칭찬은 LB가 있을 때만, 판정 7 칭찬은 앱 서버와 RDS가 있을 때만 (없는 IGW·LB 입구나 DB 이중화를 칭찬하던 것)
+  추가: 판정 24 [Lambda 연결] (오류, SV-01·02·04) — API Gateway에 Lambda가 없음 / VPC 밖 Lambda가 RDS·RDS Proxy와 이어짐 / VPC 안 Lambda가 DynamoDB·S3에 VPC Endpoints·NAT 없이 이어짐
+  추가: 제안 23 [Lambda 여러 AZ] (SV-03), 제안 24 [RDS Proxy] (SV-07, Lambda가 RDS에 바로 이어지면)
+  변경: 제안 9 [웹 방화벽]이 API Gateway(REST API) 입구도 봄 (SV-10), 제안 2 [CDN]은 서버리스면 "사용자 — CloudFront — API Gateway"
+  변경: LB 없이 API Gateway로 들어오는 구성이 정상이면 결과 문구를 "서버리스(API Gateway → Lambda) 구성의 기본 흐름이 모두 갖춰졌어요!"로
+  추가: 보안 그룹 — RDS ← Lambda·RDS Proxy의 보안 그룹, RDS Proxy ← Lambda의 보안 그룹 (SV-11), VPC 안 Lambda는 들어오는 규칙 불필요 안내
+  추가: 설명 패널 안내·공식 문서 링크, 근거 문서 criteria/serverless.md (SV-01~11, AWS 공식 문서 인용)
+  추가: 테스트 tests/serverless.spec.js — 배치, 완전 서버리스·앱만 서버리스 판정, 제안 23·24, 판정 24, 보안 그룹
+  비고: 기준선 스냅샷 갱신 — 제안 9의 할 일 문구(API Gateway 추가)만 바뀜 (판정·칭찬 결과는 그대로)
+  비고: 사용자 결정 — 완전 서버리스(DynamoDB)와 앱만 서버리스(VPC 안 Lambda + RDS) 둘 다, 50-1(박스·판정)과 50-2(성능·비용·예시)로 나눔
+  비고: 직접 정한 것 — RDS Proxy를 박스로 넣음(제안을 따를 수 있게), Lambda 박스 하나 = 한 AZ의 서브넷(여러 AZ는 박스를 AZ마다)
+
 [1.67.0] 2026-11-13  마이그레이션 ②: MGN(서버)·DMS(DB) 옮기기 (49번)
   추가: 팔레트 [마이그레이션] 묶음 — MGN 복제 서버(프라이빗·퍼블릭 서브넷 = 스테이징 서브넷), DMS 복제 인스턴스(DB·프라이빗 서브넷)
   추가: 복제 선(보라 점선, 복제·전달): 온프레미스 서버 → MGN → EC2(전환 대상), 온프레미스 DB → DMS → RDS(대상)

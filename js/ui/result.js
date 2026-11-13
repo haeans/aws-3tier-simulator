@@ -473,7 +473,9 @@ function renderResult() {
   }
   const st = validation.mode === 'onprem' && validation.status === 'ok'
     ? { label: '정상', desc: 'AWS로 옮기기 전(온프레미스) 구성이에요. VPC를 놓으면 AWS 판정이 시작돼요.' }   // 48번
-    : STATUS_TEXT[validation.status];
+    : validation.status === 'ok' && !state.nodes.some(n => n.type === 'lb') && state.nodes.some(n => n.type === 'apigw')
+      ? { label: '정상', desc: '서버리스(API Gateway → Lambda) 구성의 기본 흐름이 모두 갖춰졌어요!' }   // 50번
+      : STATUS_TEXT[validation.status];
   const errors = validation.issues.filter(i => i.rule.level === 'error').length;
   const warns = validation.issues.length - errors;
   const counts = [];

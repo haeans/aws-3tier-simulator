@@ -19,11 +19,12 @@ const CATEGORIES = [
   { key: 'ops',       label: '접근/운영',       color: '#d13212', bg: '#fdecea', fg: '#9b2410' },
   { key: 'onprem',    label: 'IDC (온프레미스)', color: '#6b5b4b', bg: '#f5f1ec', fg: '#4a3d30' },   // 48번
   { key: 'migration', label: '마이그레이션',     color: '#0b7a75', bg: '#e6f5f4', fg: '#06504c' },   // 49번
+  { key: 'serverless', label: '서버리스',        color: '#b0084d', bg: '#fdecf3', fg: '#7a0535' },   // 50번
 ];
 const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
 // 서비스 목록 (여기에 항목을 추가하면 팔레트에 자동 반영)
-// allowedZone: 'outside' | 'vpcEdge' | 'endpoint' | 'private' | 'db' | 'idc' | 'any'
+// allowedZone: 'outside' | 'vpcEdge' | 'endpoint' | 'private' | 'db' | 'idc' | 'lambdaZone' | 'any'
 // validated: true = 검증 대상 / false = 배치·연결만 가능
 const SERVICES = [
   // 사용자
@@ -73,6 +74,10 @@ const SERVICES = [
   // 마이그레이션 (49번): 근거 criteria/migration.md. MGN 복제 서버는 스테이징 서브넷(MG-02), DMS 복제 인스턴스는 VPC 안 서브넷(DM-01)
   { type: 'mgn',            name: 'MGN 복제 서버',    category: 'migration', allowedZone: 'appSubnet', validated: true },
   { type: 'dms',            name: 'DMS 복제 인스턴스', category: 'migration', allowedZone: 'dataSubnet', validated: true },
+  // 서버리스 (50번): 근거 criteria/serverless.md. API Gateway는 VPC 밖(SV-04), Lambda는 VPC 밖 또는 프라이빗 서브넷(SV-01·02), RDS Proxy는 DB와 같은 VPC(SV-07)
+  { type: 'apigw',          name: 'API Gateway',      category: 'serverless', allowedZone: 'outside', validated: true },
+  { type: 'lambda',         name: 'Lambda',           category: 'serverless', allowedZone: 'lambdaZone', validated: true },
+  { type: 'rdsproxy',       name: 'RDS Proxy',        category: 'serverless', allowedZone: 'dataSubnet', validated: true },
 ];
 // 서비스별 색상은 카테고리 색을 그대로 사용
 SERVICES.forEach(s => { s.color = CAT_MAP[s.category].color; });
@@ -127,6 +132,9 @@ const SERVICE_DESC = {
   'onprem-db':     '회사 데이터센터(IDC)에서 직접 운영하는 데이터베이스예요. AWS로 옮기기 전의 DB를 나타내요.',
   cgw:            '회사 데이터센터(IDC)의 라우터(고객 게이트웨이 장치)예요. AWS의 VGW와 VPN이나 Direct Connect로 이어져요.',
   mgn:            'AWS Application Migration Service(MGN)의 복제 서버예요. 원본 서버에 설치한 에이전트가 디스크를 계속 복제해 오고, 전환(cutover) 때 그대로 EC2로 띄워요. 서버를 그대로 옮기는(rehost) 방법이에요.',
+  apigw:          'API를 만들고 공개하는 관리형 입구예요. 받은 요청으로 Lambda 함수를 호출해요(프록시 통합). 서버를 두지 않고 트래픽에 맞춰 알아서 늘어나요.',
+  lambda:         '서버 없이 코드를 실행하는 서비스예요. 요청이 올 때만 실행되고 자동으로 늘어나요. 기본은 VPC 밖에서 돌고, RDS 같은 내 VPC의 리소스를 쓰려면 프라이빗 서브넷에 연결해요.',
+  rdsproxy:       'RDS 앞에 두는 연결 관리자예요. Lambda처럼 짧은 연결을 자주 여닫는 앱의 DB 연결을 모아 써서, DB 연결이 바닥나지 않게 해요.',
   dms:            'AWS Database Migration Service(DMS)의 복제 인스턴스예요. 원본 DB에서 데이터를 읽어 대상 DB(RDS)에 넣고, 옮기는 동안 생긴 변경(CDC)도 이어서 반영해요.',
 };
 SERVICES.forEach(s => { s.desc = SERVICE_DESC[s.type] || ''; });
@@ -134,6 +142,7 @@ SERVICES.forEach(s => { s.desc = SERVICE_DESC[s.type] || ''; });
 // 검증 규칙상 권장 위치 (놓는 곳 안내에 함께 표시)
 const RECOMMENDED_ZONE = {
   vgw: 'VPC 경계선', cgw: 'IDC 영역 안 (VPC 쪽 가장자리)', mgn: '스테이징용 전용 서브넷', dms: 'DB 서브넷 (대상 RDS와 같은 VPC)',
+  apigw: 'VPC 밖', lambda: 'VPC 밖 (RDS를 쓰면 여러 AZ의 프라이빗 서브넷)', rdsproxy: 'DB 서브넷 (RDS와 같은 VPC)',
   igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '두 AZ의 퍼블릭 서브넷 사이', ec2: '프라이빗 서브넷', ecs: '프라이빗 서브넷', eks: '프라이빗 서브넷', fargate: '프라이빗 서브넷',
   rds: 'DB 서브넷', 'rds-replica': 'DB 서브넷', 'rds-standby': 'DB 서브넷', elasticache: 'DB 서브넷',
 };
@@ -148,6 +157,7 @@ const ZONE_TEXT = {
   db:      'DB 서브넷만',
   dataSubnet: 'DB 서브넷 또는 프라이빗 서브넷',
   idc:     'IDC(온프레미스) 영역 안',
+  lambdaZone: 'VPC 밖(기본) 또는 프라이빗 서브넷(VPC 연결)',
   any:     '위치 제한 없음 (IDC 영역 안은 불가)',
 };
 const SVC_MAP = Object.fromEntries(SERVICES.map(s => [s.type, s]));
@@ -179,7 +189,7 @@ const EDGE_RULES = [
   [['waf'], null, 'relation'],                                   // CloudFront·LB에 붙는 검사 규칙
   [['iam'], null, 'relation'],                                   // 권한
   [['cloudformation'], null, 'relation'],                        // 리소스 생성
-  [['route53'], ['cloudfront', 'lb', 'ec2', 's3'], 'relation'],  // 주소 등록 (사용자—Route 53 주소 묻기는 요청)
+  [['route53'], ['cloudfront', 'lb', 'ec2', 's3', 'apigw'], 'relation'],  // 주소 등록 (사용자—Route 53 주소 묻기는 요청)
   [['ecs', 'eks'], ['fargate'], 'relation'],                     // 실행 방식
   [['rds'], ['rds-standby', 'rds-replica'], 'replication'],      // DB 복제 (Standby 동기, Replica 비동기)
   [['elasticache'], ['elasticache'], 'replication'],             // 캐시 복제

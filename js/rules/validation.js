@@ -20,6 +20,7 @@ const VALIDATION_RULES = [
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_network_protection_create_layers.html',
     check(ctx) {
       const users = ctx.ofType(...USER_TYPES), igws = ctx.ofType('igw'), lbs = ctx.ofType('lb');
+      if (!lbs.length && hasServerlessEntry(ctx)) return [];   // 50번: 서버리스 입구(API Gateway → Lambda)는 IGW·LB가 필요 없다 (SV-04)
       const missing = [];
       if (!users.length) missing.push('사용자(스마트폰/태블릿/PC)');
       if (!igws.length)  missing.push('IGW');
@@ -44,6 +45,7 @@ const VALIDATION_RULES = [
     // 근거: LB-05(칭찬만 막음) — IGW와 이어지지 않은 LB가 하나라도 있거나, 서버(EC2)가 인터넷과 바로 이어져 있으면 칭찬하지 않는다
     praise(ctx) {
       const lbs = ctx.ofType('lb');
+      if (!lbs.length) return [];   // 50번: LB가 없는 구성(서버리스 등)에는 "IGW → LB 입구" 칭찬을 하지 않는다
       if (lbs.some(lb => !ctx.neighborsOf(lb, 'igw').length)) return [];
       if (ctx.ofType(...APP_TYPES).some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
       return [{ nodeIds: ctx.ofType('igw', 'lb').map(n => n.id),
@@ -99,6 +101,7 @@ const VALIDATION_RULES = [
     ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html',
     check(ctx) {
       const lbs = ctx.ofType('lb'), ec2s = ctx.ofType(...APP_TYPES);
+      if (!lbs.length && hasServerlessEntry(ctx)) return [];   // 50번: 서버리스는 API Gateway가 Lambda로 요청을 넘긴다 (판정 24가 본다)
       if (!lbs.length && !ec2s.length) return [{ message: 'Load Balancer와 앱 서버(EC2나 ECS·EKS·Fargate 컨테이너)가 없어요.' }];
       if (!lbs.length)  return [{ message: 'Load Balancer가 없어요. 요청을 앱 서버로 나눠줄 Load Balancer가 필요해요.' }];
       if (!ec2s.length) return [{ message: '앱 서버가 없어요. 요청을 처리할 EC2나 컨테이너(ECS·EKS·Fargate)가 필요해요.' }];
@@ -149,11 +152,17 @@ const VALIDATION_RULES = [
       const ec2s = ctx.ofType(...APP_TYPES), rdss = ctx.ofType('rds');
       // 48번: VGW — 고객 게이트웨이 — 온프레미스 DB로 IDC의 DB를 쓰는 앱 서버 (옮기는 중의 하이브리드 구성, 근거 HY-01)
       const viaIdc = n => ctx.neighborsOf(n, 'vgw').some(v => ctx.neighborsOf(v, 'cgw').some(g => ctx.neighborsOf(g, 'onprem-db').length));
+      // 50번: Lambda도 앱 계층. DB는 RDS(바로 또는 RDS Proxy를 거쳐)나 DynamoDB (SV-07·08)
+      const lambdas = ctx.ofType('lambda');
+      const lambdaDb = n => ctx.neighborsOf(n, 'rds').length || ctx.linkedNodes(n, 'dynamodb').length ||
+        ctx.neighborsOf(n, 'rdsproxy').some(p => ctx.neighborsOf(p, 'rds').length);
+      const apps = [...ec2s, ...lambdas];
       const hybrid = ec2s.some(viaIdc);
-      if (!ec2s.length && !rdss.length) return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 없어요.' }];
-      if (!rdss.length && !hybrid) return [{ message: 'RDS가 없어요. 앱 서버가 데이터를 저장할 RDS가 필요해요.' }];
-      if (!ec2s.length) return [{ message: '앱 서버가 없어요. RDS를 사용할 EC2나 컨테이너(ECS·EKS·Fargate)가 필요해요.' }];
-      if (!ec2s.some(n => ctx.neighborsOf(n, 'rds').length || viaIdc(n))) {
+      const noRdsOk = hybrid || lambdas.some(l => ctx.linkedNodes(l, 'dynamodb').length);
+      if (!apps.length && !rdss.length) return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 없어요.' }];
+      if (!rdss.length && !noRdsOk) return [{ message: 'RDS가 없어요. 앱 서버가 데이터를 저장할 RDS가 필요해요.' }];
+      if (!apps.length) return [{ message: '앱 서버가 없어요. RDS를 사용할 EC2나 컨테이너(ECS·EKS·Fargate), 또는 Lambda가 필요해요.' }];
+      if (!apps.some(n => ctx.neighborsOf(n, 'rds').length || viaIdc(n) || (n.type === 'lambda' && lambdaDb(n)))) {
         return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 연결되어 있지 않아요. 앱 서버가 DB를 쓸 수 있도록 연결해주세요.' }];
       }
       return [];
@@ -202,7 +211,8 @@ const VALIDATION_RULES = [
       // 앱 서버(EC2·컨테이너): 서로 다른 AZ에 2개 이상
       const ec2s = ctx.ofType(...APP_TYPES);
       const ec2Azs = new Set(ec2s.map(ctx.azOf).filter(Boolean));
-      if (ec2Azs.size < 2) issues.push({
+      // 50번: 앱 서버 없이 Lambda만 있으면 이 검사는 건너뛴다 (Lambda의 여러 AZ는 제안 23)
+      if (ec2Azs.size < 2 && !(!ec2s.length && ctx.ofType('lambda').length)) issues.push({
         nodeIds: ec2s.map(n => n.id),
         message: ec2Azs.size === 0
           ? '앱 서버(EC2·컨테이너)가 AZ 안에 없어요. 서로 다른 AZ에 앱 서버를 2개 이상 두면 한 AZ에 장애가 나도 서비스가 계속돼요.'
@@ -242,7 +252,7 @@ const VALIDATION_RULES = [
       });
       return issues;
     },
-    praise: ctx => [{ nodeIds: ctx.ofType(...APP_TYPES, 'rds', 'rds-standby').map(n => n.id),
+    praise: ctx => !ctx.ofType(...APP_TYPES).length || !ctx.ofType('rds').length ? [] : [{ nodeIds: ctx.ofType(...APP_TYPES, 'rds', 'rds-standby').map(n => n.id),
       text: '앱 서버와 DB(RDS·Standby)를 두 AZ에 나눠 두었어요. 한 AZ에 장애가 나도 서비스가 이어져요.' }],
   },
   {
@@ -505,6 +515,32 @@ const VALIDATION_RULES = [
         message: 'DMS 복제 인스턴스는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
     },
   },
+  {
+    // 근거: SV-01·SV-02·SV-04 (등급 A, 50번)
+    id: 24, level: 'error', message: 'Lambda 연결',
+    pillars: ['reliability', 'security'],
+    basis: 'API Gateway는 받은 요청으로 Lambda를 호출해요. Lambda는 기본으로 VPC 밖에서 돌아서, RDS 같은 내 VPC의 리소스를 쓰려면 프라이빗 서브넷에 연결해야 해요. VPC에 연결한 Lambda는 VPC 안에만 닿아서, DynamoDB·S3에는 VPC Endpoints나 NAT가 필요해요.',
+    ref: 'https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('apigw').forEach(gw => {
+        if (!ctx.neighborsOf(gw, 'lambda').length) issues.push({ nodeIds: [gw.id],
+          message: 'API Gateway가 요청을 보낼 Lambda가 없어요. API Gateway와 Lambda를 이어주세요.' });
+      });
+      ctx.ofType('lambda').forEach(l => {
+        const zone = ctx.zoneOf(l);
+        const dbs = ctx.neighborsOf(l, 'rds', 'rdsproxy', 'rds-replica');
+        if (zone === 'outside' && dbs.length) issues.push({ nodeIds: [l.id, ...dbs.map(n => n.id)],
+          message: `VPC 밖의 Lambda는 VPC 안의 ${[...new Set(dbs.map(n => SVC_MAP[n.type].name))].join('·')}에 닿을 수 없어요. Lambda를 프라이빗 서브넷에 놓아 VPC에 연결해주세요.` });
+        if (zone === 'private' && !ctx.linkedNodes(l, 'nat').length) {
+          const bare = ctx.linkedNodes(l, 'dynamodb', 's3').filter(sv => !ctx.linkedNodes(sv, 'vpce').length);
+          if (bare.length) issues.push({ nodeIds: [l.id, ...bare.map(n => n.id)],
+            message: `VPC에 연결한 Lambda는 VPC 안에만 닿아요. ${[...new Set(bare.map(n => SVC_MAP[n.type].name))].join('·')}에 가려면 VPC Endpoints를 그 서비스와 잇거나, Lambda를 NAT와 이어주세요.` });
+        }
+      });
+      return issues;
+    },
+  },
 ];
 
 // ----- 옮기기 전 구성 (48번): VPC 없이 IDC만 있으면 AWS 3-Tier 판정 대신 IDC 안 흐름만 본다 -----
@@ -534,6 +570,12 @@ const ONPREM_RULES = [
 // VPC 없이 IDC만 있는 구성인지
 function isOnpremOnly(s = state) {
   return s.containers.some(c => c.type === 'idc') && !s.containers.some(c => c.type === 'vpc');
+}
+
+// 50번: 서버리스 입구 — 사용자(또는 사용자 — CloudFront) → API Gateway → Lambda 가 있는지 (근거 SV-04)
+function hasServerlessEntry(ctx) {
+  const front = gw => ctx.neighborsOf(gw, ...USER_TYPES).length || ctx.neighborsOf(gw, 'cloudfront').some(cf => ctx.neighborsOf(cf, ...USER_TYPES).length);
+  return ctx.ofType('apigw').some(gw => front(gw) && ctx.neighborsOf(gw, 'lambda').length);
 }
 
 // 모든 규칙을 실행해 결과를 만든다
