@@ -84,8 +84,25 @@
 - 페이지: https://aws.amazon.com/route53/pricing/
 - 별도: DNS 조회 요청 수 요금
 
+## C13. Site-to-Site VPN 연결 (48번)
+- 값: $0.05 per VPN Connection-Hour
+- 데이터: Price List AmazonVPC ap-northeast-2, APN2-VPN-Usage-Hours:ipsec.1 (CreateVpnConnection)
+- 페이지: https://aws.amazon.com/vpn/pricing/
+- 앱: 고객 게이트웨이—VGW 선(VPN) 하나 = 연결 1개
+- 별도: 데이터 전송(밖으로 나가는 데이터) 요금
+
+## C14. Direct Connect 1Gbps 전용(Dedicated) 포트 (48번)
+- 값: $0.30 per connected 1G port-hour (서울의 Direct Connect 위치들: KINX 가산, LG U+ 평촌, Digital Realty ICN10)
+- 참고: 호스티드 연결(Hosted) 1G는 $0.33 per port-hour
+- 데이터: Price List AWSDirectConnect ap-northeast-2, APN2-*-PortUsage:1G (발행 2026-11-08)
+- 페이지: https://aws.amazon.com/directconnect/pricing/
+- 앱: 고객 게이트웨이—VGW 선(Direct Connect) 하나 = 1Gbps 전용 포트 1개 (가정: 포트 속도 1Gbps)
+- 별도: 데이터 전송 요금, Direct Connect 위치까지의 회선(통신사) 비용
+
 ## C12. 금액을 넣지 않는 것
 - 무료: 인터넷 게이트웨이·VPC·서브넷·라우팅 테이블·보안 그룹, 게이트웨이 VPC 엔드포인트(S3·DynamoDB), ECS 자체(실행 방식. 요금은 작업을 돌리는 EC2·Fargate에)
   - 페이지: https://aws.amazon.com/vpc/pricing/ , https://aws.amazon.com/ecs/pricing/
+- 회사 비용(AWS 요금이 아님): 온프레미스 서버·DB·고객 게이트웨이 장치 (48번)
+- 연결 요금에 함께 계산: VGW (고객 게이트웨이—VGW 선의 VPN·Direct Connect 요금으로만 계산하고 VGW 자체 금액은 따로 넣지 않음)
 - 사용량에 따라 요금이 붙거나 이번에 금액을 조사하지 않은 것: CloudFront·S3·DynamoDB·CloudWatch·CloudTrail·ECR·Session Manager·CodeCommit·CodeBuild·CodePipeline·CodeDeploy
   - 앱은 "사용량에 따라 요금"으로만 표시한다 (요청 수·데이터 양을 입력받지 않으므로)

@@ -143,14 +143,17 @@ const VALIDATION_RULES = [
   {
     id: 5, level: 'error', message: '앱-DB 연결',
     pillars: [],
-    basis: '앱 계층(EC2·컨테이너)이 데이터 계층(RDS)에 접속해야 세 계층이 이어져요. 같은 VPC의 앱 서버가 RDS를 쓰는 것이 기본 구성이에요.',
+    basis: '앱 계층(EC2·컨테이너)이 데이터 계층(RDS)에 접속해야 세 계층이 이어져요. 같은 VPC의 앱 서버가 RDS를 쓰는 것이 기본 구성이에요. 옮기는 중에는 VPN·Direct Connect로 IDC의 DB를 쓸 수도 있어요.',
     ref: 'https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_VPC.Scenarios.html',
     check(ctx) {
       const ec2s = ctx.ofType(...APP_TYPES), rdss = ctx.ofType('rds');
+      // 48번: VGW — 고객 게이트웨이 — 온프레미스 DB로 IDC의 DB를 쓰는 앱 서버 (옮기는 중의 하이브리드 구성, 근거 HY-01)
+      const viaIdc = n => ctx.neighborsOf(n, 'vgw').some(v => ctx.neighborsOf(v, 'cgw').some(g => ctx.neighborsOf(g, 'onprem-db').length));
+      const hybrid = ec2s.some(viaIdc);
       if (!ec2s.length && !rdss.length) return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 없어요.' }];
-      if (!rdss.length) return [{ message: 'RDS가 없어요. 앱 서버가 데이터를 저장할 RDS가 필요해요.' }];
+      if (!rdss.length && !hybrid) return [{ message: 'RDS가 없어요. 앱 서버가 데이터를 저장할 RDS가 필요해요.' }];
       if (!ec2s.length) return [{ message: '앱 서버가 없어요. RDS를 사용할 EC2나 컨테이너(ECS·EKS·Fargate)가 필요해요.' }];
-      if (!ec2s.some(n => ctx.neighborsOf(n, 'rds').length)) {
+      if (!ec2s.some(n => ctx.neighborsOf(n, 'rds').length || viaIdc(n))) {
         return [{ message: '앱 서버(EC2·컨테이너)와 RDS가 연결되어 있지 않아요. 앱 서버가 DB를 쓸 수 있도록 연결해주세요.' }];
       }
       return [];

@@ -40,9 +40,12 @@ function exampleFixSpec(picks) {
 // 예시와 미션 시작 구성(js/ui/mission.js)이 함께 쓴다
 function loadSpec(spec, toast) {
   const { nodes, edges } = spec;
-  const o = loadTemplate();
+  const o = spec.noVpc ? loadBlank() : loadTemplate();
   if (!o) return false;   // 기존 내용을 지울지 묻는 창에서 취소
   const before = takeSnapshot();
+  // 48번: 더할 영역 (IDC 등). 박스보다 먼저 놓아 박스의 소속이 정해지게
+  (spec.areas || []).forEach(([type, x, y, w, h]) => state.containers.push({
+    id: newId('c'), type, x: o.x + x, y: o.y + y, width: w, height: h, parentContainer: null, label: AREA_MAP[type].name }));
   const ids = {};
   nodes.forEach(([k, type, x, y]) => {
     const pos = fitRect(o.x + x - NODE_W / 2, o.y + y - NODE_H / 2, NODE_W, NODE_H);
@@ -51,7 +54,7 @@ function loadSpec(spec, toast) {
     snapToVpcEdge(node);
     ids[k] = node.id;
   });
-  edges.forEach(([a, b]) => state.edges.push({ id: newId('e'), from: ids[a], to: ids[b], fromSide: null, toSide: null, mid: null }));
+  edges.forEach(([a, b, kind]) => state.edges.push({ id: newId('e'), from: ids[a], to: ids[b], fromSide: null, toSide: null, mid: null, ...(kind ? { kind } : {}) }));
   if (spec.asg) {
     state.containers.push({ id: newId('c'), type: 'asg', x: o.x + spec.asg.x, y: o.y + spec.asg.y,
       width: spec.asg.width, height: spec.asg.height, parentContainer: null, label: AREA_MAP.asg.name });
@@ -114,6 +117,21 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$loadMenu
 // ----- 기본 틀 (VPC 1개 + AZ 2개 + AZ별 퍼블릭/프라이빗/DB 서브넷) -----
 const TEMPLATE_VPC = { w: 1000, h: 660 };   // 기본 틀 VPC 크기
 const TEMPLATE_USER_GAP = 200;              // VPC 왼쪽에 사용자 박스를 놓을 자리
+
+// 빈 캔버스 (48번: VPC 없는 예시용). 기본 틀과 같은 자리를 기준점으로 돌려준다. 묻는 창에서 취소하면 null
+function loadBlank() {
+  const hasContent = state.nodes.length + state.containers.length > 0;
+  if (hasContent && !confirm('캔버스의 기존 내용을 모두 지우고 예시를 불러올까요?')) return null;
+  state.nodes = [];
+  state.edges = [];
+  state.containers = [];
+  selectedId = null;
+  cancelPendingConnect();
+  return {
+    x: snap((($world.offsetWidth - TEMPLATE_VPC.w) + TEMPLATE_USER_GAP) / 2),
+    y: snap(($world.offsetHeight - TEMPLATE_VPC.h) / 2),
+  };
+}
 
 // origin: VPC 왼쪽 위 위치. 없으면 캔버스 한가운데 (사방에 여백이 있어 배치하기 편함)
 // 만든 VPC 왼쪽 위 위치를 돌려준다 (예시 구성이 이 위치 기준으로 놓임). 묻는 창에서 취소하면 null

@@ -50,6 +50,7 @@ function renderCostPanel(head) {
   };
   if (c.usage.length) line('사용량에 따라', `${c.usage.join(' · ')} — 요청 수·데이터 양에 따라 요금이 붙어서 합계에 넣지 않았어요`);
   if (c.free.length) line('무료', `${c.free.join(' · ')}`);
+  if (c.onprem.length) line('회사 비용', `${c.onprem.join(' · ')} — IDC의 장비라 AWS 요금이 아니에요. 계산하지 않았어요`);   // 48번
   line('넣지 않은 것', COST_EXTRA);
   panel.appendChild(notes);
 }

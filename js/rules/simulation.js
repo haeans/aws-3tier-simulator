@@ -83,7 +83,7 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     const blocked = F.down.has(id) || F.dbBlocked.has(id) || count === 0;
     const done = blocked ? 0 : capacity === null ? amount : Math.min(amount, capacity);
     const util = capacity ? amount / capacity : 0;
-    const lat = (amount ? inLat.get(id) / amount : 0) + (perf ? perf.latency * queueFactor(Math.min(util, 1)) : 0);
+    const lat = (amount ? inLat.get(id) / amount : 0) + (perf ? perfLatency(n, s) * queueFactor(Math.min(util, 1)) : 0);
     // stuck: 처리는 했지만 넘길 곳이 없어 실패한 요청 수 (예: RDS와 연결되지 않은 EC2)
     const info = { load: amount, served: done, capacity, util, stuck: 0, blocked, count };
     if (perf || USER_TYPES.includes(n.type)) nodes.set(id, info);
@@ -166,7 +166,7 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
    - ElastiCache가 멈추면 다른 AZ의 캐시가 이어받고, 없으면 그 조회가 RDS로 간다 (24번)
    ========================================================= */
 const HEALTH_INTERVAL = 30, UNHEALTHY_COUNT = 2, HEALTHY_COUNT = 5, FAILOVER_TIME = 90;
-const FAULT_TYPES = [...APP_TYPES, ...RDS_TYPES, 'elasticache'];   // 장애를 넣을 수 있는 박스 (ElastiCache는 24번)
+const FAULT_TYPES = [...APP_TYPES, ...RDS_TYPES, 'elasticache', ...ONPREM_TYPES];   // 장애를 넣을 수 있는 박스 (ElastiCache는 24번, 온프레미스는 48번: 예비가 없어 멈추면 그대로 실패)
 
 // 사건 기록용 이름: "EC2(가용 영역 A)"
 function simNodeName(id, s = state) {
@@ -281,6 +281,17 @@ function sizeGroupOf(type) {
 // 박스 크기 ('small' | 'medium' | 'large'). 없거나 알 수 없는 값이면 보통
 function nodeSize(n) {
   return SIZE_KEYS.includes(n.size) ? n.size : 'medium';
+}
+// 박스를 한 번 거칠 때 기본 지연(ms). VGW는 고객 게이트웨이와 이은 선 종류로 (VPN·Direct Connect 중 빠른 쪽, 48번)
+function perfLatency(n, s = state) {
+  const p = PERF[n.type];
+  if (!p) return 0;
+  if (n.type !== 'vgw') return p.latency;
+  const kinds = s.edges.map(ed => {
+    const other = edgeOtherEnd(ed, n.id, s);
+    return other && other.type === 'cgw' ? edgeInfo('cgw', 'vgw', ed.kind || null).kind : null;
+  }).filter(Boolean);
+  return kinds.length ? Math.min(...kinds.map(k => PERF_LINK_LATENCY[k] || 0)) : 0;
 }
 // 박스 1대가 1초에 처리하는 양 (크기 반영). 제한 없는 박스면 null
 function perfCapacity(n) {
