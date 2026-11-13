@@ -18,6 +18,7 @@ const CATEGORIES = [
   { key: 'cicd',      label: 'CI/CD',           color: '#2e9e47', bg: '#ebf7ee', fg: '#1d6b30' },
   { key: 'ops',       label: '접근/운영',       color: '#d13212', bg: '#fdecea', fg: '#9b2410' },
   { key: 'onprem',    label: 'IDC (온프레미스)', color: '#6b5b4b', bg: '#f5f1ec', fg: '#4a3d30' },   // 48번
+  { key: 'migration', label: '마이그레이션',     color: '#0b7a75', bg: '#e6f5f4', fg: '#06504c' },   // 49번
 ];
 const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
@@ -69,6 +70,9 @@ const SERVICES = [
   { type: 'onprem-server',  name: '온프레미스 서버',  category: 'onprem',    allowedZone: 'idc',     validated: true  },
   { type: 'onprem-db',      name: '온프레미스 DB',    category: 'onprem',    allowedZone: 'idc',     validated: true  },
   { type: 'cgw',            name: '고객 게이트웨이',  category: 'onprem',    allowedZone: 'idc',     validated: true  },
+  // 마이그레이션 (49번): 근거 criteria/migration.md. MGN 복제 서버는 스테이징 서브넷(MG-02), DMS 복제 인스턴스는 VPC 안 서브넷(DM-01)
+  { type: 'mgn',            name: 'MGN 복제 서버',    category: 'migration', allowedZone: 'appSubnet', validated: true },
+  { type: 'dms',            name: 'DMS 복제 인스턴스', category: 'migration', allowedZone: 'dataSubnet', validated: true },
 ];
 // 서비스별 색상은 카테고리 색을 그대로 사용
 SERVICES.forEach(s => { s.color = CAT_MAP[s.category].color; });
@@ -122,12 +126,14 @@ const SERVICE_DESC = {
   'onprem-server': '회사 데이터센터(IDC)에서 직접 운영하는 서버예요. AWS로 옮기기 전의 앱 서버를 나타내요.',
   'onprem-db':     '회사 데이터센터(IDC)에서 직접 운영하는 데이터베이스예요. AWS로 옮기기 전의 DB를 나타내요.',
   cgw:            '회사 데이터센터(IDC)의 라우터(고객 게이트웨이 장치)예요. AWS의 VGW와 VPN이나 Direct Connect로 이어져요.',
+  mgn:            'AWS Application Migration Service(MGN)의 복제 서버예요. 원본 서버에 설치한 에이전트가 디스크를 계속 복제해 오고, 전환(cutover) 때 그대로 EC2로 띄워요. 서버를 그대로 옮기는(rehost) 방법이에요.',
+  dms:            'AWS Database Migration Service(DMS)의 복제 인스턴스예요. 원본 DB에서 데이터를 읽어 대상 DB(RDS)에 넣고, 옮기는 동안 생긴 변경(CDC)도 이어서 반영해요.',
 };
 SERVICES.forEach(s => { s.desc = SERVICE_DESC[s.type] || ''; });
 
 // 검증 규칙상 권장 위치 (놓는 곳 안내에 함께 표시)
 const RECOMMENDED_ZONE = {
-  vgw: 'VPC 경계선', cgw: 'IDC 영역 안 (VPC 쪽 가장자리)',
+  vgw: 'VPC 경계선', cgw: 'IDC 영역 안 (VPC 쪽 가장자리)', mgn: '스테이징용 전용 서브넷', dms: 'DB 서브넷 (대상 RDS와 같은 VPC)',
   igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '두 AZ의 퍼블릭 서브넷 사이', ec2: '프라이빗 서브넷', ecs: '프라이빗 서브넷', eks: '프라이빗 서브넷', fargate: '프라이빗 서브넷',
   rds: 'DB 서브넷', 'rds-replica': 'DB 서브넷', 'rds-standby': 'DB 서브넷', elasticache: 'DB 서브넷',
 };
@@ -164,6 +170,11 @@ const EDGE_SERVERS = ['ec2', 'ecs', 'eks', 'fargate'];   // 서버(앱이 도는
 // 위에서부터 처음 맞는 규칙을 쓴다. [앞 종류들, 뒤 종류들, 연결선 종류] — 화살표는 앞 → 뒤 (null = 아무 종류)
 // 표에 없는 짝은 요청(request). 잘못 이은 선(IGW—EC2 등)도 요청이 지나가므로 요청으로 두고 판정이 알린다
 const EDGE_RULES = [
+  // 49번: 옮기기 (원본 → 복제 → 대상). 근거 MG-01·05, DM-02
+  [['onprem-server'], ['mgn'], 'replication'],
+  [['mgn'], ['ec2'], 'replication'],
+  [['onprem-db'], ['dms'], 'replication'],
+  [['dms'], ['rds'], 'replication'],
   [['cgw'], ['vgw'], 'vpn'],                                     // IDC ↔ VPC 사설 연결 (기본 VPN, 선을 골라 Direct Connect로, 48번)
   [['waf'], null, 'relation'],                                   // CloudFront·LB에 붙는 검사 규칙
   [['iam'], null, 'relation'],                                   // 권한

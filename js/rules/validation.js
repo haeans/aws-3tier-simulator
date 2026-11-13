@@ -426,7 +426,9 @@ const VALIDATION_RULES = [
       const linked = n => ctx.s.edges.map(e => edgeOtherEnd(e, n.id, ctx.s)).filter(Boolean);   // 이어진 모든 박스 (종류 상관없이)
       // 온프레미스 서버·DB가 IDC 밖의 AWS 박스와 바로 이어짐 (사용자·고객 게이트웨이는 괜찮음)
       ctx.ofType(...ONPREM_TYPES).forEach(n => {
-        const bad = linked(n).filter(m => !ONPREM_TYPES.includes(m.type) && m.type !== 'cgw' && !USER_TYPES.includes(m.type));
+        // 49번 예외: 온프레미스 서버 → MGN, 온프레미스 DB → DMS는 복제라 인터넷으로도 바로 갈 수 있다 (MG-04, DM-02)
+        const ok = n.type === 'onprem-server' ? 'mgn' : 'dms';
+        const bad = linked(n).filter(m => !ONPREM_TYPES.includes(m.type) && m.type !== 'cgw' && m.type !== ok && !USER_TYPES.includes(m.type));
         if (bad.length) issues.push({ nodeIds: [n.id, ...bad.map(m => m.id)],
           message: `${SVC_MAP[n.type].name}가 ${[...new Set(bad.map(m => SVC_MAP[m.type].name))].join('·')}와 바로 이어져 있어요. IDC와 AWS는 고객 게이트웨이 → VPN·Direct Connect → VGW를 거쳐야 해요.` });
       });
@@ -462,6 +464,45 @@ const VALIDATION_RULES = [
       if (!ctx.ofType('cgw').length && ctx.ofType('vgw').some(v => ctx.s.edges.some(e => e.from === v.id || e.to === v.id))) issues.push({ nodeIds: ctx.ofType('vgw').map(n => n.id),
         message: 'IDC 쪽 고객 게이트웨이가 없어요. IDC 영역 안에 고객 게이트웨이를 놓고 VGW와 이어주세요.' });
       return issues;
+    },
+  },
+  {
+    // 근거: MG-01·MG-05·DM-02 (등급 A, 49번) — MGN은 원본 서버를 복제해 대상 EC2로 띄우고, DMS는 원본 DB를 읽어 대상 DB에 넣는다
+    id: 22, level: 'error', message: '마이그레이션 원본·대상',
+    pillars: ['reliability'],
+    basis: 'MGN은 원본 서버에 설치한 에이전트가 복제 서버로 디스크를 복제하고, 전환 때 대상 서브넷에 EC2를 띄워요. DMS 복제 인스턴스는 원본 DB에 접속해 읽고 대상 DB에 넣어요.',
+    ref: 'https://docs.aws.amazon.com/mgn/latest/ug/what-is-application-migration-service.html',
+    check(ctx) {
+      const issues = [];
+      ctx.ofType('mgn').forEach(m => {
+        if (!ctx.neighborsOf(m, 'onprem-server').length) issues.push({ nodeIds: [m.id],
+          message: 'MGN 복제 서버에 옮길 원본 서버가 없어요. 온프레미스 서버와 이어주세요. (원본 서버의 에이전트가 디스크를 복제해 와요)' });
+        if (!ctx.neighborsOf(m, 'ec2').length) issues.push({ nodeIds: [m.id],
+          message: 'MGN 복제 서버에 전환(cutover)할 EC2가 없어요. 대상 서브넷의 EC2와 이어주세요.' });
+      });
+      ctx.ofType('dms').forEach(d => {
+        if (!ctx.neighborsOf(d, 'onprem-db').length) issues.push({ nodeIds: [d.id],
+          message: 'DMS 복제 인스턴스에 원본 DB가 없어요. 옮길 온프레미스 DB와 이어주세요.' });
+        if (!ctx.neighborsOf(d, 'rds').length) issues.push({ nodeIds: [d.id],
+          message: 'DMS 복제 인스턴스에 대상 DB가 없어요. 데이터를 넣을 RDS와 이어주세요.' });
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: DM-01 (등급 A, 49번) — 복제 서브넷 그룹은 서로 다른 AZ의 서브넷이 2개 이상 (판정 19 EKS와 같은 방식)
+    id: 23, level: 'error', message: 'DMS 서브넷 AZ',
+    pillars: ['reliability'],
+    basis: 'DMS 복제 인스턴스는 VPC 안의 복제 서브넷 그룹에 만들어요. 서브넷 그룹에는 서로 다른 AZ의 서브넷이 2개 이상 있어야 해요.',
+    ref: 'https://docs.aws.amazon.com/dms/latest/userguide/CHAP_ReplicationInstance.VPC.html',
+    check(ctx) {
+      const dms = ctx.ofType('dms');
+      const subnets = ctx.s.containers.filter(c => SUBNET_TYPES.includes(c.type));
+      if (!dms.length || !subnets.length) return [];
+      const azIds = new Set(subnets.map(c => c.parentContainer).filter(id => ctx.findContainer(id)?.type === 'az'));
+      if (azIds.size >= 2) return [];
+      return [{ nodeIds: dms.map(n => n.id),
+        message: 'DMS 복제 인스턴스는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
     },
   },
 ];

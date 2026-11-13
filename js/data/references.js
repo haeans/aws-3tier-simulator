@@ -20,6 +20,9 @@ const PILLARS = {
    설명 문구(SERVICE_DESC, SERVICE_GUIDE)는 이 문서들을 근거로 쓴다.
    ========================================================= */
 const SERVICE_DOCS = {
+  // 49번: 마이그레이션 (근거 criteria/migration.md)
+  mgn:             'https://docs.aws.amazon.com/mgn/latest/ug/what-is-application-migration-service.html',
+  dms:             'https://docs.aws.amazon.com/dms/latest/userguide/CHAP_ReplicationInstance.html',
   // 48번: IDC (근거 criteria/hybrid.md)
   vgw:             'https://docs.aws.amazon.com/vpn/latest/s2svpn/how_it_works.html',
   cgw:             'https://docs.aws.amazon.com/vpn/latest/s2svpn/how_it_works.html',

@@ -99,6 +99,19 @@
 - 앱: 고객 게이트웨이—VGW 선(Direct Connect) 하나 = 1Gbps 전용 포트 1개 (가정: 포트 속도 1Gbps)
 - 별도: 데이터 전송 요금, Direct Connect 위치까지의 회선(통신사) 비용
 
+## C15. DMS 복제 인스턴스 (49번)
+- 값: dms.t3.small $0.056 / dms.t3.medium $0.112 / dms.t3.large $0.224 per hour (Single-AZ), Multi-AZ는 2배
+- 데이터: Price List AWSDatabaseMigrationSvc ap-northeast-2, APN2-InstanceUsg:dms.t3.* / APN2-Multi-AZUsg:dms.t3.*
+- 페이지: https://aws.amazon.com/dms/pricing/
+- 앱: 박스 1개 = dms.t3.medium Single-AZ 1개 (크기 설정 없음, 가정)
+
+## C16. MGN 복제 (49번)
+- 값: $0.042 per Replication-hour (Paid_replication). 같은 파일에 Free_replication $0 항목이 있다 (서버마다 무료 복제 시간)
+- 데이터: Price List AWSApplicationMigrationSvc ap-northeast-2, APN2-MGN-Replication (발행 2026-09-11)
+- 페이지: https://aws.amazon.com/application-migration-service/pricing/
+- 앱: MGN 박스와 이은 원본 서버 1대마다 복제 시간 요금. 무료 시간은 빼지 않고 "처음 일정 기간 무료"라고만 적는다 (무료 시간 길이는 이번에 확인하지 않음)
+- 별도: 스테이징의 복제 서버(EC2)·디스크(EBS) 요금
+
 ## C12. 금액을 넣지 않는 것
 - 무료: 인터넷 게이트웨이·VPC·서브넷·라우팅 테이블·보안 그룹, 게이트웨이 VPC 엔드포인트(S3·DynamoDB), ECS 자체(실행 방식. 요금은 작업을 돌리는 EC2·Fargate에)
   - 페이지: https://aws.amazon.com/vpc/pricing/ , https://aws.amazon.com/ecs/pricing/
