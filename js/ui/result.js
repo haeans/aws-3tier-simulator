@@ -21,6 +21,7 @@ const $validateBtn = document.getElementById('btn-validate');
 
 // [검증하기]를 누르면 검증, 결과가 떠 있을 때 다시 누르면([검증 종료]) 결과를 지우고 검증 전 화면으로
 function runValidation() {
+  if (resultTab === 'mission' && !validation) resultTab = 'validate';   // [미션] 탭에서 검증하면 결과가 보이게 탭을 옮긴다 (42번)
   if (validation) {
     validation = null;
     resultNote = '검증을 종료했어요. [검증하기]를 누르면 다시 확인할 수 있어요.';
@@ -443,8 +444,9 @@ function renderResult() {
   $result.innerHTML = '';
   const head = document.createElement('div');
   head.className = 'result-head';
-  // 탭: 검증 결과 / 성능 시뮬레이션 (UI-11 simulate.js)
-  head.innerHTML = '<span class="tabs"><button class="tab" data-tab="validate">검증 결과</button>' +
+  // 탭: 미션 (UI-15 mission.js) / 검증 결과 / 성능 시뮬레이션 (UI-11 simulate.js)
+  head.innerHTML = '<span class="tabs"><button class="tab" data-tab="mission">미션</button>' +
+    '<button class="tab" data-tab="validate">검증 결과</button>' +
     '<button class="tab" data-tab="sim">성능 시뮬레이션</button></span>';
   head.querySelectorAll('.tab').forEach(b => {
     const tab = b.getAttribute('data-tab');
@@ -460,6 +462,7 @@ function renderResult() {
   $result.appendChild(head);
   if (resultTab === 'sim') { renderSimPanel(head); return; }
   stopSimAll();
+  if (resultTab === 'mission') { renderMissionPanel(head); return; }
 
   if (!validation) {
     head.insertAdjacentHTML('beforeend', `<span class="msg">${resultNote}</span>`);

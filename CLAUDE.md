@@ -45,6 +45,7 @@
   - 파일 사이에서는 전역 변수·함수를 공유한다.
   - 다른 파일의 함수는 실행 시점에만 호출한다. 파일을 불러오는 도중(최상위 코드)에 뒤쪽 파일의 함수를 부르면 안 된다.
 - 서비스 추가: `js/data/services.js`의 SERVICES와 SERVICE_DESC, `js/data/guide.js`의 SERVICE_GUIDE(설명 패널), `js/data/references.js`의 SERVICE_DOCS(공식 문서), 흐름에 나오는 박스면 `js/data/flow-steps.js`의 FLOW_STEP_TEXT(흐름 단계 해설, 근거는 criteria/flow.md)
+- 미션 추가: `js/data/missions.js`의 MISSIONS (목표 조건은 판정 규칙이 보는 것과 같게, 채점은 js/rules/missions.js). 테스트는 tests/mission.spec.js
 - 예시 추가: `js/data/examples.js`의 EXAMPLES(메뉴)와 구성 데이터 (VPC 기준 상대 좌표). 판정 결과 테스트는 tests/validation.spec.js
 - 규칙 추가: `js/rules/` 안의 배열(PLACEMENT_RULES / VALIDATION_RULES / SUGGESTION_RULES)
 - 배치·이동·크기 조절은 반드시 `commit(before, actedId, movedIds)`(js/ui/core.js)를 거친다.
@@ -71,6 +72,7 @@ npm test         # Playwright 자동 테스트 (tests/*.spec.js, 이 PC의 Edge�
   - `tests/edges.spec.js`: 연결점 끌기·손잡이·경로 회피·강조
   - `tests/validation.spec.js`: 판정·제안·흐름 점·결과 클릭
   - `tests/simulation.spec.js`: 성능 시뮬레이션 계산·탭·사용률 막대
+  - `tests/mission.spec.js`: 단계별 미션 (목표 자동 체크·힌트·다음 미션·진행 저장)
   - `tests/regression.spec.js`: 리팩터링 기준선 (판정·제안·시뮬레이션 결과 스냅샷). 결과를 일부러 바꿀 때만 `npx playwright test regression --update-snapshots`
 - **기능을 추가하거나 고치면** 해당 spec 파일에 테스트를 추가한다.
   - 화면 조작은 `page.mouse`로 실제 마우스처럼 한다.
@@ -111,11 +113,11 @@ npm 도구를 쓸 수 없을 때는 **Microsoft Edge 헤드리스**로 직접 �
 - PR 병합도 매번 사용자 승인을 받고, 승인되면 `gh pr merge <번호> --merge`로 직접 처리한다 (2026-10-30 사용자 결정. 기록은 "Merge pull request #N" 형식 유지)
   - 병합 전에 `gh pr view <번호> --json state`로 실제 상태를 확인한다 (사용자가 병합했다고 해도 OPEN일 수 있었음)
 
-## 세션 인계 (2026-11-13 기준, v1.56.0, 새 세션은 여기부터 읽는다)
+## 세션 인계 (2026-11-13 기준, v1.57.0, 새 세션은 여기부터 읽는다)
 
 - **먼저 HANDOFF.md를 읽는다.** 새 PC 준비, 지금 상태, 다음 할 일, Claude 메모리 내용(메인 기능 계획 3단계)을 모아 두었다.
-- **현재 상태:** v1.56.0, 41번 [예시 구성 확장: 컨테이너 예시]까지 완료 (병합 여부는 git log·gh로 확인). 구조 정리 R1~R7 모두 완료. 작업 계획 5차·동작 개편 22~28번 완료
-  - **다음: 42번 [단계별 미션]** — 작업 계획 6차(ROADMAP [확정], 2026-11-12 사용자 결정): 38 I(완료) → 39 C(완료) → 40 A(완료) → 41 D(완료) → 42 B → 43 H → 44 E → 45~ F(13번, 나눠서). 디자인 다듬기는 마지막
+- **현재 상태:** v1.57.0, 42-1 [단계별 미션: 틀 + 만들기 미션 5개]까지 완료 (병합 여부는 git log·gh로 확인). 구조 정리 R1~R7 모두 완료. 작업 계획 5차·동작 개편 22~28번 완료
+  - **다음: 42-2 [고치기·개선 미션]** (42번의 나머지, ROADMAP [확정]) — 작업 계획 6차(ROADMAP [확정], 2026-11-12 사용자 결정): 38 I(완료) → 39 C(완료) → 40 A(완료) → 41 D(완료) → 42 B → 43 H → 44 E → 45~ F(13번, 나눠서). 디자인 다듬기는 마지막
   - 네트워크 표현(G)은 지금 추가하지 않고 확장 후보로 둔다. "세부 설정값 입력 없음" 조건은 뺐다 (2026-11-12 사용자 결정, GUIDE.md 4장)
   - 구조 정리 요약은 GUIDE.md 4장. 28번 [서버 통신 경로 제안]은 완료(제안 19)
   - **구조 정리(리팩터링)는 REFACTOR.md** (R1~R7). 29번 = R1 문서 어긋남 정리 — 완료(PR #16 병합). R2 이후 순서는 사용자가 정한다

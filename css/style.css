@@ -604,6 +604,31 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
   padding: 2px 10px; line-height: 18px; border-radius: 6px; cursor: pointer; }   /* 높이 24px: 결과 영역 높이를 바꾸지 않게 */
 .tab:hover { background: #eef2f6; }
 .tab.active { background: #fff; color: var(--text); border-color: var(--accent); }
+/* [미션] 탭 (42번) */
+.mission-panel { margin-top: 8px; display: grid; gap: 8px; }
+.mission-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.mission-title b { font-size: 14px; }
+.mission-title span { color: var(--muted); }
+.mission-goals, .mission-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+/* 목표는 여러 칸으로 나눠 패널 높이를 줄인다 (패널이 높아지면 캔버스가 줄어듦) */
+.mission-goals { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+.mission-goals li, .mission-list li { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid var(--line, #d5dbe1);
+  border-radius: 6px; background: #fff; }
+.mission-goals i, .mission-list i { flex-shrink: 0; width: 18px; height: 18px; border: 1.5px solid #9aa5b1; border-radius: 4px;
+  font-style: normal; font-size: 12px; font-weight: 700; line-height: 16px; text-align: center; color: #fff; }
+.mission-goals li.done { background: #f0f9f1; border-color: #bfe3c6; color: #1d6b2f; }
+.mission-goals li.done i, .mission-list li.done i { background: #2e9e47; border-color: #2e9e47; }
+.mission-list i { border-radius: 50%; color: var(--muted); }
+.mission-list li.done i { color: #fff; }
+.mission-list li.current { border-color: var(--accent); }
+.mission-list li b { flex-shrink: 0; }
+.mission-list li span { color: var(--muted); flex: 1; }
+.mission-list .btn { padding: 2px 10px; flex-shrink: 0; }
+.mission-hint { padding: 6px 10px; border-radius: 6px; background: #fff8e1; border: 1px solid #f0d98a; }
+.mission-hint b { margin-right: 8px; color: #8a6400; }
+.mission-done { padding: 6px 10px; border-radius: 6px; background: #f0f9f1; border: 1px solid #bfe3c6; color: #1d6b2f; font-weight: 700; }
+.mission-ctl { display: flex; gap: 8px; flex-wrap: wrap; }
+.mission-ctl .btn { padding: 3px 12px; }
 /* 성능 시뮬레이션 패널 */
 .sim-panel { margin-top: 8px; display: grid; gap: 6px; }
 .sim-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
