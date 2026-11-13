@@ -66,6 +66,11 @@ const PLACEMENT_RULES = {
     test: zone => zone === 'db' || zone === 'private',
     message: name => `${eunNeun(name)} DB 서브넷이나 프라이빗 서브넷 안에만 놓을 수 있어요.`,
   },
+  // Lambda (50번): VPC 밖(기본) 또는 프라이빗 서브넷. 퍼블릭 서브넷에 연결해도 인터넷이 되지 않아 막는다 (SV-01·02)
+  lambdaZone: {
+    test: zone => zone === 'outside' || zone === 'private',
+    message: name => `${eunNeun(name)} VPC 밖(기본)이나 프라이빗 서브넷에 놓아주세요. 퍼블릭 서브넷에 연결해도 인터넷에 나갈 수 없어요.`,
+  },
   // IDC 영역 안: 온프레미스 박스만 (48번). AWS 서비스는 IDC에 놓을 수 없다
   idc: {
     test: zone => zone === 'idc',

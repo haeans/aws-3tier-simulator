@@ -100,6 +100,38 @@ const SERVICE_GUIDE = {
     ],
     avoid: [],
   },
+  // ----- 서버리스 (50번) -----
+  apigw: {
+    links: [
+      { to: [...USER_TYPES, 'cloudfront'], text: '사용자(또는 CloudFront)의 요청을 받는 공개 입구예요. VPC 밖에 있어서 IGW·Load Balancer가 필요 없어요.' },
+      { to: ['lambda'], text: '받은 요청으로 Lambda 함수를 호출해요 (프록시 통합).' },
+      { to: ['waf'], text: 'REST API면 WAF로 위험한 요청을 막을 수 있어요. (HTTP API는 WAF를 지원하지 않아요)' },
+    ],
+    avoid: [
+      { to: [...APP_TYPES, 'rds', 'dynamodb'], text: '서버나 DB에 바로 잇지 않아요. Lambda가 받아서 처리해요.' },
+    ],
+    note: 'VPC 밖에 놓아요. 계정 기본 한도는 초당 10,000요청이에요.',
+  },
+  lambda: {
+    links: [
+      { to: ['apigw'], text: 'API Gateway가 요청마다 이 함수를 호출해요.' },
+      { to: ['dynamodb'], text: '서버리스 DB예요. IAM 권한으로 접근해요. Lambda를 VPC에 연결했다면 VPC Endpoints가 필요해요.' },
+      { to: ['rdsproxy', 'rds'], text: 'RDS를 쓰려면 Lambda를 프라이빗 서브넷에 놓아 VPC에 연결해요. RDS Proxy를 거치면 DB 연결이 바닥나지 않아요.' },
+    ],
+    avoid: [
+      { to: [...USER_TYPES, 'igw', 'lb'], text: '인터넷 요청은 API Gateway가 받아요.' },
+    ],
+    note: 'VPC 밖(기본)이나 프라이빗 서브넷에 놓아요. VPC에 연결하면 여러 AZ의 서브넷을 고르세요.',
+  },
+  rdsproxy: {
+    links: [
+      { to: ['lambda'], text: 'Lambda의 짧은 DB 연결을 받아 모아 써요.' },
+      { to: ['rds'], text: '모아 둔 연결로 RDS에 접속해요.' },
+    ],
+    avoid: [
+      { to: [...USER_TYPES, 'igw', 'apigw'], text: 'DB 앞단이라 인터넷이나 API Gateway와 바로 잇지 않아요.' },
+    ],
+  },
   // ----- 마이그레이션 (49번) -----
   mgn: {
     links: [

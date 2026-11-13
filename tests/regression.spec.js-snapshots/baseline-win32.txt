@@ -12,7 +12,7 @@ valid | ok |  | S1(ec2#0,rds#0) S2(pc#0) S4(ec2#0,ec2#1) S5() S8(pc#0) S9(lb#0) 
   ? EC2 수가 고정되어 있어요. 사용자가 몰리면 느려지고, 한가할 땐 남는 서버 비용이 들어요. → [영역]의 Auto Scaling 그룹을 두 AZ의 프라이빗 서브넷에 걸쳐 놓고, 그 안에 EC2를 두세요.
   ? 서버 상태나 누가 무엇을 바꿨는지 볼 수단이 없어요. 문제가 생겨도 원인을 찾기 어려워요. → CloudWatch(상태 모니터링·알림), CloudTrail(작업 기록)을 VPC 밖에 추가하세요.
   ? 사용자가 도메인 이름(example.com) 없이 들어오고 있어요. 서비스 주소가 바뀌거나 한 곳에 문제가 생기면 사용자가 접속하지 못해요. → Route 53을 VPC 밖에 두고 사용자와 연결하세요. (사용자 — Route 53)
-  ? 인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요. → WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.
+  ? 인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요. → WAF를 VPC 밖에 두고 CloudFront·Load Balancer·API Gateway(REST API)와 연결하세요.
   ? 가용 영역 B의 서버는 다른 AZ의 NAT를 같이 써요. 그 NAT가 있는 AZ에 장애가 나면 인터넷으로 나갈 수 없어요. → 가용 영역 B의 퍼블릭 서브넷에도 NAT를 두세요.
   ? Session Manager와 이어지지 않은 EC2가 있어요. 서버에 들어가려면 SSH 포트를 열고 키를 관리해야 해요. → Session Manager를 VPC 밖에 두고 EC2와 연결하세요. (프라이빗 서브넷이면 NAT나 VPC Endpoints도 필요해요)
   ? NAT가 IGW와 이어져 있지 않아요. NAT는 받은 요청을 IGW로 넘겨 인터넷에 내보내므로, 이대로면 서버가 밖으로 나갈 수 없어 보여요. → NAT를 IGW와 연결하세요. (서버 — NAT — IGW)
@@ -349,7 +349,7 @@ container-only | warn | W7(lb#0,ecs#0) W18(ecs#0,ecr#0) | S1(ecs#0,rds#0) S2(pc#
   ? 사용자 요청이 CDN 없이 바로 서버로 가요. 이미지·정적 파일까지 매번 서버가 처리해요. → 사용자와 IGW 사이에 CloudFront를 두세요. (사용자 — CloudFront — IGW)
   ? 서버 상태나 누가 무엇을 바꿨는지 볼 수단이 없어요. 문제가 생겨도 원인을 찾기 어려워요. → CloudWatch(상태 모니터링·알림), CloudTrail(작업 기록)을 VPC 밖에 추가하세요.
   ? 사용자가 도메인 이름(example.com) 없이 들어오고 있어요. 서비스 주소가 바뀌거나 한 곳에 문제가 생기면 사용자가 접속하지 못해요. → Route 53을 VPC 밖에 두고 사용자와 연결하세요. (사용자 — Route 53)
-  ? 인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요. → WAF를 VPC 밖에 두고 CloudFront나 Load Balancer와 연결하세요.
+  ? 인터넷에서 들어오는 요청을 검사하지 않고 그대로 받아요. SQL 인젝션 같은 흔한 공격이 서버까지 닿을 수 있어요. → WAF를 VPC 밖에 두고 CloudFront·Load Balancer·API Gateway(REST API)와 연결하세요.
   + 인터넷 요청이 IGW를 지나 Load Balancer라는 한 입구로만 들어와요. 서버는 인터넷에 직접 드러나지 않아요.
   + 요청은 Load Balancer가 받고, 앱 서버는 프라이빗 서브넷에 두었어요. 앱 서버를 인터넷에서 숨겼어요.
   + DB를 DB 서브넷에 두고 인터넷과 바로 이어지지 않게 했어요. 데이터를 가장 안쪽에서 보호해요.

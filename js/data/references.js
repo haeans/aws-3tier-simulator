@@ -20,6 +20,10 @@ const PILLARS = {
    설명 문구(SERVICE_DESC, SERVICE_GUIDE)는 이 문서들을 근거로 쓴다.
    ========================================================= */
 const SERVICE_DOCS = {
+  // 50번: 서버리스 (근거 criteria/serverless.md)
+  apigw:           'https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html',
+  lambda:          'https://docs.aws.amazon.com/lambda/latest/dg/configuration-vpc.html',
+  rdsproxy:        'https://docs.aws.amazon.com/lambda/latest/dg/services-rds.html',
   // 49번: 마이그레이션 (근거 criteria/migration.md)
   mgn:             'https://docs.aws.amazon.com/mgn/latest/ug/what-is-application-migration-service.html',
   dms:             'https://docs.aws.amazon.com/dms/latest/userguide/CHAP_ReplicationInstance.html',
