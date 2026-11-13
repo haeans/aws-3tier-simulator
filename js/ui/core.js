@@ -191,7 +191,7 @@ function findOverlap(before, actedId, movedIds) {
 
 // 같은 단계 영역(VPC끼리, AZ끼리, 서브넷끼리)이 일부라도 겹치는지 검사.
 // 이번 동작으로 새로 생기거나 위치·크기가 바뀐 영역만 대상으로 한다.
-const RANK_NAME = ['VPC', 'AZ(가용 영역)', '서브넷', 'Auto Scaling 그룹'];
+const RANK_NAME = ['VPC·IDC', 'AZ(가용 영역)', '서브넷', 'Auto Scaling 그룹'];   // 48번: IDC는 VPC와 같은 단계
 function findAreaOverlap(before) {
   const prev = new Map(before.containers.map(c => [c.id, c]));
   const changed = new Set(state.containers.filter(c => {

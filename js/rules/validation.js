@@ -412,14 +412,93 @@ const VALIDATION_RULES = [
         message: 'EKS는 서로 다른 AZ의 서브넷이 2개 이상 있어야 만들 수 있어요. 다른 AZ를 추가하고 그 안에 서브넷을 만들어주세요.' }];
     },
   },
+  {
+    // 근거: HY-01 (등급 A, 48번) — IDC와 VPC는 고객 게이트웨이 ↔ (VPN·Direct Connect) ↔ VGW로만 이어진다
+    id: 20, level: 'error', message: 'IDC 연결 경로',
+    pillars: ['security', 'reliability'],
+    basis: '회사 데이터센터(IDC)와 VPC는 고객 게이트웨이와 VGW(가상 프라이빗 게이트웨이)를 Site-to-Site VPN이나 Direct Connect로 이어서 통신해요. 서버끼리 바로 이을 수는 없어요.',
+    ref: 'https://docs.aws.amazon.com/vpn/latest/s2svpn/how_it_works.html',
+    check(ctx) {
+      const issues = [];
+      const linked = n => ctx.s.edges.map(e => edgeOtherEnd(e, n.id, ctx.s)).filter(Boolean);   // 이어진 모든 박스 (종류 상관없이)
+      // 온프레미스 서버·DB가 IDC 밖의 AWS 박스와 바로 이어짐 (사용자·고객 게이트웨이는 괜찮음)
+      ctx.ofType(...ONPREM_TYPES).forEach(n => {
+        const bad = linked(n).filter(m => !ONPREM_TYPES.includes(m.type) && m.type !== 'cgw' && !USER_TYPES.includes(m.type));
+        if (bad.length) issues.push({ nodeIds: [n.id, ...bad.map(m => m.id)],
+          message: `${SVC_MAP[n.type].name}가 ${[...new Set(bad.map(m => SVC_MAP[m.type].name))].join('·')}와 바로 이어져 있어요. IDC와 AWS는 고객 게이트웨이 → VPN·Direct Connect → VGW를 거쳐야 해요.` });
+      });
+      // 고객 게이트웨이가 VGW가 아닌 AWS 박스와 바로 이어짐
+      ctx.ofType('cgw').forEach(g => {
+        const bad = linked(g).filter(m => !ONPREM_TYPES.includes(m.type) && m.type !== 'vgw' && m.type !== 'cgw');
+        if (bad.length) issues.push({ nodeIds: [g.id, ...bad.map(m => m.id)],
+          message: `고객 게이트웨이가 ${[...new Set(bad.map(m => SVC_MAP[m.type].name))].join('·')}와 바로 이어져 있어요. 고객 게이트웨이는 AWS 쪽 VGW와만 VPN·Direct Connect로 이어요.` });
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: HY-01·HY-02 (등급 A, 48번) — VPN은 고객 게이트웨이와 VGW가 함께 있어야 하고, VGW는 VPC에 붙여야 한다
+    id: 21, level: 'error', message: 'VPN·Direct Connect 연결',
+    pillars: ['reliability'],
+    basis: 'Site-to-Site VPN·Direct Connect는 IDC 쪽 고객 게이트웨이와 AWS 쪽 VGW를 이어야 해요. VGW는 VPC에 붙여야(경계에 놓아야) 그 VPC와 통신해요.',
+    ref: 'https://docs.aws.amazon.com/vpn/latest/s2svpn/SetUpVPNConnections.html',
+    check(ctx) {
+      const issues = [];
+      const hasVpc = ctx.s.containers.some(c => c.type === 'vpc');
+      ctx.ofType('vgw').forEach(v => {
+        if (ctx.zoneOf(v) === 'outside') issues.push({ nodeIds: [v.id],
+          message: 'VGW가 VPC에 붙어 있지 않아요. VGW는 VPC 경계선에 놓아야 그 VPC와 IDC를 이어요.' });
+        if (!ctx.neighborsOf(v, 'cgw').length) issues.push({ nodeIds: [v.id],
+          message: 'VGW가 고객 게이트웨이와 이어져 있지 않아요. IDC의 고객 게이트웨이와 VPN이나 Direct Connect로 이어주세요.' });
+      });
+      ctx.ofType('cgw').forEach(g => {
+        if (hasVpc && !ctx.neighborsOf(g, 'vgw').length) issues.push({ nodeIds: [g.id],
+          message: '고객 게이트웨이가 VGW와 이어져 있지 않아요. VPC 경계에 VGW를 놓고 VPN이나 Direct Connect로 이어주세요.' });
+      });
+      // VGW 없이 IDC와 AWS를 잇는 선이 판정 20에서 잡히지 않는 경우: VGW와 이은 VPC 박스가 있는데 고객 게이트웨이가 아예 없음
+      if (!ctx.ofType('cgw').length && ctx.ofType('vgw').some(v => ctx.s.edges.some(e => e.from === v.id || e.to === v.id))) issues.push({ nodeIds: ctx.ofType('vgw').map(n => n.id),
+        message: 'IDC 쪽 고객 게이트웨이가 없어요. IDC 영역 안에 고객 게이트웨이를 놓고 VGW와 이어주세요.' });
+      return issues;
+    },
+  },
 ];
+
+// ----- 옮기기 전 구성 (48번): VPC 없이 IDC만 있으면 AWS 3-Tier 판정 대신 IDC 안 흐름만 본다 -----
+// 판정 기준(AWS 공식 문서)은 AWS 구성에 대한 것이라, 온프레미스만 있는 구성에는 적용하지 않는다
+const ONPREM_RULES = [
+  {
+    id: 'P1', level: 'error', message: '온프레미스 흐름',
+    pillars: ['reliability'],
+    basis: '옮기기 전 구성도 3-Tier 흐름(사용자 → 서버 → DB)이 이어져 있어야, 옮긴 뒤 구성과 비교할 수 있어요.',
+    ref: 'https://docs.aws.amazon.com/whitepapers/latest/aws-vpc-connectivity-options/aws-site-to-site-vpn.html',
+    check(ctx) {
+      const users = ctx.ofType(...USER_TYPES), servers = ctx.ofType('onprem-server'), dbs = ctx.ofType('onprem-db');
+      const missing = [];
+      if (!users.length) missing.push('사용자');
+      if (!servers.length) missing.push('온프레미스 서버');
+      if (!dbs.length) missing.push('온프레미스 DB');
+      if (missing.length) return [{ message: `${missing.join(', ')}가 없어요. 옮기기 전 구성은 사용자 → 온프레미스 서버 → 온프레미스 DB로 그려요.` }];
+      const issues = [];
+      if (!servers.some(sv => ctx.neighborsOf(sv, ...USER_TYPES).length)) issues.push({ nodeIds: servers.map(n => n.id),
+        message: '사용자가 온프레미스 서버와 이어져 있지 않아요. 사용자와 서버를 이어주세요.' });
+      if (!servers.some(sv => ctx.neighborsOf(sv, 'onprem-db').length)) issues.push({ nodeIds: servers.map(n => n.id),
+        message: '온프레미스 서버가 온프레미스 DB와 이어져 있지 않아요. 서버와 DB를 이어주세요.' });
+      return issues;
+    },
+  },
+];
+// VPC 없이 IDC만 있는 구성인지
+function isOnpremOnly(s = state) {
+  return s.containers.some(c => c.type === 'idc') && !s.containers.some(c => c.type === 'vpc');
+}
 
 // 모든 규칙을 실행해 결과를 만든다
 // s: 검사할 구성 (R3, 없으면 캔버스 구성)
 function validateArchitecture(s = state) {
   const ctx = buildContext(false, s);
   const issues = [];
-  VALIDATION_RULES.forEach(rule => {
+  const onprem = isOnpremOnly(s);   // 48번: 옮기기 전 구성은 IDC 흐름만 본다 (제안·칭찬 없음)
+  (onprem ? ONPREM_RULES : VALIDATION_RULES).forEach(rule => {
     rule.check(ctx).forEach(it => issues.push({ rule, message: it.message, nodeIds: it.nodeIds || [] }));
   });
   // 잘한 점: 문제가 하나도 없는 규칙만 칭찬 후보 (판정 → 제안 순서)
@@ -428,7 +507,7 @@ function validateArchitecture(s = state) {
     if (!rule.praise || found.some(f => f.rule === rule)) return;
     rule.praise(c).forEach(p => praises.push({ rule, text: p.text, nodeIds: p.nodeIds || [] }));
   });
-  addPraises(VALIDATION_RULES, issues, ctx);
+  if (!onprem) addPraises(VALIDATION_RULES, issues, ctx);
   // 박스별 강조 단계 (오류가 경고보다 우선)
   const nodeLevels = new Map();
   issues.forEach(i => i.nodeIds.forEach(id => {
@@ -439,11 +518,11 @@ function validateArchitecture(s = state) {
   // 개선·제거 제안 (판정과 별개)
   const allCtx = buildContext(true, s);
   const suggestions = [];
-  SUGGESTION_RULES.forEach(rule => {
+  (onprem ? [] : SUGGESTION_RULES).forEach(rule => {
     rule.check(allCtx).forEach(it => suggestions.push({ rule, reason: it.reason, action: it.action, nodeIds: it.nodeIds || [] }));
   });
   const suggestNodes = new Set(suggestions.flatMap(s => s.nodeIds).filter(id => !nodeLevels.has(id)));
-  addPraises(SUGGESTION_RULES, suggestions, allCtx);
-  return { status, issues, nodeLevels, suggestions, suggestNodes, praises };
+  if (!onprem) addPraises(SUGGESTION_RULES, suggestions, allCtx);
+  return { status, issues, nodeLevels, suggestions, suggestNodes, praises, mode: onprem ? 'onprem' : 'aws' };
 }
 
