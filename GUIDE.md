@@ -87,7 +87,15 @@
 
 ### 오른쪽 학습 패널 (v1.59, 43번)
 - 캔버스 오른쪽 폭 300px 패널. 위쪽 탭 [미션]·[문제]. 툴바 [학습 ◂]/[학습 ▸] 또는 패널의 ✕로 열고 닫음. 열면 캔버스가 그만큼 좁아짐
-- [문제] 탭: 면접식 설계 문제 (43-2에서 문제·채점을 넣음. 지금은 준비 중 안내)
+- [문제] 탭: 면접식 설계 문제 (아래)
+
+### 면접식 설계 문제 (v1.60, 43번)
+- 학습 패널의 [문제] 탭. 문제 3개: 회사 게시판(쉬움) / 온라인 쇼핑몰(보통) / 사진 공유 앱(어려움)
+- [시작]하면 빈 기본 틀. 상황 설명과 요구 사항만 보이고 힌트는 없다
+- [제출]: 요구 사항마다 ✓/✗. 맨 앞은 모든 문제의 기본 요구 '검증 결과가 "정상"'. 못 채운 요구는 "모범 답안에는 있는 역할 + 이유"
+- 제출 뒤 구성을 바꾸면 지난 결과를 지우고 다시 제출하라고 알린다
+- [모범 답안 불러오기]: 한 번 제출한 뒤(또는 통과한 문제)에 나온다. 캔버스를 모범 답안으로 바꾸고 설계 이유 한 줄. 되돌리기 한 번으로 내 설계로
+- 진행(통과한 문제·풀던 문제)은 브라우저에 저장
 - 아래 결과 패널은 [검증 결과]·[성능 시뮬레이션]만
 
 ### 기타
@@ -119,7 +127,7 @@ aws-3tier-simulator/
 ├─ scripts/setup-icons.js     AWS 아이콘 패키지에서 필요한 아이콘을 icons/로 복사 (npm run icons, 개발 도구)
 ├─ icons/                     AWS 공식 아이콘 (커밋하지 않음. 없으면 글자 박스)
 ├─ criteria/                  판정 근거 조사 (README.md 기준표·양식, entry·server·data·ops·container.md 묶음별 조사, flow.md 흐름 단계 해설 근거, PROGRESS.md 진행표). 앱에는 넣지 않음
-├─ tests/                     자동 테스트 (helpers.js, placement/edges/validation/simulation/mission.spec.js)
+├─ tests/                     자동 테스트 (helpers.js, placement/edges/validation/simulation/mission/problem.spec.js)
 │   ├─ regression.spec.js     리팩터링 기준선: 여러 구성의 판정·제안·잘한 점·시뮬레이션 결과를 스냅샷과 비교
 │   └─ regression.spec.js-snapshots/  기준선 스냅샷 (판정을 일부러 바꿀 때만 다시 저장)
 ├─ css/
@@ -132,6 +140,7 @@ aws-3tier-simulator/
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
 │   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA·EXAMPLE_CONTAINER, 고쳐 보세요용 EXAMPLE_MISTAKES)
 │   │   ├─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
+│   │   ├─ problems.js        면접식 설계 문제 (PROBLEMS: 상황·요구 사항(역할 목록)·모범 답안·설계 이유, PROBLEM_ROLES: 역할(이름·이유·조건))
 │   │   └─ missions.js        단계별 미션 (MISSIONS: 종류·제목·설명·시작 구성·목표(문구·힌트·조건)·완료 문구, MISSION_KINDS: 만들기·고치기·개선)
 │   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/
@@ -140,6 +149,7 @@ aws-3tier-simulator/
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 20개)
 │   │   ├─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
+│   │   ├─ problems.js        문제 채점 gradeProblem(구성 s를 인자로): 요구 사항별 충족·없는 역할. 역할 조회 도구(problem…)
 │   │   └─ missions.js        미션 채점 gradeMission(구성 s를 인자로)·채점용 ctx(missionContext: verdict)·목표 조건 조회 도구(mission…)
 │   ├─ ui/
 │   │   ├─ core.js            UI-1 화면 상태·공통 유틸(DOM 참조·좌표 변환), UI-2 소속 판정·동작 검사
@@ -154,6 +164,7 @@ aws-3tier-simulator/
 │   │   ├─ sim-canvas.js      UI-12 성능 시뮬레이션 캔버스 표시 (박스 색·사용률 막대·트래픽 점)
 │   │   ├─ examples.js        UI-13 [불러오기 ▾] 메뉴·기본 틀(loadTemplate)·구성 데이터 놓기(loadSpec)·예시 불러오기·전체 보기(fitView)
 │   │   ├─ mission.js         UI-15 [미션] 탭: 목록·목표 체크·힌트·진행 저장 (학습 패널 안에 그림)
+│   │   ├─ problem.js         UI-17 [문제] 탭: 목록·[제출] 채점 결과·모범 답안 불러오기·진행 저장
 │   │   └─ learn.js           UI-16 오른쪽 학습 패널: [미션]·[문제] 탭, 열기·닫기(openLearn·renderLearn)
 │   └─ main.js                UI-9 이벤트·시작
 └─ docs/                      개인 메모 (Git에 올리지 않음)
@@ -179,6 +190,7 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 검증 규칙: js/rules/validation.js: VALIDATION_RULES 배열에 항목 추가
 - 개선·제거 제안: js/rules/suggestions.js: SUGGESTION_RULES 배열에 항목 추가
 - 미션 추가: js/data/missions.js: MISSIONS 배열에 항목 추가 (목표 조건은 판정 규칙이 보는 것과 같게. 테스트는 tests/mission.spec.js)
+- 문제 추가: js/data/problems.js: PROBLEMS 배열에 항목 추가 (요구 사항 = 역할 목록, 역할 조건은 판정 규칙과 같게, 모범 답안은 정상이고 자기 문제를 통과해야 함. 테스트는 tests/problem.spec.js)
 - 여러 규칙이 함께 쓰는 조회 도구: js/rules/context.js
   - 규칙 본문은 전역 state·findNode 대신 ctx의 도구(ctx.s, ctx.findNode, ctx.linkedNodes 등)를 쓴다. 그래야 캔버스가 아닌 구성도 검사할 수 있다 (R3: validateArchitecture(s), simulateTraffic(..., s), createFaults(s))
 - 판정·제안·시뮬레이션 결과를 일부러 바꾸면: `npx playwright test regression --update-snapshots`로 기준선을 다시 저장 (구조만 바꾸는 작업이면 저장하지 않고 통과해야 함)
@@ -494,4 +506,8 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 사용자 결정: 채점은 요구 사항별 ✓/✗ + 못 맞힌 요구에 "모범 답안에 있는 역할과 이유". 같은 역할이면 다른 서비스도 맞다 (EC2 대신 ECS 등 정답이 여러 개)
 - 사용자 결정: 요구 사항은 구성으로 판단하는 것만 먼저. 트래픽·응답 시간 같은 숫자 요구(성능 시뮬레이션 채점)는 데이터 형식만 열어 두고 나중에
 - 43-1(v1.59): 학습 패널로 [미션]을 옮기고 [문제] 탭 자리를 만든다. 패널은 처음에 닫혀 있어 캔버스 폭이 그대로다 (직접 정함)
-- 43-2 계획: 문제 3개(쉬움 회사 게시판 / 보통 온라인 쇼핑몰 / 어려움 사진 공유 앱), 시작은 기본 틀, [제출]은 몇 번이든, [모범 답안 불러오기]는 확인 후 캔버스를 바꾸고 되돌리기로 돌아옴. 모든 문제에 "검증 결과 정상"이 기본 요구
+- 43-2(v1.60): 문제 3개(쉬움 회사 게시판 / 보통 온라인 쇼핑몰 / 어려움 사진 공유 앱), 시작은 기본 틀, [제출]은 몇 번이든, [모범 답안 불러오기]는 확인 후 캔버스를 바꾸고 되돌리기로 돌아옴. 모든 문제에 "검증 결과 정상"이 기본 요구
+- 채점 단위는 "역할"(직접 정함): 요구 사항 하나 = 역할 몇 개, 역할마다 이름·이유·조건(has). 못 채우면 그 역할을 이유와 함께 "모범 답안에는 있어요"로 보여 준다.
+  모범 답안과 박스를 하나하나 맞대지 않는 이유: 같은 역할을 다른 서비스로 해도 맞는 설계라서 (EC2 대신 컨테이너 등)
+- 미션과 달리 자동 채점 없이 [제출] 때만 채점한다 (면접처럼 스스로 판단하게). 모범 답안 버튼도 한 번 제출해 본 뒤에 보인다
+- 모범 답안을 불러올 때 기본 틀 단계는 되돌리기 기록에서 빼, 되돌리기 한 번이면 내 설계로 돌아온다

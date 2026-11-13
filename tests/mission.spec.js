@@ -272,9 +272,9 @@ test('툴바 [학습]으로 오른쪽 학습 패널을 열고 닫으며, 미션�
   await expect(page.locator('.mission-list li:not(.mission-group)')).toHaveCount(11);
   const after = await page.locator('#canvas-wrap').boundingBox();
   expect(Math.round(before.width - after.width)).toBe(300);                        // 캔버스가 패널 폭만큼 좁아진다
-  // [문제] 탭은 아직 준비 중 안내
+  // [문제] 탭: 면접식 설계 문제 목록 (43-2)
   await page.click('.learn-tab[data-learn="problem"]');
-  await expect(page.locator('.learn-panel .mission-title b')).toHaveText('준비 중이에요');
+  await expect(page.locator('.learn-panel .mission-title b')).toHaveText('면접식 설계 문제');
   // 연 상태와 고른 탭은 다시 열어도 유지된다
   await page.reload();
   await expect(page.locator('#learn-panel')).toBeVisible();
