@@ -39,7 +39,7 @@ test('설명 패널에서 서버 크기를 [크게]로 바꾸면 캔버스에 �
     await clickEl(page, '#info-panel .ip-size[data-size="large"]');
     await expect(page.locator('#info-panel .ip-size.active')).toHaveText('크게');
   }
-  await expect(page.locator('#info-panel .ip-set-hint')).toContainText('초당 200요청');
+  await expect(page.locator('#info-panel .ip-set-hint').first()).toContainText('초당 200요청');
   await expect(page.locator('#node-layer .node-size')).toHaveText(['크게', '크게']);
   const after = await page.evaluate(() => simulateTraffic(300).successRate);
   expect(before).toBeLessThan(1);

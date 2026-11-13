@@ -9,7 +9,7 @@
    - 검증 오류가 있으면 요청이 끝까지 가지 못하므로 실행하지 않는다 (경고는 허용).
    - 재생 중에 구성을 바꿔도 시계·그래프는 이어진다 (바꾼 전후를 그래프로 비교할 수 있게).
    --------------------------------------------------------- */
-let resultTab = 'validate';   // 결과 영역 탭: 'validate' | 'sim' | 'compare'
+let resultTab = 'validate';   // 결과 영역 탭: 'validate' | 'sim' | 'compare' | 'cost'
 let simRps = 200;             // 기본 트래픽: 사용자 전체가 1초에 보내는 요청 수
 let simResult = null;         // 마지막 계산 결과 (simulateTraffic)
 const SIM_MAX_RPS = 1000;

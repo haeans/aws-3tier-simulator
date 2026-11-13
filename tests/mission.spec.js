@@ -263,7 +263,7 @@ test('개선 미션 "더 빠르게 만들기": ElastiCache를 실제로 놓고 �
 test('툴바 [학습]으로 오른쪽 학습 패널을 열고 닫으며, 미션은 아래 결과 패널에서 빠졌다', async ({ page }) => {
   await openApp(page);
   await expect(page.locator('#learn-panel')).toBeHidden();                          // 처음에는 닫혀 있다
-  await expect(page.locator('.result-head .tab')).toHaveText(['검증 결과', '성능 시뮬레이션', '비교']);   // [비교]는 44번
+  await expect(page.locator('.result-head .tab')).toHaveText(['검증 결과', '성능 시뮬레이션', '비교', '비용']);   // [비교]는 44번, [비용]은 47번
   const before = await page.locator('#canvas-wrap').boundingBox();
   await page.click('#btn-learn');
   await expect(page.locator('#learn-panel')).toBeVisible();

@@ -9,7 +9,7 @@ const COMPARE_RPS = [100, 300, 1000];   // 표 위에서 고르는 트래픽 (�
 const COMPARE_TIME = 300;
 
 // 구성 하나의 요약. rps: 비교할 트래픽
-// 돌려주는 값: { status, errors, warns, sugs: [{ id, title }], traffic: { served, successRate, latency } | null,
+// 돌려주는 값: { status, errors, warns, sugs: [{ id, title }], cost(월 달러, 47번), traffic: { served, successRate, latency } | null,
 //               az: { rate, label } | null (AZ 하나가 멈췄을 때 가장 나쁜 성공률과 그 AZ 이름) }
 // 트래픽·AZ 칸은 그 트래픽이 COMPARE_TIME초(5분) 이어진 뒤의 상태
 // 판정이 오류면 요청이 끝까지 가지 못하므로 트래픽·AZ 계산은 하지 않는다 (성능 시뮬레이션 탭과 같은 원칙)
@@ -21,6 +21,7 @@ function compareSummary(s, rps) {
     warns: v.issues.filter(i => i.rule.level === 'warn').length,
     sugs: v.suggestions.map(x => ({ id: x.rule.id, title: x.rule.title })),
     traffic: null, az: null,
+    cost: costOf(s).total,   // 47번: 대략적인 월 비용 (달러)
   };
   if (v.status === 'error' || !s.nodes.some(n => USER_TYPES.includes(n.type))) return out;
   const t = compareRun(s, rps, null);
