@@ -123,6 +123,7 @@ buildLoadMenu();
 loadUiPrefs();
 loadMissionProgress();
 loadProblemProgress();
+loadCompareA();
 const restored = loadSaved();
 applyZoom();
 if (savedScroll) {   // render()가 저장하기 전에 시점부터 복원

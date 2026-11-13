@@ -669,6 +669,22 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .problem-level.easy { background: #e6f4ea; color: #1d6b2f; }
 .problem-level.normal { background: #fff3e0; color: #c45500; }
 .problem-level.hard { background: #fdecea; color: #b3261e; }
+/* [비교] 탭 (44번): A(담은 구성)와 B(지금) 표 + 달라진 점 */
+.compare-panel { margin-top: 8px; display: grid; gap: 8px; }
+.compare-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.compare-controls .btn { padding: 3px 12px; }
+.compare-help { color: var(--muted); }
+.compare-rps { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; color: var(--muted); }
+.compare-rps .btn { padding: 2px 8px; }
+.compare-table { border-collapse: collapse; width: 100%; max-width: 760px; }
+.compare-table th, .compare-table td { border-bottom: 1px solid var(--line); padding: 3px 10px; text-align: right; white-space: nowrap; }
+.compare-table th { color: var(--muted); font-weight: 700; font-size: 12px; }
+.compare-table td.compare-name, .compare-table th:first-child { text-align: left; }
+.compare-table td.better, .compare-diff span.better { color: #1d6b2f; font-weight: 700; }
+.compare-table td.worse, .compare-diff span.worse { color: #b0260e; font-weight: 700; }
+.compare-table td.same { color: var(--muted); }
+.compare-diff { display: grid; gap: 2px; }
+.compare-diff b { display: inline-block; min-width: 140px; color: var(--muted); font-weight: 700; }
 /* 성능 시뮬레이션 패널 */
 .sim-panel { margin-top: 8px; display: grid; gap: 6px; }
 .sim-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
