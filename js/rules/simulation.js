@@ -78,7 +78,7 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     const amount = load.get(id) || 0;
     const perf = PERF[n.type];
     const count = countOf(id);
-    const capacity = perf && perf.capacity !== null ? perf.capacity * count : null;
+    const capacity = perf && perf.capacity !== null ? perfCapacity(n) * count : null;   // 46번: 박스 크기 반영
     // 멈췄거나 장애 조치 중이거나 서버가 0대: 들어온 요청이 모두 실패
     const blocked = F.down.has(id) || F.dbBlocked.has(id) || count === 0;
     const done = blocked ? 0 : capacity === null ? amount : Math.min(amount, capacity);
@@ -266,11 +266,38 @@ function stepFaults(f, t, last = null) {
 /* ----- Auto Scaling 그룹 (목표 추적) -----
    - 그룹 영역 안의 EC2 박스 하나 = 그 AZ의 서버 묶음. 박스마다 서버 대수(running)를 센다.
    - 최소 = 처음 놓은 EC2 수, 최대 = 최소의 3배 (가정)
-   - 늘리기: 그룹 평균 사용률이 목표 50%(문서 예시)를 1분(가정) 넘으면, 50%가 되도록 필요한 대수를 올림해서 한 번에 추가
+   - 늘리기: 그룹 평균 사용률이 목표(기본 50%, 문서 예시)를 1분(가정) 넘으면, 목표가 되도록 필요한 대수를 올림해서 한 번에 추가
+   - 46번: 최소·최대·목표는 그룹 영역의 설정(asgSettings)으로 바꿀 수 있다. 서버 1대 처리량은 박스 크기(perfCapacity)를 따른다
    - 새 서버: 띄우는 데 60초(가정) + LB 상태 확인 1번 통과(30초) = 90초 뒤 요청을 받음
    - 줄이기: 1대를 빼도 50% 아래인 상태가 5분(가정) 이어지면 1대씩. 새 서버를 띄우는 중에는 줄이지 않음 (문서)
    - 고장 교체: 그룹 안 EC2가 고장 나서 LB에서 빠지면 새 EC2로 교체. AZ 장애면 다른 AZ에 띄우고, 돌아오면 균형을 맞춤 */
 const ASG_TARGET = 0.5, ASG_OUT_AFTER = 60, ASG_IN_AFTER = 300, ASG_READY = 90, ASG_MAX_FACTOR = 3;
+
+// ----- 46번: 설정값 -----
+// 박스 종류의 크기 설정 묶음 ('app' | 'db'), 없으면 null
+function sizeGroupOf(type) {
+  return Object.keys(SIZE_SETTINGS).find(k => SIZE_SETTINGS[k].types.includes(type)) || null;
+}
+// 박스 크기 ('small' | 'medium' | 'large'). 없거나 알 수 없는 값이면 보통
+function nodeSize(n) {
+  return SIZE_KEYS.includes(n.size) ? n.size : 'medium';
+}
+// 박스 1대가 1초에 처리하는 양 (크기 반영). 제한 없는 박스면 null
+function perfCapacity(n) {
+  const p = PERF[n.type];
+  if (!p || p.capacity === null) return null;
+  return p.capacity * (sizeGroupOf(n.type) ? SIZE_FACTOR[nodeSize(n)] : 1);
+}
+// Auto Scaling 그룹 설정 { min, max, target(0~1) }. count: 그룹 안 EC2 박스 수
+// 최소는 박스 수 이상(박스 하나 = 서버 1대 이상), 최대는 최소 이상. 값이 없거나 범위를 벗어나면 기본값·경계로
+function asgSettings(area, count) {
+  const num = (v, d) => (typeof v === 'number' && isFinite(v) ? Math.round(v) : d);
+  const lim = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const min = lim(num(area.asgMin, count), count, Math.max(count, ASG_LIMITS.min));
+  const max = lim(num(area.asgMax, min * ASG_MAX_FACTOR), min, Math.max(min, ASG_LIMITS.max));
+  const target = lim(num(area.asgTarget, ASG_TARGET * 100), ASG_LIMITS.targetLow, ASG_LIMITS.targetHigh) / 100;
+  return { min, max, target };
+}
 
 const asgRunning = g => [...g.running.values()].reduce((a, b) => a + b, 0);
 
@@ -279,21 +306,25 @@ function asgState(f, area) {
   const members = asgMembersOf(area, f.s.nodes);
   if (!members.length) { f.asg.delete(area.id); return null; }
   let g = f.asg.get(area.id);
+  const set = asgSettings(area, members.length);
   if (!g) {
-    g = { min: 0, max: 0, running: new Map(), launching: [], highFor: 0, lowFor: 0, maxNoted: false };
+    g = { min: 0, max: 0, target: ASG_TARGET, running: new Map(), launching: [], highFor: 0, lowFor: 0, maxNoted: false };
     f.asg.set(area.id, g);
+    // 처음에는 최소 대수만큼 띄운다: 박스마다 1대, 남는 대수는 박스에 돌아가며 (46번: 최소를 박스 수보다 크게 정할 수 있음)
+    members.forEach((m, i) => g.running.set(m.id, 1 + Math.floor((set.min - members.length) / members.length) +
+      (i < (set.min - members.length) % members.length ? 1 : 0)));
   }
   members.forEach(m => { if (!g.running.has(m.id)) g.running.set(m.id, 1); });
   [...g.running.keys()].forEach(id => { if (!members.some(m => m.id === id)) g.running.delete(id); });
   g.launching = g.launching.filter(l => members.some(m => m.id === l.box));
-  g.min = members.length;
-  g.max = members.length * ASG_MAX_FACTOR;
+  g.min = set.min;
+  g.max = set.max;
+  g.target = set.target;
   return { g, members };
 }
 
 function stepAsg(f, t, last, down) {
   const log = text => f.log.push({ t, text });
-  const cap = PERF.ec2.capacity;
   f.s.containers.filter(c => c.type === 'asg').forEach(area => {
     const st = asgState(f, area);
     if (!st) return;
@@ -347,18 +378,21 @@ function stepAsg(f, t, last, down) {
     });
 
     // 4) 목표 추적: 그룹 평균 사용률 = 살아 있는 박스에 들어온 요청 ÷ 처리할 수 있는 양
+    // 46번: 서버 1대가 처리하는 양은 박스 크기마다 다르다 → 살아 있는 서버의 평균으로
     const running = up.reduce((sum, m) => sum + (g.running.get(m.id) || 0), 0);
+    const runCap = up.reduce((sum, m) => sum + (g.running.get(m.id) || 0) * perfCapacity(m), 0);
+    const cap = running ? runCap / running : (up.length ? perfCapacity(up[0]) : PERF.ec2.capacity);
     const load = up.reduce((sum, m) => sum + ((last && last.nodes.get(m.id)) ? last.nodes.get(m.id).load : 0), 0);
     const util = running ? load / (running * cap) : 0;
     const total = running + g.launching.length;
-    g.highFor = util > ASG_TARGET ? g.highFor + 1 : 0;
+    g.highFor = util > g.target ? g.highFor + 1 : 0;
     if (g.highFor >= ASG_OUT_AFTER) {
       g.highFor = 0;
-      const need = Math.min(g.max, Math.ceil(load / (cap * ASG_TARGET)));
+      const need = Math.min(g.max, Math.ceil(load / (cap * g.target)));
       const add = need - total;
       if (add > 0 && up.length) {
         for (let i = 0; i < add; i++) g.launching.push({ box: up[i % up.length].id, readyAt: t + ASG_READY });
-        log(`평균 사용률 ${Math.round(util * 100)}%가 1분 넘게 목표 50%보다 높아서 EC2를 늘려요 (${total}대 → ${total + add}대, 약 ${ASG_READY}초 뒤 투입)`);
+        log(`평균 사용률 ${Math.round(util * 100)}%가 1분 넘게 목표 ${Math.round(g.target * 100)}%보다 높아서 EC2를 늘려요 (${total}대 → ${total + add}대, 약 ${ASG_READY}초 뒤 투입)`);
         g.maxNoted = false;
       } else if (total >= g.max && !g.maxNoted) {
         g.maxNoted = true;
@@ -366,7 +400,7 @@ function stepAsg(f, t, last, down) {
       }
     }
     // 줄이기: 띄우는 중이 아니고, 1대를 빼도 목표 아래일 때 5분 지나면 1대
-    const canShrink = !g.launching.length && running > g.min && load / ((running - 1) * cap) < ASG_TARGET;
+    const canShrink = !g.launching.length && running > g.min && load / ((running - 1) * cap) < g.target;
     g.lowFor = canShrink ? g.lowFor + 1 : 0;
     if (g.lowFor >= ASG_IN_AFTER) {
       g.lowFor = 0;

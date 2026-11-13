@@ -52,14 +52,33 @@ function compareBoxes(a, b) {
     .filter(x => x.a !== x.b);
 }
 
+// 두 구성의 설정 차이 (46번): ["EC2 크기: 보통 2 → 크게 2", "Auto Scaling: 최소 2·최대 6·목표 50% → …"] (다른 것만)
+function compareSettings(a, b) {
+  const out = [];
+  const dist = (s, type) => SIZE_KEYS.map(k => [k, s.nodes.filter(n => n.type === type && nodeSize(n) === k).length]).filter(([, c]) => c);
+  const text = d => d.map(([k, c]) => `${SIZE_NAMES[k]} ${c}`).join('·');
+  SERVICES.filter(sv => sizeGroupOf(sv.type)).forEach(sv => {
+    const da = dist(a, sv.type), db = dist(b, sv.type);
+    if (!da.length || !db.length || text(da) === text(db)) return;   // 한쪽에만 있는 종류는 박스 차이 줄에서 보인다
+    out.push(`${sv.name} 크기: ${text(da)} → ${text(db)}`);
+  });
+  const asg = s => s.containers.filter(c => c.type === 'asg').map(c => {
+    const st = asgSettings(c, asgMembersOf(c, s.nodes).length);
+    return `최소 ${st.min}·최대 ${st.max}·목표 ${Math.round(st.target * 100)}%`;
+  }).join(' / ');
+  const ga = asg(a), gb = asg(b);
+  if (ga && gb && ga !== gb) out.push(`Auto Scaling: ${ga} → ${gb}`);
+  return out;
+}
+
 // 구성 두 개 비교. a: 담아 둔 구성(기준), b: 지금 구성. sumA: 이미 계산한 a의 요약 (같은 rps일 때 다시 쓰려고, 없으면 계산)
-// 돌려주는 값: { a: 요약, b: 요약, boxes: 박스 차이, sugGone: b에서 사라진 제안, sugNew: b에 새로 생긴 제안 }
+// 돌려주는 값: { a: 요약, b: 요약, boxes: 박스 차이, settings: 설정 차이(46번), sugGone: b에서 사라진 제안, sugNew: b에 새로 생긴 제안 }
 function compareConfigs(a, b, rps, sumA = null) {
   const sa = sumA || compareSummary(a, rps), sb = compareSummary(b, rps);
   const ids = list => new Set(list.map(x => x.id));
   const ia = ids(sa.sugs), ib = ids(sb.sugs);
   return {
-    a: sa, b: sb, boxes: compareBoxes(a, b),
+    a: sa, b: sb, boxes: compareBoxes(a, b), settings: compareSettings(a, b),
     sugGone: sa.sugs.filter(x => !ib.has(x.id)),
     sugNew: sb.sugs.filter(x => !ia.has(x.id)),
   };

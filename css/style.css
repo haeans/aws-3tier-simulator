@@ -685,6 +685,15 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .compare-table td.same { color: var(--muted); }
 .compare-diff { display: grid; gap: 2px; }
 .compare-diff b { display: inline-block; min-width: 140px; color: var(--muted); font-weight: 700; }
+/* 설정값 (46번): 설명 패널 "설정" 칸, 박스 아래 크기 글씨 */
+.ip-set { margin: 6px 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9fb; display: grid; gap: 4px; }
+.ip-set-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.ip-seg { display: inline-flex; gap: 2px; }
+.ip-seg .btn { padding: 1px 8px; font-size: 12px; }
+.ip-num { width: 56px; font: inherit; padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px; }
+.ip-set-hint { font-size: 11px; color: var(--muted); }
+.node-size { position: absolute; left: 50%; transform: translateX(-50%); bottom: -16px; padding: 0 4px; border-radius: 4px; background: #fff; border: 1px solid #f3c58f;
+  font-size: 10px; line-height: 13px; font-weight: 700; color: #c45500; white-space: nowrap; pointer-events: none; }
 /* 설명 패널의 라우팅 테이블·보안 그룹 표 (45번) */
 .ip-head .tt-cat { white-space: nowrap; }
 .ip-net { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }

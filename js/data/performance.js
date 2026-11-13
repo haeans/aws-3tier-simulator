@@ -32,6 +32,19 @@ const PERF = {
   elasticache: { capacity: 2000, latency: 1 },   // 메모리 캐시: DB보다 훨씬 많이·빨리 응답한다고 가정
 };
 
+// ----- 46번: 간단한 설정값 (가정) -----
+// 박스 크기: 처리량(capacity)에 곱하는 배수. 박스에 size가 없으면 'medium'(보통) = 지금까지의 값
+// examples: 실제 느낌을 주는 예시 이름 (가정. 실제 성능 비율과 같지 않다)
+const SIZE_KEYS = ['small', 'medium', 'large'];
+const SIZE_NAMES = { small: '작게', medium: '보통', large: '크게' };
+const SIZE_FACTOR = { small: 0.5, medium: 1, large: 2 };
+const SIZE_SETTINGS = {
+  app: { label: '서버 크기', unit: '요청/초', types: APP_TYPES, examples: { small: 't3.small', medium: 't3.medium', large: 't3.large' } },
+  db:  { label: 'DB 크기', unit: '쿼리/초', types: RDS_TYPES, examples: { small: 'db.t3.small', medium: 'db.t3.medium', large: 'db.t3.large' } },
+};
+// Auto Scaling 그룹 설정 범위. 그룹에 asgMin·asgMax·asgTarget이 없으면 기본(최소 = 박스 수, 최대 = 3배, 목표 50%)
+const ASG_LIMITS = { min: 20, max: 30, targetLow: 30, targetHigh: 90 };
+
 // 요청을 다음 박스로 넘기는 방식: 앞에 적힌 종류부터 찾아, 연결된 그 종류의 박스들에 고르게 나눈다.
 //   한 칸이 배열이면 그 종류들을 한 묶음으로 본다 (36번: 앱 서버 = EC2·ECS·EKS·Fargate를 함께 고르게)
 //   사용자: CloudFront가 있으면 CloudFront로, 없으면 IGW로

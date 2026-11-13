@@ -158,6 +158,7 @@ function renderComparePanel(head) {
     diff.appendChild(p);
   };
   line('박스 (A → B)', result.boxes.map(x => `${x.b > x.a ? '+' : '−'}${x.name} ${Math.abs(x.b - x.a)}개`));
+  line('설정 (A → B)', result.settings);
   line('B에서 사라진 제안', result.sugGone.map(x => x.title), 'better');
   line('B에 새로 생긴 제안', result.sugNew.map(x => x.title), 'worse');
   panel.appendChild(diff);
