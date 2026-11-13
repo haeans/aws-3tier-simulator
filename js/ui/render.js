@@ -74,6 +74,13 @@ function buildNodeEl(node) {
   el.dataset.id = node.id;
 
   fillServiceBox(el, svc);
+  // 46번: 크기가 보통이 아니면 박스 아래쪽에 작은 글씨로 (그림만 봐도 설정이 보이게)
+  if (sizeGroupOf(node.type) && nodeSize(node) !== 'medium') {
+    const tag = document.createElement('div');
+    tag.className = 'node-size';
+    tag.textContent = SIZE_NAMES[nodeSize(node)];
+    el.appendChild(tag);
+  }
   attachTooltip(el, () => simTooltip(node.id) + serviceTooltip(svc));   // 시뮬레이션 중이면 사용률 설명을 맨 위에
 
   const del = document.createElement('div');

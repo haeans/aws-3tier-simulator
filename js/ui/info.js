@@ -25,6 +25,7 @@ function renderInfo() {
   if (ed && multiSel.size <= 1) { renderEdgeInfo(ed); return; }
   const area = selectedId ? findContainer(selectedId) : null;
   if (area && SUBNET_TYPES.includes(area.type) && multiSel.size <= 1) { renderSubnetInfo(area); return; }
+  if (area && area.type === 'asg' && multiSel.size <= 1) { renderAsgInfo(area); return; }
   const n = selectedId ? findNode(selectedId) : null;
   if (!n || multiSel.size > 1) { $info.hidden = true; return; }   // 여러 개를 고르면 숨김
   const svc = SVC_MAP[n.type], cat = CAT_MAP[svc.category];
@@ -49,18 +50,71 @@ function renderInfo() {
     `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
     '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
     '<div class="ip-sim" id="ip-sim" hidden></div>' +
+    sizeSection(n) +
     `<div class="ip-desc">${svc.desc}</div>` +
     (SERVICE_DOCS[n.type] ? `<a class="ip-doc" href="${SERVICE_DOCS[n.type]}" target="_blank" rel="noopener">AWS 공식 문서 열기 ↗</a>` : '') +
     (g.note ? `<div class="ip-note">${g.note}</div>` : '') +
     (linkRows ? `<div class="ip-sec">이렇게 연결해요</div><ul class="ip-list">${linkRows}</ul>` : '') +
     (avoidRows ? `<div class="ip-sec avoid">이렇게 연결하지 마세요</div><ul class="ip-list">${avoidRows}</ul>` : '') +
     sgSection(networkSecurityGroup(n));
+  bindSizeSection(n);
   $info.querySelector('.ip-close').addEventListener('click', () => select(null));
   // 접기: 제목 줄만 남겨 캔버스를 덜 가림. 다른 박스를 골라도 접힌 채로 유지
   $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
   $info.classList.toggle('folded', uiPrefs.infoFolded);
   $info.hidden = false;
   updateInfoSim();
+}
+
+// ----- 설정값 (46번): 서버·DB 크기, Auto Scaling 그룹 최소·최대·목표 (값과 계산은 js/data/performance.js·js/rules/simulation.js) -----
+// 박스 설명 패널 맨 위의 "설정" 칸 (크기를 바꿀 수 있는 박스만)
+function sizeSection(n) {
+  const key = sizeGroupOf(n.type);
+  if (!key) return '';
+  const set = SIZE_SETTINGS[key], cur = nodeSize(n);
+  const btns = SIZE_KEYS.map(k => `<button class="btn ip-size${k === cur ? ' active' : ''}" data-size="${k}">${SIZE_NAMES[k]}</button>`).join('');
+  return `<div class="ip-set"><div class="ip-set-row"><b>${set.label}</b><span class="ip-seg">${btns}</span></div>` +
+    `<div class="ip-set-hint">1대가 초당 ${perfCapacity(n)}${set.unit === '요청/초' ? '요청' : '쿼리'} 처리 · 예: ${set.examples[cur]} (숫자·이름은 예시, 가정)</div></div>`;
+}
+function bindSizeSection(n) {
+  $info.querySelectorAll('.ip-size').forEach(b => b.addEventListener('click', () => {
+    const k = b.getAttribute('data-size');
+    if (k === nodeSize(n)) return;
+    if (k === 'medium') delete n.size; else n.size = k;   // 보통이면 저장하지 않음 (예전 저장 형식과 같게)
+    render();   // 다시 그리기 + 되돌리기 기록
+  }));
+}
+
+// Auto Scaling 그룹 영역을 고르면: 최소·최대 대수와 목표 사용률
+function renderAsgInfo(area) {
+  const count = asgMembersOf(area).length;
+  const set = asgSettings(area, count);
+  const field = (key, label, value, min, max, unit) =>
+    `<label class="ip-set-row"><b>${label}</b><span><input type="number" class="ip-num" data-key="${key}" value="${value}" min="${min}" max="${max}"> ${unit}</span></label>`;
+  $info.innerHTML =
+    '<div class="ip-head"><span class="ip-name">Auto Scaling 그룹</span><span class="tt-cat">영역</span>' +
+    `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
+    '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
+    '<div class="ip-desc">그룹 안 EC2 수를 사용률에 맞춰 자동으로 늘리고 줄여요. 성능 시뮬레이션에서 확인할 수 있어요.</div>' +
+    (count
+      ? '<div class="ip-set">' +
+        field('asgMin', '최소 대수', set.min, count, Math.max(count, ASG_LIMITS.min), '대') +
+        field('asgMax', '최대 대수', set.max, set.min, Math.max(set.min, ASG_LIMITS.max), '대') +
+        field('asgTarget', '목표 사용률', Math.round(set.target * 100), ASG_LIMITS.targetLow, ASG_LIMITS.targetHigh, '%') +
+        `<div class="ip-set-hint">최소는 그룹 안 EC2 박스 수(${count}개) 이상, 최대는 최소 이상이에요. 사용률이 목표보다 1분 넘게 높으면 늘려요 (기본: 최소 = 박스 수, 최대 = 3배, 목표 50%).</div></div>`
+      : '<div class="ip-note">그룹 안에 EC2가 없어요. 프라이빗 서브넷의 EC2를 이 영역으로 감싸 주세요.</div>');
+  $info.querySelectorAll('.ip-num').forEach(inp => inp.addEventListener('change', () => {
+    const v = Number(/** @type {HTMLInputElement} */ (inp).value);
+    if (!isFinite(v)) { renderInfo(); return; }
+    area[inp.getAttribute('data-key')] = Math.round(v);
+    const fixed = asgSettings(area, count);   // 범위를 벗어난 값은 경계로 맞춰 저장
+    area.asgMin = fixed.min; area.asgMax = fixed.max; area.asgTarget = Math.round(fixed.target * 100);
+    render();
+  }));
+  $info.querySelector('.ip-close').addEventListener('click', () => select(null));
+  $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
+  $info.classList.toggle('folded', uiPrefs.infoFolded);
+  $info.hidden = false;
 }
 
 // ----- 네트워크 ② (45번): 라우팅 테이블·보안 그룹 (계산은 js/rules/network.js) -----

@@ -109,12 +109,13 @@ function renderSimPanel(head) {
     '<div class="sim-assume"><b>박스 안 사용률</b> = 들어온 요청 ÷ 처리할 수 있는 양. 100%를 넘으면 넘친 만큼 실패하고, 박스 안 위쪽 빨간 배지에 초당 실패 수가 떠요.</div>' +
     '<details class="sim-assume"><summary>가정값과 근거 문서</summary>가정: ' +
     Object.entries(PERF).filter(([, p]) => p.capacity).map(([t, p]) => `${SVC_MAP[t].name} 1대 초당 ${p.capacity}요청`).join(' · ') +
+    ' (서버·DB는 보통 크기 기준. 작게 ½배, 크게 2배)' +
     ' · Load Balancer·IGW·CloudFront는 AWS가 알아서 늘려서 제한 없음 ' +
     `(<a href="${PERF_DOCS.lb}" target="_blank" rel="noopener">ELB 문서 ↗</a>) · 그래프의 붉은 배경은 트래픽이 평소보다 많은 구간, 세로선은 사건<br>` +
     `장애 복구는 AWS 기본값: LB 상태 확인 30초마다·2번 실패하면 제외·5번 성공하면 다시 넣음 ` +
     `(<a href="${PERF_DOCS.health}" target="_blank" rel="noopener">ALB 문서 ↗</a>), ` +
     `RDS 장애 조치 약 90초 (<a href="${PERF_DOCS.failover}" target="_blank" rel="noopener">RDS 문서: 보통 60~120초 ↗</a>)<br>` +
-    `Auto Scaling: 평균 사용률 목표 50%, 1분 넘으면 늘림(새 서버 약 90초 뒤 투입), 5분 낮으면 1대씩 줄임, 최대 = 처음 대수 × 3 ` +
+    `Auto Scaling: 평균 사용률 목표(기본 50%), 1분 넘으면 늘림(새 서버 약 90초 뒤 투입), 5분 낮으면 1대씩 줄임, 최대(기본 처음 대수 × 3). 그룹 영역을 누르면 바꿀 수 있어요 ` +
     `(<a href="${PERF_DOCS.asg}" target="_blank" rel="noopener">목표 추적 문서 ↗</a>, 시간·최대는 가정)<br>` +
     `캐시·복제본: CloudFront가 요청의 ${PERF_CDN_HIT * 100}%를 엣지에서 응답 (<a href="${PERF_DOCS.cdn}" target="_blank" rel="noopener">캐시 적중률 ↗</a>), ` +
     `ElastiCache가 DB 조회의 ${PERF_CACHE_HIT * 100}%를 응답 (<a href="${PERF_DOCS.cache}" target="_blank" rel="noopener">lazy loading ↗</a>), ` +
