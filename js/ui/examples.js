@@ -33,8 +33,15 @@ function loadExample(key, picks) {
     });
     edges = [...edges, ...ms.flatMap(m => m.edges || [])];
   }
+  loadSpec({ nodes, edges, asg: spec.asg }, ex.toast);
+}
+
+// 구성 데이터(js/data/examples.js의 형식: nodes·edges·asg)를 기본 틀 위에 놓는다. 놓았으면 true
+// 예시와 미션 시작 구성(js/ui/mission.js)이 함께 쓴다
+function loadSpec(spec, toast) {
+  const { nodes, edges } = spec;
   const o = loadTemplate();
-  if (!o) return;   // 기존 내용을 지울지 묻는 창에서 취소
+  if (!o) return false;   // 기존 내용을 지울지 묻는 창에서 취소
   const before = takeSnapshot();
   const ids = {};
   nodes.forEach(([k, type, x, y]) => {
@@ -49,17 +56,19 @@ function loadExample(key, picks) {
     state.containers.push({ id: newId('c'), type: 'asg', x: o.x + spec.asg.x, y: o.y + spec.asg.y,
       width: spec.asg.width, height: spec.asg.height, parentContainer: null, label: AREA_MAP.asg.name });
   }
-  if (!commit(before, null)) return;   // 예시가 배치 규칙에 어긋나면 기본 틀만 남김 (테스트가 막아 둠)
+  if (!commit(before, null)) return false;   // 예시가 배치 규칙에 어긋나면 기본 틀만 남김 (테스트가 막아 둠)
   fitView();
-  showToast(ex.toast);
+  showToast(toast);
+  return true;
 }
 
 // 캔버스의 모든 박스·영역이 한 화면에 들어오도록 줌(단계 중 가장 큰 것, 최소 60%)을 맞추고 가운데로 이동
-function fitView() {
+// extraLeft: 왼쪽에 더 보여 줄 여백 (미션 1: 사용자를 놓을 VPC 왼쪽 빈 곳)
+function fitView(extraLeft = 0) {
   const items = [...state.containers, ...state.nodes].map(rectOf);
   if (!items.length) return;
   const M = 40;   // 둘레 여백
-  const x1 = Math.min(...items.map(r => r.x)) - M, y1 = Math.min(...items.map(r => r.y)) - M;
+  const x1 = Math.min(...items.map(r => r.x)) - M - extraLeft, y1 = Math.min(...items.map(r => r.y)) - M;
   const x2 = Math.max(...items.map(r => r.x + r.w)) + M, y2 = Math.max(...items.map(r => r.y + r.h)) + M;
   const fit = Math.min($wrap.clientWidth / (x2 - x1), $wrap.clientHeight / (y2 - y1));
   setZoom([...ZOOM_STEPS].reverse().find(s => s <= Math.min(fit, 1)) || ZOOM_STEPS[0]);

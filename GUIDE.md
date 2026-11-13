@@ -76,6 +76,13 @@
   RDS와 연결되지 않은 EC2는 빨간 점선 테두리 + "연결 끊김"
 - 숫자는 학습용 가정값 (EC2 1대 초당 100요청, RDS 초당 300요청). LB·IGW·CloudFront는 제한 없음
 
+### 단계별 미션 (v1.57, 42번)
+- 아래 패널의 [미션] 탭. 미션 목록에서 [시작]을 누르면 그 미션의 시작 구성을 불러오고 목표 목록이 나온다
+- 만들기 미션 5개: 입구 만들기 → 앱 서버 놓기 → DB 붙이기 → 두 가용 영역으로 넓히기 → 밖으로 나가는 길 만들기 (끝내면 기본 3-Tier)
+- 목표는 캔버스를 바꿀 때마다 자동으로 ✓. 모두 채우면 완료 안내와 [다음 미션] (캔버스를 그대로 이어 씀)
+- [힌트 보기]: 아직 못 채운 첫 목표의 힌트 한 줄. [미션 목록]: 완료 표시, [이어 하기]·[처음부터]
+- 진행(완료한 미션·하던 미션)은 브라우저에 저장. [미션] 탭에서 [검증하기]를 누르면 [검증 결과] 탭으로 옮김
+
 ### 기타
 - 줌 60~150% (버튼 / Ctrl+휠), 자동 저장 (배치·줌·스크롤 위치)
 - 화면 끌어 옮기기: 영역 밖 흰 배경을 끌거나, 스페이스바를 누른 채 어디서든 끌기 (v1.38)
@@ -105,7 +112,7 @@ aws-3tier-simulator/
 ├─ scripts/setup-icons.js     AWS 아이콘 패키지에서 필요한 아이콘을 icons/로 복사 (npm run icons, 개발 도구)
 ├─ icons/                     AWS 공식 아이콘 (커밋하지 않음. 없으면 글자 박스)
 ├─ criteria/                  판정 근거 조사 (README.md 기준표·양식, entry·server·data·ops·container.md 묶음별 조사, flow.md 흐름 단계 해설 근거, PROGRESS.md 진행표). 앱에는 넣지 않음
-├─ tests/                     자동 테스트 (helpers.js, placement/edges/validation/simulation.spec.js)
+├─ tests/                     자동 테스트 (helpers.js, placement/edges/validation/simulation/mission.spec.js)
 │   ├─ regression.spec.js     리팩터링 기준선: 여러 구성의 판정·제안·잘한 점·시뮬레이션 결과를 스냅샷과 비교
 │   └─ regression.spec.js-snapshots/  기준선 스냅샷 (판정을 일부러 바꿀 때만 다시 저장)
 ├─ css/
@@ -117,14 +124,16 @@ aws-3tier-simulator/
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
 │   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA·EXAMPLE_CONTAINER, 고쳐 보세요용 EXAMPLE_MISTAKES)
-│   │   └─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
+│   │   ├─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
+│   │   └─ missions.js        단계별 미션 (MISSIONS: 제목·설명·시작 구성·목표(문구·힌트·조건)·완료 문구)
 │   ├─ model.js               캔버스 상태(state)·박스 찾기(findNode 등)·도형 계산(rectOf 등). DOM 없음, 규칙과 화면이 함께 씀
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등). 구성 s를 인자로 받음 (R3)
 │   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 20개)
-│   │   └─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
+│   │   ├─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
+│   │   └─ missions.js        미션 채점 gradeMission(구성 s를 인자로)·목표 조건 조회 도구(mission…)
 │   ├─ ui/
 │   │   ├─ core.js            UI-1 화면 상태·공통 유틸(DOM 참조·좌표 변환), UI-2 소속 판정·동작 검사
 │   │   ├─ palette.js         UI-3 팔레트·설명 툴팁
@@ -136,7 +145,8 @@ aws-3tier-simulator/
 │   │   ├─ info.js            UI-10 서비스 설명 패널
 │   │   ├─ simulate.js        UI-11 성능 시뮬레이션 패널·시계·그래프
 │   │   ├─ sim-canvas.js      UI-12 성능 시뮬레이션 캔버스 표시 (박스 색·사용률 막대·트래픽 점)
-│   │   └─ examples.js        UI-13 [불러오기 ▾] 메뉴·기본 틀(loadTemplate)·예시 불러오기·전체 보기(fitView)
+│   │   ├─ examples.js        UI-13 [불러오기 ▾] 메뉴·기본 틀(loadTemplate)·구성 데이터 놓기(loadSpec)·예시 불러오기·전체 보기(fitView)
+│   │   └─ mission.js         UI-15 [미션] 탭: 목록·목표 체크·힌트·진행 저장
 │   └─ main.js                UI-9 이벤트·시작
 └─ docs/                      개인 메모 (Git에 올리지 않음)
 ```
@@ -160,6 +170,7 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - 배치 위치 규칙: js/rules/placement.js: PLACEMENT_RULES / 서비스의 allowedZone 값
 - 검증 규칙: js/rules/validation.js: VALIDATION_RULES 배열에 항목 추가
 - 개선·제거 제안: js/rules/suggestions.js: SUGGESTION_RULES 배열에 항목 추가
+- 미션 추가: js/data/missions.js: MISSIONS 배열에 항목 추가 (목표 조건은 판정 규칙이 보는 것과 같게. 테스트는 tests/mission.spec.js)
 - 여러 규칙이 함께 쓰는 조회 도구: js/rules/context.js
   - 규칙 본문은 전역 state·findNode 대신 ctx의 도구(ctx.s, ctx.findNode, ctx.linkedNodes 등)를 쓴다. 그래야 캔버스가 아닌 구성도 검사할 수 있다 (R3: validateArchitecture(s), simulateTraffic(..., s), createFaults(s))
 - 판정·제안·시뮬레이션 결과를 일부러 바꾸면: `npx playwright test regression --update-snapshots`로 기준선을 다시 저장 (구조만 바꾸는 작업이면 저장하지 않고 통과해야 함)
@@ -452,3 +463,14 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
   배치 규칙에 어긋난 배치는 저장소에서 불러올 때와 같이 그대로 열고 판정이 알린다. 뒤의 미션·면접 과제(42·43번)에서 과제·모범 답안을 파일로 다루는 바탕
 - 트래픽 계산의 서비스별 동작은 데이터(PERF.edgeHit, PERF_SIDE_ROUTES, PERF_GUARDS, PERF_OFF_PATH). 장애 엔진(Multi-AZ 장애 조치·Auto Scaling)은 AWS 기능 자체의 동작이라 코드에 둔다 (R6, 사용자 결정)
 - 애니메이션 테스트는 실제 시간을 기다리지 않고 시각을 넘겨 그린다 (simDrawDots(t)) (R7)
+
+### 단계별 미션 (42번, 2026-11-13, v1.57)
+- 사용자 결정: 미션 종류는 만들기 → 고치기 → 개선 순서, 채점은 캔버스를 바꿀 때마다 자동, 화면은 아래 패널의 [미션] 탭, 틀 + 만들기 미션을 먼저(42-1) 만들고 고치기·개선은 42-2
+- 미션 = 시작 구성 + 목표 목록. 채점(gradeMission)은 화면에 기대지 않고 구성 s를 받아 목표별 달성 여부를 돌려준다 (43번 면접식 과제가 같은 틀을 쓴다)
+- 목표 조건은 기존 판정 규칙이 보는 것과 같은 조건만 쓴다 (data/missions.js 주석에 판정 번호). 판정과 어긋나는 목표·새 판정은 만들지 않는다 ("판정은 현실과 벗어나지 않는다" 원칙).
+  마지막 미션은 "검증 결과가 정상"을 목표로 두어, 미션을 다 끝낸 구성이 판정과도 맞는지 한 번 더 확인한다
+- 만들기 미션은 한 캔버스에서 이어진다: [다음 미션]은 캔버스를 그대로 두고, 목록의 [시작]·[처음부터]만 시작 구성(기본 3-Tier 예시의 일부)을 새로 불러온다.
+  내가 만든 것이 이어져야 "완성했다"는 느낌이 나고, 중간부터 하고 싶은 사람은 목록에서 고르면 된다
+- 미션 완료 기록은 [미션] 탭을 보고 있을 때만 한다. 다른 탭에서 예시를 불러와 목표가 한꺼번에 충족돼도 완료로 치지 않는다
+- 목표 목록은 여러 칸으로 나눠 그린다. 결과 패널이 높아지면 캔버스가 줄기 때문이다 (탭 높이 24px를 지키는 이유와 같음)
+- 넣지 않은 것: 점수·별점, 미션 중 팔레트 제한 (목표 체크만으로 다음 행동을 알 수 있어서)
