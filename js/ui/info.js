@@ -4,6 +4,7 @@
 /* ---------------------------------------------------------
    UI-10. 서비스 설명 패널
    박스를 선택하면 캔버스 오른쪽 위에 "무엇과 연결하는지, 어떤 요청이 오가는지"를 보여준다.
+   45번: 박스에는 보안 그룹(들어오는 규칙), 서브넷을 고르면 라우팅 테이블을 계산해 보여 준다.
    지금 실제로 연결된 상대가 있으면 ✓, 연결하면 안 되는 상대와 이어져 있으면 ⚠로 표시한다.
    --------------------------------------------------------- */
 const $info = document.getElementById('info-panel');
@@ -22,6 +23,8 @@ const typeNames = types => [...new Set(types.map(t => SVC_MAP[t].name))].join(',
 function renderInfo() {
   const ed = selectedId ? state.edges.find(e => e.id === selectedId) : null;
   if (ed && multiSel.size <= 1) { renderEdgeInfo(ed); return; }
+  const area = selectedId ? findContainer(selectedId) : null;
+  if (area && SUBNET_TYPES.includes(area.type) && multiSel.size <= 1) { renderSubnetInfo(area); return; }
   const n = selectedId ? findNode(selectedId) : null;
   if (!n || multiSel.size > 1) { $info.hidden = true; return; }   // 여러 개를 고르면 숨김
   const svc = SVC_MAP[n.type], cat = CAT_MAP[svc.category];
@@ -50,13 +53,48 @@ function renderInfo() {
     (SERVICE_DOCS[n.type] ? `<a class="ip-doc" href="${SERVICE_DOCS[n.type]}" target="_blank" rel="noopener">AWS 공식 문서 열기 ↗</a>` : '') +
     (g.note ? `<div class="ip-note">${g.note}</div>` : '') +
     (linkRows ? `<div class="ip-sec">이렇게 연결해요</div><ul class="ip-list">${linkRows}</ul>` : '') +
-    (avoidRows ? `<div class="ip-sec avoid">이렇게 연결하지 마세요</div><ul class="ip-list">${avoidRows}</ul>` : '');
+    (avoidRows ? `<div class="ip-sec avoid">이렇게 연결하지 마세요</div><ul class="ip-list">${avoidRows}</ul>` : '') +
+    sgSection(networkSecurityGroup(n));
   $info.querySelector('.ip-close').addEventListener('click', () => select(null));
   // 접기: 제목 줄만 남겨 캔버스를 덜 가림. 다른 박스를 골라도 접힌 채로 유지
   $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
   $info.classList.toggle('folded', uiPrefs.infoFolded);
   $info.hidden = false;
   updateInfoSim();
+}
+
+// ----- 네트워크 ② (45번): 라우팅 테이블·보안 그룹 (계산은 js/rules/network.js) -----
+const NET_ASSUME = '<div class="ip-net-note">* 주소·포트 숫자는 예시(가정)예요. 그린 선과 서브넷으로 자동 계산했어요.</div>';
+const netNotes = notes => notes.map(t => `<li>${t}</li>`).join('');
+
+// 박스 설명 패널 맨 아래의 "보안 그룹 (들어오는 규칙)" 칸. 보안 그룹이 없는 박스면 빈 글
+function sgSection(sg) {
+  if (!sg) return '';
+  const rows = sg.rules.map(r => `<tr class="${r.warn ? 'bad' : ''}"><td>${r.port}</td><td>${r.source}</td></tr>` +
+    (r.warn ? `<tr class="bad"><td colspan="2">⚠ ${r.warn}</td></tr>` : '')).join('');
+  return '<div class="ip-sec">보안 그룹 (들어오는 규칙)</div>' +
+    (rows ? `<table class="ip-net"><thead><tr><th>포트</th><th>출발지</th></tr></thead><tbody>${rows}</tbody></table>` : '') +
+    (sg.notes.length ? `<ul class="ip-net-notes">${netNotes(sg.notes)}</ul>` : '') + (rows ? NET_ASSUME : '');
+}
+
+// 서브넷을 고르면: 그 서브넷의 라우팅 테이블
+function renderSubnetInfo(area) {
+  const rt = networkRouteTable(area);
+  const az = findContainer(area.parentContainer);
+  const rows = rt.rows.map(r => `<tr class="${r.target ? '' : 'none'}"><td>${r.dest}${r.cidr ? ` <span class="ip-cidr">(${r.cidr})</span>` : ''}</td>` +
+    `<td>${r.target || '없음'}</td></tr>` + (r.note ? `<tr class="${r.target ? 'warn' : 'none'}"><td colspan="2">${r.target ? '⚠ ' : ''}${r.note}</td></tr>` : '')).join('');
+  $info.innerHTML =
+    `<div class="ip-head"><span class="ip-name">${AREA_MAP[area.type].name}</span>` +
+    `<span class="tt-cat">${az && az.type === 'az' ? az.label : '서브넷'}</span>` +
+    `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
+    '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
+    '<div class="ip-sec">라우팅 테이블 (자동 계산)</div>' +
+    `<table class="ip-net"><thead><tr><th>목적지</th><th>보내는 곳</th></tr></thead><tbody>${rows}</tbody></table>` +
+    `<ul class="ip-net-notes">${netNotes(rt.notes)}</ul>` + NET_ASSUME;
+  $info.querySelector('.ip-close').addEventListener('click', () => select(null));
+  $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
+  $info.classList.toggle('folded', uiPrefs.infoFolded);
+  $info.hidden = false;
 }
 
 // 연결선을 고르면 (26번): 지금 종류와 뜻. 실제로 두 가지가 다 가능한 짝이면 종류를 고르는 버튼
