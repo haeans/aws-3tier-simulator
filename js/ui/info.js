@@ -75,7 +75,7 @@ function sizeSection(n) {
   const cost = nodeMonthlyCost(n);   // 47번 (ECS·EKS 박스처럼 크기 요금이 없는 박스면 null)
   const btns = SIZE_KEYS.map(k => `<button class="btn ip-size${k === cur ? ' active' : ''}" data-size="${k}">${SIZE_NAMES[k]}</button>`).join('');
   return `<div class="ip-set"><div class="ip-set-row"><b>${set.label}</b><span class="ip-seg">${btns}</span></div>` +
-    `<div class="ip-set-hint">1대가 초당 ${perfCapacity(n)}${set.unit === '요청/초' ? '요청' : '쿼리'} 처리 · 예: ${set.examples[cur]} (숫자·이름은 예시, 가정)</div>` +
+    `<div class="ip-set-hint">1대가 초당 ${perfCapacity(n)}${set.unit === '요청/초' ? '요청' : '쿼리'} 처리 · ${ONPREM_TYPES.includes(n.type) ? '사내 장비 (숫자는 가정)' : `예: ${set.examples[cur]} (숫자·이름은 예시, 가정)`}</div>` +
     (cost ? `<div class="ip-set-hint">이 크기로 1대 월 약 ${usd(cost.monthly)} (${COST_REGION} 온디맨드, [비용] 탭)</div>` : '') + '</div>';
 }
 function bindSizeSection(n) {

@@ -35,7 +35,7 @@ function nodeMonthlyCost(n, s = state) {
 }
 
 // 구성의 월 비용. 돌려주는 값:
-// { rows: [{ name, count, unit(1개 월), monthly(합), doc, note }], total, usage: [서비스 이름], free: [서비스 이름] }
+// { rows: [{ name, count, unit(1개 월), monthly(합), doc, note }], total, usage: [서비스 이름], free: [서비스 이름], onprem: [회사 비용 박스 이름] }
 // Auto Scaling 그룹 안 EC2는 최소 대수 기준 (늘어나면 그만큼 더)
 function costOf(s = state) {
   const counts = new Map();   // 박스 id → 대수
@@ -57,13 +57,26 @@ function costOf(s = state) {
     row.monthly += c.monthly * counts.get(n.id);
     rows.set(key, row);
   });
+  // 48번: IDC ↔ VPC 연결 (고객 게이트웨이—VGW 선 하나마다 VPN 연결 또는 Direct Connect 포트)
+  s.edges.forEach(ed => {
+    const a = findNode(ed.from, s), b = findNode(ed.to, s);
+    if (!a || !b || [a.type, b.type].sort().join() !== 'cgw,vgw') return;
+    const kind = edgeInfo(a.type, b.type, ed.kind || null).kind;
+    const p = COST_PRICE[kind];
+    if (!p) return;
+    const row = rows.get(kind) || { name: p.label, count: 0, unit: p.hour * COST_HOURS, monthly: 0, doc: p.doc, note: 'VGW 포함, 데이터 전송 요금 별도' };
+    row.count += 1;
+    row.monthly += p.hour * COST_HOURS;
+    rows.set(kind, row);
+  });
   const names = types => [...new Set(s.nodes.filter(n => types.includes(n.type)).map(n => SVC_MAP[n.type].name))];
-  const order = t => SERVICES.findIndex(sv => t.startsWith(sv.name));   // 팔레트 순서로
+  const order = t => { const i = SERVICES.findIndex(sv => t.startsWith(sv.name)); return i < 0 ? SERVICES.length : i; };   // 팔레트 순서로 (연결 요금은 맨 뒤)
   const list = [...rows.values()].sort((a, b) => order(a.name) - order(b.name));
   return {
     rows: list,
     total: list.reduce((sum, r) => sum + r.monthly, 0),
     usage: names(COST_USAGE),
     free: names(COST_FREE),
+    onprem: names(COST_ONPREM),   // 48번
   };
 }

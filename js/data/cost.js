@@ -27,11 +27,15 @@ const COST_PRICE = {
   eks:  { hour: 0.10, label: '클러스터', doc: 'https://aws.amazon.com/eks/pricing/' },                               // C9
   waf:  { month: 6, label: '웹 ACL + 규칙 1개', doc: 'https://aws.amazon.com/waf/pricing/' },                    // C10 ($5 + $1)
   route53: { month: 0.5, label: '호스팅 영역', doc: 'https://aws.amazon.com/route53/pricing/' },                 // C11
+  // 48번: IDC ↔ VPC 연결 (고객 게이트웨이—VGW 선 하나마다)
+  vpn: { hour: 0.05, label: 'Site-to-Site VPN 연결', doc: 'https://aws.amazon.com/vpn/pricing/' },                 // C13
+  dx:  { hour: 0.30, label: 'Direct Connect 1Gbps 전용 포트', doc: 'https://aws.amazon.com/directconnect/pricing/' },   // C14 (포트 속도는 가정)
 };
 const COST_VPCE_AZS = 2;                                           // 인터페이스 엔드포인트는 AZ마다 요금 (가정: 기본 틀의 AZ 2곳)
 const COST_VPCE_IFACE = ['ecr', 'cloudwatch', 'sessionmanager'];   // 인터페이스형으로 잇는 서비스 (S3·DynamoDB는 게이트웨이형 = 무료)
 // 금액을 넣지 않는 것 (C12)
 const COST_FREE = ['igw', 'ecs'];
+const COST_ONPREM = ['onprem-server', 'onprem-db', 'cgw'];   // 48번: 회사 비용 (AWS 요금이 아님, 계산 안 함)
 const COST_USAGE = ['cloudfront', 's3', 'dynamodb', 'cloudwatch', 'cloudtrail', 'ecr', 'sessionmanager',
   'codecommit', 'codebuild', 'codepipeline', 'codedeploy'];
-const COST_EXTRA = '저장 공간(EBS·RDS)·데이터 전송·NAT와 Load Balancer의 처리량 요금·요청 수 요금은 넣지 않았어요.';
+const COST_EXTRA = '저장 공간(EBS·RDS)·데이터 전송·NAT와 Load Balancer의 처리량 요금·요청 수 요금·Direct Connect 위치까지의 회선 비용은 넣지 않았어요.';

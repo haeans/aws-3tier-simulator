@@ -6,7 +6,8 @@
    - 좌표: 기본 틀 VPC 왼쪽 위 기준 상대 좌표 (박스 중심). VPC 0~1000 × 0~660
      AZ A: x 40~480 (서브넷 60~460), AZ B: x 520~960 (서브넷 540~940)
      퍼블릭 y 120~260, 프라이빗 280~420, DB 440~580. VPC 밖은 음수나 1000 넘는 값
-   - nodes: [키, 종류, x, y] / edges: [키, 키] / asg: Auto Scaling 그룹 영역 { x, y, width, height } (상대 좌표)
+   - nodes: [키, 종류, x, y] / edges: [키, 키, 선 종류(없으면 자동)] / asg: Auto Scaling 그룹 영역 { x, y, width, height } (상대 좌표)
+   - areas: 더할 영역 [종류, x, y, 너비, 높이] (48번: IDC) / noVpc: true면 기본 틀(VPC) 없이 그 영역만 (옮기기 전 구성)
    - 판정·제안 결과는 tests/validation.spec.js의 예시 테스트가 지킨다 (기본·컨테이너: 정상, 고가용성: 정상·제안 0개)
    --------------------------------------------------------- */
 
@@ -62,8 +63,29 @@ const EXAMPLE_CONTAINER = {
   ],
 };
 
+// 옮기기 전: 온프레미스 3-Tier (48번). VPC 없이 IDC 안에 서버·DB. 판정은 "옮기기 전 구성"(사용자 → 서버 → DB 흐름)
+const EXAMPLE_ONPREM = {
+  noVpc: true,
+  areas: [['idc', 300, 80, 400, 420]],
+  nodes: [['pc', 'pc', 500, -100], ['srv', 'onprem-server', 500, 200], ['db', 'onprem-db', 500, 390]],
+  edges: [['pc', 'srv'], ['srv', 'db']],
+};
+// 하이브리드: AWS 서버 + IDC DB (48번). 서버는 AWS로 옮기고 DB는 아직 IDC에. Direct Connect(주 회선) + VPN(백업)으로 이중화
+// 근거: criteria/hybrid.md HY-01·02(고객 게이트웨이 — VGW), HY-07·09(이중화)
+const EXAMPLE_HYBRID = {
+  areas: [['idc', 1160, 160, 420, 340]],
+  nodes: [
+    ...EXAMPLE_BASIC.nodes.filter(([k]) => !['rds', 'sb'].includes(String(k))),
+    ['vgw', 'vgw', 1000, 330], ['cgw', 'cgw', 1240, 330], ['idb', 'onprem-db', 1460, 330],
+  ],
+  edges: [
+    ...EXAMPLE_BASIC.edges.filter(([a, b]) => ![a, b].some(k => ['rds', 'sb'].includes(String(k)))),
+    ['ec2a', 'vgw'], ['ec2b', 'vgw'], ['vgw', 'cgw', 'dx'], ['vgw', 'cgw', 'vpn'], ['cgw', 'idb'],
+  ],
+};
+
 // 예시 key → 구성 데이터 ("고쳐 보세요"는 기본 3-Tier에 실수를 더해 쓴다)
-const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC };
+const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC, onprem: EXAMPLE_ONPREM, hybrid: EXAMPLE_HYBRID };
 
 // "고쳐 보세요": 기본 3-Tier에 흔한 실수 2개를 랜덤으로 넣는다.
 // rule: 그 실수를 잡는 판정 근거(criteria ID). 테스트는 실수마다 판정 문제(오류·경고)가 새로 생기는지 확인한다
@@ -86,6 +108,10 @@ const EXAMPLES = [
     toast: '예시 "고가용성"을 불러왔어요. [성능 시뮬레이션]에서 장애를 넣어 버티는지 확인해 보세요.' },
   { key: 'container', name: '예시: 컨테이너 (ECS + Fargate)', desc: 'EC2 대신 컨테이너로 만든 3-Tier예요',
     toast: '예시 "컨테이너"를 불러왔어요. [검증하기] 뒤 [서버 통신] 보기에서 이미지를 받는 길을 확인해 보세요.' },
+  { key: 'onprem', name: '예시: 옮기기 전 (온프레미스)', desc: 'AWS로 옮기기 전, 회사 데이터센터(IDC)의 3-Tier예요',
+    toast: '예시 "옮기기 전 (온프레미스)"를 불러왔어요. [비교] 탭에 담아 두고 AWS 구성과 비교해 보세요.' },
+  { key: 'hybrid', name: '예시: 하이브리드 (AWS 서버 + IDC DB)', desc: '서버는 AWS로 옮기고 DB는 아직 IDC에 있어요',
+    toast: '예시 "하이브리드"를 불러왔어요. 고객 게이트웨이—VGW 선 두 줄(Direct Connect + VPN 백업)을 눌러 보세요.' },
   { key: 'fix', name: '예시: 고쳐 보세요', desc: '흔한 실수 2개가 숨어 있어요 (매번 달라져요)',
     toast: '문제 2개가 숨어 있어요. [검증하기]로 찾아서 고쳐 보세요.' },
 ];

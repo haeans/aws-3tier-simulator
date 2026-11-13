@@ -116,3 +116,69 @@ test('VPN / Direct Connect: 고객 게이트웨이—VGW 선을 누르면 종류
   await page.click('#btn-validate');
   await expect(page.locator('.edge-legend .k-vpn')).toHaveCount(0);
 });
+
+// ----- 48-2: 라우팅 테이블·보안 그룹·성능·비용·예시 -----
+test('예시 "옮기기 전 (온프레미스)": VPC 없이 IDC만, 판정은 옮기기 전 구성으로 정상이고 성능은 서버 1대 처리량까지, AWS 요금 없음', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => {
+    loadExample('onprem');
+    const v = validateArchitecture(), t = simulateTraffic(300), c = costOf();
+    return { vpc: state.containers.some(x => x.type === 'vpc'), idc: state.containers.filter(x => x.type === 'idc').length,
+      zones: state.nodes.filter(n => n.type !== 'pc').map(n => zoneOf(n)), status: v.status, mode: v.mode, served: t.served, cost: c.total, onprem: c.onprem };
+  });
+  expect(r).toEqual({ vpc: false, idc: 1, zones: ['idc', 'idc'], status: 'ok', mode: 'onprem', served: 100, cost: 0, onprem: ['온프레미스 서버', '온프레미스 DB'] });
+});
+
+test('예시 "하이브리드": AWS 서버가 VGW—고객 게이트웨이로 IDC의 DB를 쓰면 판정 정상(판정 5), DX + VPN 백업이라 이중화 제안 없음', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => {
+    loadExample('hybrid');
+    const v = validateArchitecture();
+    return { status: v.status, issues: v.issues.length, sug21: v.suggestions.some(x => x.rule.id === 21),
+      kinds: state.edges.map(ed => edgeInfoOf(ed).kind).filter(k => k === 'vpn' || k === 'dx').sort() };
+  });
+  expect(r).toEqual({ status: 'ok', issues: 0, sug21: false, kinds: ['dx', 'vpn'] });
+  // VGW—EC2 선을 지우면 앱 서버가 DB와 이어지지 않아 판정 5 오류
+  const r5 = await page.evaluate(() => {
+    state.edges = state.edges.filter(ed => ![findNode(ed.from).type, findNode(ed.to).type].includes('ec2') || ![findNode(ed.from).type, findNode(ed.to).type].includes('vgw'));
+    render();
+    return validateArchitecture().issues.map(i => i.rule.id);
+  });
+  expect(r5).toContain(5);
+});
+
+test('하이브리드의 라우팅 테이블에 온프레미스 경로(VGW, 경로 전파), 서버 보안 그룹에 온프레미스 규칙이 생긴다 (HY-04·05)', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => {
+    loadExample('hybrid');
+    const priv = state.containers.find(c => c.type === 'private'), db = state.containers.find(c => c.type === 'db');
+    return { priv: networkRouteTable(priv).rows.map(x => `${x.dest} ${x.cidr} → ${x.target}`), db: networkRouteTable(db).rows.length,
+      sg: networkSecurityGroup(state.nodes.find(n => n.type === 'ec2')).rules.map(x => x.source) };
+  });
+  expect(r.priv).toEqual(['VPC 안 10.0.0.0/16 → local', '온프레미스 (IDC) 192.168.0.0/16 → VGW (경로 전파)', '인터넷 전체 0.0.0.0/0 → NAT (가용 영역 A)']);
+  expect(r.db).toBe(1);                                                                // DB 서브넷엔 VGW와 이은 박스가 없다
+  expect(r.sg).toEqual(['Load Balancer의 보안 그룹', '온프레미스 (192.168.0.0/16, VGW 거쳐)']);
+});
+
+test('성능: IDC ↔ AWS 연결 지연은 Direct Connect 5ms·VPN 20ms (둘 다면 빠른 쪽), 온프레미스는 장애 조치 없이 멈추면 실패. 비용: VPN 연결·DX 포트', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => {
+    loadExample('hybrid');
+    const vgw = state.nodes.find(n => n.type === 'vgw');
+    const both = perfLatency(vgw);
+    const dxEdge = state.edges.find(ed => ed.kind === 'dx');
+    state.edges = state.edges.filter(ed => ed !== dxEdge);   // VPN만 남김
+    const vpnOnly = perfLatency(vgw);
+    const okBefore = simulateTraffic(100).successRate;
+    const f = createFaults();
+    f.down.add(state.nodes.find(n => n.type === 'onprem-db').id);
+    const okDown = simulateTraffic(100, simFaultOptions(f)).successRate;
+    loadExample('hybrid');
+    const c = costOf();
+    return { both, vpnOnly, okBefore, okDown, conn: c.rows.filter(x => /VPN|Direct/.test(x.name)).map(x => [x.name, Math.round(x.monthly * 100) / 100]) };
+  });
+  expect([r.both, r.vpnOnly]).toEqual([5, 20]);
+  expect(r.okBefore).toBe(1);
+  expect(r.okDown).toBe(0);                                                             // IDC의 DB는 예비가 없다
+  expect(r.conn).toEqual([['Direct Connect 1Gbps 전용 포트', 219], ['Site-to-Site VPN 연결', 36.5]]);
+});

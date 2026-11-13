@@ -1,12 +1,14 @@
 // @ts-check
 // js/rules/network.js — 네트워크 ② 라우팅 테이블·보안 그룹 계산 (45번). 화면에 기대지 않고 구성 s를 받는다
 // 사용자가 값을 입력하지 않는다. 캔버스에 그린 서브넷·박스·연결선을 보고 "실제 AWS라면 이렇게 설정한다"를 만든다.
+// 48번: IDC와 이은 VGW → 라우팅 테이블에 온프레미스 경로(HY-04), 보안 그룹에 온프레미스에서 오는 규칙(HY-05). 근거 criteria/hybrid.md
 // 근거: criteria/flow.md F5(퍼블릭 = IGW 경로)·F6(local 경로)·F9(상태 저장)·F10(출발지 = 다른 보안 그룹)·
 //       F16(프라이빗 → NAT)·F18(게이트웨이 엔드포인트는 경로, 인터페이스는 서브넷 안 IP)·F19(Session Manager는 인바운드 불필요)
 // 주소·포트 숫자는 예시(가정)다. 54번(직접 설정)에서 사용자가 바꿀 값의 자리
 
 const NET_VPC_CIDR = '10.0.0.0/16';   // 예시 (가정)
 const NET_ANY = '0.0.0.0/0';
+const NET_ONPREM_CIDR = '192.168.0.0/16';   // 48번: IDC 주소 예시 (가정). VPC와 겹치지 않게 둔다 (HY-10)
 const NET_PORT = {                     // 예시 (가정): 엔진·앱에 따라 다르다
   https: 'HTTPS 443',
   app: 'HTTP (예: 80)',
@@ -44,6 +46,9 @@ function networkRouteTable(area, s = state) {
   const inside = netNodesIn(area, s);
   const apps = inside.filter(n => APP_TYPES.includes(n.type) && n.type !== 'ecs');
 
+  // HY-04: 서브넷 안의 박스가 VGW(고객 게이트웨이와 이어진)와 연결돼 있으면 온프레미스로 가는 경로가 있다 (경로 전파로 자동)
+  const vgws = [...new Set(inside.flatMap(n => ctx.neighborsOf(n, 'vgw')))].filter(v => ctx.neighborsOf(v, 'cgw').length);
+  const onpremRow = vgws.length ? { dest: '온프레미스 (IDC)', cidr: NET_ONPREM_CIDR, target: 'VGW (경로 전파)', note: '' } : null;
   if (area.type === 'public') {   // F5
     const igw = ctx.ofType('igw').length > 0;
     rows.push({ dest: '인터넷 전체', cidr: NET_ANY, target: igw ? 'IGW' : null,
@@ -68,7 +73,11 @@ function networkRouteTable(area, s = state) {
     } else notes.push('앱 서버를 두면 밖으로 나가는 경로(NAT)가 여기에 생겨요.');
     notes.push('IGW로 가는 경로가 없어서 인터넷에서 바로 들어올 수 없어요.');
   } else {
-    notes.push('DB는 밖으로 나갈 일이 없어 local 경로만 있어요. 앱 서버의 요청은 local 경로로 들어와요.');
+    notes.push(onpremRow ? 'DB는 인터넷으로 나갈 일이 없어 IGW·NAT 경로가 없어요. 앱 서버의 요청은 local 경로로 들어와요.' : 'DB는 밖으로 나갈 일이 없어 local 경로만 있어요. 앱 서버의 요청은 local 경로로 들어와요.');
+  }
+  if (onpremRow) {
+    rows.splice(1, 0, onpremRow);
+    notes.push('VGW에서 경로 전파를 켜 두면 IDC로 가는 경로가 자동으로 들어와요. 주소 범위는 VPC와 겹치지 않게 해요.');
   }
   return { rows, notes };
 }
@@ -84,16 +93,22 @@ function networkSecurityGroup(node, s = state) {
   const fromInternet = (port, warn) => rules.push({ port, source: `인터넷 전체 (${NET_ANY})`, warn });
   const fromSg = (port, list) => { if (list.length) rules.push({ port, source: `${names(list)}의 보안 그룹`, warn: '' }); };   // F10
 
+  // HY-05: VGW(고객 게이트웨이와 이은)와 연결된 서버·DB는 IDC에서 오는 연결을 허용해야 한다
+  const fromIdc = port => {
+    if (ctx.neighborsOf(node, 'vgw').some(v => ctx.neighborsOf(v, 'cgw').length)) rules.push({ port, source: `온프레미스 (${NET_ONPREM_CIDR}, VGW 거쳐)`, warn: '' });
+  };
   if (node.type === 'lb') {
     if (ctx.neighborsOf(node, ...outside, 'cloudfront').length) fromInternet(NET_PORT.https, '');
     else notes.push('Load Balancer로 들어오는 연결이 아직 없어요. IGW와 이으면 인터넷에서 오는 HTTPS 규칙이 생겨요.');
   } else if (NET_SG_APPS.includes(node.type)) {
     fromSg(NET_PORT.app, ctx.neighborsOf(node, 'lb'));
+    fromIdc(NET_PORT.app);
     if (ctx.neighborsOf(node, ...outside).length) fromInternet(NET_PORT.app, '인터넷에서 서버로 바로 들어오는 규칙이 생겨요. Load Balancer를 거치게 하세요.');
     if (!rules.length) notes.push('이 서버로 들어오는 연결이 아직 없어요.');
     if (ctx.linkedNodes(node, 'sessionmanager').length) notes.push('Session Manager로 접속해서 SSH(22) 규칙이 필요 없어요.');   // F19
   } else if (node.type === 'rds' || node.type === 'rds-replica') {
     fromSg(NET_PORT.db, ctx.neighborsOf(node, ...APP_TYPES).filter(n => n.type !== 'ecs'));
+    fromIdc(NET_PORT.db);
     if (ctx.neighborsOf(node, ...outside).length) fromInternet(NET_PORT.db, 'DB가 인터넷에 열려요. 앱 서버에서만 접속하게 하세요.');
     if (!rules.length) notes.push('이 DB로 들어오는 연결이 아직 없어요. 앱 서버와 이으면 그 서버의 보안 그룹에서 오는 규칙이 생겨요.');
   } else if (node.type === 'rds-standby') {

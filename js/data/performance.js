@@ -30,7 +30,14 @@ const PERF = {
   'rds-standby': { capacity: 300, latency: 10 }, // 장애 조치 후 본체가 되면 RDS와 같은 성능
   'rds-replica': { capacity: 300, latency: 10 }, // 읽기 전용 복사본 (RDS와 같은 성능)
   elasticache: { capacity: 2000, latency: 1 },   // 메모리 캐시: DB보다 훨씬 많이·빨리 응답한다고 가정
+  // 48번: IDC(온프레미스). 장비 성능은 AWS와 같게 두고(사용자 결정), 다른 점은 자동 확장·예비 DB가 없는 것과 IDC ↔ AWS 연결 지연
+  'onprem-server': { capacity: 100, latency: 30 },   // = EC2 보통 (가정)
+  'onprem-db':     { capacity: 300, latency: 10 },   // = RDS 보통 (가정)
+  cgw: { capacity: null, latency: 1 },                // 사내 라우터
+  vgw: { capacity: null, latency: 0 },                // 연결 지연은 고객 게이트웨이—VGW 선 종류로 (PERF_LINK_LATENCY)
 };
+// IDC ↔ AWS 연결 지연(ms, 가정): VPN은 인터넷을 거쳐 더 느리고, Direct Connect는 전용선이라 빠르고 일정하다 (근거 HY-08은 "더 일정"까지, 숫자는 가정)
+const PERF_LINK_LATENCY = { vpn: 20, dx: 5 };
 
 // ----- 46번: 간단한 설정값 (가정) -----
 // 박스 크기: 처리량(capacity)에 곱하는 배수. 박스에 size가 없으면 'medium'(보통) = 지금까지의 값
@@ -39,8 +46,8 @@ const SIZE_KEYS = ['small', 'medium', 'large'];
 const SIZE_NAMES = { small: '작게', medium: '보통', large: '크게' };
 const SIZE_FACTOR = { small: 0.5, medium: 1, large: 2 };
 const SIZE_SETTINGS = {
-  app: { label: '서버 크기', unit: '요청/초', types: APP_TYPES, examples: { small: 't3.small', medium: 't3.medium', large: 't3.large' } },
-  db:  { label: 'DB 크기', unit: '쿼리/초', types: RDS_TYPES, examples: { small: 'db.t3.small', medium: 'db.t3.medium', large: 'db.t3.large' } },
+  app: { label: '서버 크기', unit: '요청/초', types: [...APP_TYPES, 'onprem-server'], examples: { small: 't3.small', medium: 't3.medium', large: 't3.large' } },
+  db:  { label: 'DB 크기', unit: '쿼리/초', types: [...RDS_TYPES, 'onprem-db'], examples: { small: 'db.t3.small', medium: 'db.t3.medium', large: 'db.t3.large' } },
 };
 // Auto Scaling 그룹 설정 범위. 그룹에 asgMin·asgMax·asgTarget이 없으면 기본(최소 = 박스 수, 최대 = 3배, 목표 50%)
 const ASG_LIMITS = { min: 20, max: 30, targetLow: 30, targetHigh: 90 };
@@ -51,14 +58,18 @@ const ASG_LIMITS = { min: 20, max: 30, targetLow: 30, targetHigh: 90 };
 //   Load Balancer: 연결된 앱 서버(EC2·컨테이너)에 고르게 (기본 라운드 로빈, ELB 문서)
 //   앱 서버: 요청 하나마다 RDS에 한 번 조회
 const PERF_ROUTES = {
-  user:       ['cloudfront', 'igw'],
+  user:       ['cloudfront', 'igw', 'onprem-server'],   // 48번: 옮기기 전 구성은 사용자 → 온프레미스 서버
   cloudfront: ['igw'],
   igw:        ['lb'],
   lb:         [APP_TYPES],
-  ec2:        ['rds'],
-  ecs:        ['rds'],
-  eks:        ['rds'],
-  fargate:    ['rds'],
+  ec2:        ['rds', 'vgw'],   // 48번: RDS가 없으면 VGW를 거쳐 IDC의 DB로
+  ecs:        ['rds', 'vgw'],
+  eks:        ['rds', 'vgw'],
+  fargate:    ['rds', 'vgw'],
+  // 48번: IDC. 온프레미스 서버 → 온프레미스 DB (옮기기 전), 고객 게이트웨이·VGW는 IDC와 AWS 사이를 잇는 길
+  'onprem-server': ['onprem-db', 'cgw'],
+  cgw:        ['onprem-db', 'vgw'],
+  vgw:        ['cgw', 'rds'],
 };
 
 // 옆길 (R6): 본 대상(키 종류)으로 갈 요청 중 일부를, 함께 연결된 다른 종류가 대신 받는다 (적힌 순서대로)

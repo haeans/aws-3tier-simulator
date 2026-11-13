@@ -23,7 +23,7 @@ function compareSummary(s, rps) {
     traffic: null, az: null,
     cost: costOf(s).total,   // 47번: 대략적인 월 비용 (달러)
   };
-  if (v.status === 'error' || v.mode === 'onprem' || !s.nodes.some(n => USER_TYPES.includes(n.type))) return out;   // 48번: 옮기기 전 구성은 아직 계산 안 함
+  if (v.status === 'error' || !s.nodes.some(n => USER_TYPES.includes(n.type))) return out;
   const t = compareRun(s, rps, null);
   out.traffic = { served: t.served, successRate: t.successRate, latency: t.latency };
   s.containers.filter(c => c.type === 'az').forEach(az => {
