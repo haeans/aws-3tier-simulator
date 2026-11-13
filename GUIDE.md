@@ -76,6 +76,13 @@
   RDS와 연결되지 않은 EC2는 빨간 점선 테두리 + "연결 끊김"
 - 숫자는 학습용 가정값 (EC2 1대 초당 100요청, RDS 초당 300요청). LB·IGW·CloudFront는 제한 없음
 
+### IDC(온프레미스)와 하이브리드 연결 (v1.65, 48번)
+- 팔레트 [영역]의 IDC (온프레미스): VPC 바깥(겹치지 않게). 안에 온프레미스 서버·DB·고객 게이트웨이. AWS 박스는 IDC 안 불가
+- VGW(가상 프라이빗 게이트웨이)는 VPC 경계에 붙는다. 고객 게이트웨이—VGW 선을 누르면 [VPN] / [Direct Connect] (기본 VPN)
+- VGW와 이은 VPC 안 서버·DB가 IDC와 사설망으로 통신한다는 뜻. IDC 박스를 AWS 박스와 바로 이으면 판정 20(오류)
+- 판정 21: VGW가 VPC에 안 붙음·고객 게이트웨이와 안 이어짐. 제안 21: IDC—AWS 연결이 하나뿐이면 이중화
+- 옮기기 전 구성(VPC 없이 IDC만): AWS 판정 대신 사용자 → 온프레미스 서버 → DB 흐름만 확인
+
 ### 비용 (v1.64, 47번)
 - 결과 패널 [비용] 탭: 대략적인 월 비용 합계와 항목별 내역 (서울 온디맨드 × 730시간, 2026-11-13 확인한 AWS 공식 가격). 항목마다 [가격 ↗] 링크
 - 사용량 요금(CloudFront·S3 등)·저장 공간·데이터 전송은 합계에 넣지 않고 따로 적는다. Auto Scaling은 최소 대수 기준
@@ -169,10 +176,11 @@ aws-3tier-simulator/
 │   ├─ rules/
 │   │   ├─ placement.js       PLACEMENT_RULES(서비스 위치), NESTING_RULES(영역 중첩)
 │   │   ├─ context.js         판정·제안·시뮬레이션 공용 조회 도구 (buildContext, azOf, asgMembersOf, linkedNodes 등). 구성 s를 인자로 받음 (R3)
-│   │   ├─ validation.js      VALIDATION_RULES(판정 19개), 검증 실행 validateArchitecture
+│   │   ├─ validation.js      VALIDATION_RULES(판정 21개, 20·21은 48번 IDC), 검증 실행 validateArchitecture
 │   │   ├─ suggestions.js     SUGGESTION_RULES(개선·제거 제안 20개)
 │   │   ├─ simulation.js      성능 시뮬레이션 계산 엔진 simulateTraffic (화면과 분리)
 │   │   ├─ cost.js            월 비용 costOf(구성)·nodeMonthlyCost(박스) (가격표 js/data/cost.js, 근거 criteria/cost.md)
+│   │   ├─ (validation.js에 48번 판정 20·21과 옮기기 전 구성 ONPREM_RULES·isOnpremOnly, suggestions.js에 제안 21)
 │   │   ├─ network.js         네트워크 ② 라우팅 테이블 networkRouteTable(서브넷)·보안 그룹 networkSecurityGroup(박스) 계산 (구성 s를 인자로)
 │   │   ├─ compare.js         구성 두 개 비교 compareConfigs(a, b, rps): 판정·트래픽·AZ 장애 요약(compareSummary)·박스 차이·제안 차이
 │   │   ├─ problems.js        문제 채점 gradeProblem(구성 s를 인자로): 요구 사항별 충족·없는 역할. 역할 조회 도구(problem…)
@@ -578,3 +586,14 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
   WAF는 웹 ACL 1개 + 규칙 1개, Client VPN은 서브넷 연결 1개, ElastiCache는 Redis cache.t3.medium 1노드, RDS는 MySQL
 - Auto Scaling 그룹은 최소 대수로 계산한다 (평소 상태. 시뮬레이션에서 늘어나는 대수는 시간마다 달라서)
 - 판정이 오류인 구성도 비용은 계산한다 (박스가 있으면 요금은 나오므로). 판정·제안은 비용을 보지 않는다
+
+### IDC(온프레미스)·하이브리드 연결 (48번, 2026-11-13, v1.65~)
+- 사용자 결정: IDC 영역 + 온프레미스 서버·DB + 연결까지 표현한다 (옮기기 전 구성도 그리고 계산해 49번 전후 비교로 잇기 위해). VPN·Direct Connect는 박스가 아니라 선 종류
+- 근거: criteria/hybrid.md (HY-01~10). 등급 A는 판정(20·21), C는 제안(21), 입력이 없는 항목(터널 2개 HY-03, CIDR 겹침 HY-10)은 설명만
+- IDC는 VPC와 같은 단계(rank 0) 영역이다: 서로 겹칠 수 없고 다른 영역 안에 넣을 수 없다. AZ·서브넷은 IDC 안에 둘 수 없다
+- 배치: 온프레미스 박스는 allowedZone 'idc'. 'any'·'endpoint' 박스도 IDC 안은 막는다 (AWS 서비스라서)
+- VPN·Direct Connect 선은 26번 선 종류 고르기(EDGE_CHOICES)를 쓴다. 화살표 없음(EDGE_NO_DIR): 사설망이라 양쪽에서 연결을 시작할 수 있어서
+- 옮기기 전 구성(isOnpremOnly: IDC가 있고 VPC가 없음)은 AWS 판정을 하지 않는다. 판정 기준(AWS 문서)은 AWS 구성에 대한 것이라서.
+  대신 이 도구의 흐름 확인(ONPREM_RULES P1: 사용자 → 온프레미스 서버 → DB)만 하고 칭찬·제안은 없다. validateArchitecture 결과의 mode가 'onprem'
+- IDC 안의 방화벽·로드 밸런서 같은 장비는 그리지 않는다 (옮기기 전 구성을 단순하게: 사용자 → 온프레미스 서버)
+- 48-1(v1.65)은 영역·박스·연결·판정까지. 성능 시뮬레이션·라우팅 테이블·보안 그룹·비용·예시는 48-2. 그전까지 옮기기 전 구성은 성능 탭·비교에서 계산하지 않는다

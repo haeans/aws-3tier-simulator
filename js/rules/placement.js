@@ -45,8 +45,8 @@ const PLACEMENT_RULES = {
   // VPC Endpoints: 게이트웨이 엔드포인트는 VPC 경계, 인터페이스 엔드포인트는 고른 서브넷마다 생긴다.
   // 문서는 서브넷 종류를 제한하지 않는다 (criteria/ops.md VPCE-03). 프라이빗 서브넷은 안내문에서만 권장
   endpoint: {
-    test: () => true,
-    message: () => '',
+    test: zone => zone !== 'idc',
+    message: name => `${eunNeun(name)} AWS 서비스라 IDC(온프레미스) 영역 안에 놓을 수 없어요.`,
   },
   private: {
     test: zone => zone === 'private',
@@ -66,14 +66,24 @@ const PLACEMENT_RULES = {
     test: zone => zone === 'db' || zone === 'private',
     message: name => `${eunNeun(name)} DB 서브넷이나 프라이빗 서브넷 안에만 놓을 수 있어요.`,
   },
+  // IDC 영역 안: 온프레미스 박스만 (48번). AWS 서비스는 IDC에 놓을 수 없다
+  idc: {
+    test: zone => zone === 'idc',
+    message: name => `${eunNeun(name)} IDC(온프레미스) 영역 안에 놓아주세요.`,
+  },
   any: {
-    test: () => true,
-    message: () => '',
+    test: zone => zone !== 'idc',
+    message: name => `${eunNeun(name)} AWS 서비스라 IDC(온프레미스) 영역 안에 놓을 수 없어요. 온프레미스 서버·DB를 쓰세요.`,
   },
 };
 
 // 영역 중첩 규칙: VPC > AZ > 서브넷 (parentType = 소속 영역 종류, 없으면 null)
 const NESTING_RULES = {
+  // IDC (48번): VPC처럼 다른 영역 밖에만
+  idc: {
+    test: parentType => parentType === null,
+    message: () => 'IDC(온프레미스)는 다른 영역 안에 놓을 수 없어요. VPC 바깥의 빈 곳에 놓아주세요.',
+  },
   vpc: {
     test: parentType => parentType === null,
     message: () => 'VPC는 다른 영역 안에 놓을 수 없어요. VPC 바깥의 빈 곳에 놓아주세요.',
@@ -82,6 +92,7 @@ const NESTING_RULES = {
     test: parentType => parentType === 'vpc',
     message: parentType => parentType === null
       ? 'AZ(가용 영역)는 VPC 안에 놓아야 해요.'
+      : parentType === 'idc' ? 'AZ(가용 영역)는 AWS의 영역이라 IDC 안에 놓을 수 없어요. VPC 안에 놓아주세요.'
       : 'AZ(가용 영역)는 서브넷이나 다른 AZ 안에 놓을 수 없어요. VPC 안의 빈 곳에 놓아주세요.',
   },
   // 근거: SRV-01 — 서브넷은 AZ 하나 안에만 만들 수 있다

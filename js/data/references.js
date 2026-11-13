@@ -20,6 +20,11 @@ const PILLARS = {
    설명 문구(SERVICE_DESC, SERVICE_GUIDE)는 이 문서들을 근거로 쓴다.
    ========================================================= */
 const SERVICE_DOCS = {
+  // 48번: IDC (근거 criteria/hybrid.md)
+  vgw:             'https://docs.aws.amazon.com/vpn/latest/s2svpn/how_it_works.html',
+  cgw:             'https://docs.aws.amazon.com/vpn/latest/s2svpn/how_it_works.html',
+  'onprem-server': 'https://docs.aws.amazon.com/whitepapers/latest/aws-vpc-connectivity-options/aws-site-to-site-vpn.html',
+  'onprem-db':     'https://docs.aws.amazon.com/whitepapers/latest/aws-vpc-connectivity-options/aws-site-to-site-vpn.html',
   // 사용자: AWS 서비스가 아니므로, 인터넷에서 VPC로 들어오는 길(인터넷 게이트웨이) 문서
   smartphone:     'https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html',
   tablet:         'https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html',

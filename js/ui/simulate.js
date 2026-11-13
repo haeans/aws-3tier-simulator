@@ -72,6 +72,10 @@ function renderSimPanel(head) {
     head.insertAdjacentHTML('beforeend', '<span class="msg">서비스를 먼저 배치해주세요.</span>');
     return;
   }
+  if (isOnpremOnly()) {   // 48번
+    head.insertAdjacentHTML('beforeend', '<span class="msg">IDC(온프레미스)만 있는 구성의 성능 계산은 아직 지원하지 않아요. VPC에 AWS 구성을 함께 그리면 계산해요.</span>');
+    return;
+  }
   if (validateArchitecture().status === 'error') {
     head.insertAdjacentHTML('beforeend', '<span class="msg">검증 오류가 있어 요청이 끝까지 가지 못해요. ' +
       '[검증 결과] 탭에서 오류를 먼저 고쳐주세요.</span>');

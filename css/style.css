@@ -15,6 +15,7 @@
   --edge: #5d6773;
   /* 영역 색상 */
   --vpc: #248814;
+  --idc: #6b5b4b;   /* 48번: IDC(온프레미스) */
   --az: #147eba;
   --pub-line: #7aa116;
   --pub-bg: #eef6e8;
@@ -182,6 +183,7 @@ body {
 .area-chip.area-private,
 .area-chip.area-db      { border: 1.5px dashed var(--pri-line); background: var(--pri-bg); color: var(--pri-text); }
 .area-chip.area-asg     { border: 2px dashed var(--asg); color: var(--asg); }
+.area-chip.area-idc     { border: 2px solid var(--idc); color: var(--idc); background: #f5f1ec; }
 
 /* ----- 중앙 캔버스 ----- */
 .stage { flex: 1; position: relative; min-width: 0; }
@@ -390,6 +392,7 @@ body {
   touch-action: none;
 }
 .area-vpc     { border: 2px solid var(--vpc); }
+.area-idc     { border: 2px solid var(--idc); background: rgba(107, 91, 75, .05); }
 .area-az      { border: 1.5px dashed var(--az); }
 .area-public  { border: 1.5px dashed var(--pub-line); background: var(--pub-bg); }
 .area-private,
@@ -429,6 +432,7 @@ body {
   cursor: help;   /* 이름표에 마우스를 올리면 설명 툴팁 */
 }
 .area-vpc .area-label     { color: var(--vpc); top: 0; left: 0; }
+.area-idc .area-label     { color: var(--idc); font-weight: 700; }
 .area-az .area-label      { color: var(--az); }
 .area-public .area-label  { color: var(--pub-text); }
 .area-private .area-label,
@@ -464,12 +468,17 @@ body {
 .edge.k-egress      { stroke: #0a8f6c; stroke-width: 2.4; }
 .edge.k-replication { stroke: #7b3fe4; stroke-width: 2.2; stroke-dasharray: 9 5; }
 .edge.k-relation    { stroke: #6b7785; stroke-width: 2.6; stroke-dasharray: 0.1 6; stroke-linecap: round; }
+/* 48번: IDC ↔ VPC 사설 연결. VPN = 갈색 긴 점선(인터넷 위 터널), Direct Connect = 굵은 갈색 실선(전용선) */
+.edge.k-vpn         { stroke: #8a5a2b; stroke-width: 2.6; stroke-dasharray: 12 5; }
+.edge.k-dx          { stroke: #8a5a2b; stroke-width: 4.5; }
 .edge.selected      { stroke: var(--select); }
 /* 설명 패널의 연결선 종류 고르기 (26번) */
 .ek-swatch { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid var(--edge); margin-right: 6px; vertical-align: 3px; }
 .ek-swatch.k-egress      { border-top: 3px solid #0a8f6c; }
 .ek-swatch.k-replication { border-top: 2.5px dashed #7b3fe4; }
 .ek-swatch.k-relation    { border-top: 3px dotted #6b7785; }
+.ek-swatch.k-vpn         { border-top: 3px dashed #8a5a2b; }
+.ek-swatch.k-dx          { border-top: 5px solid #8a5a2b; }
 .ek-list { display: grid; gap: 6px; margin-top: 4px; }
 .ek-opt { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 2px 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .ek-opt.on { border-color: var(--select); background: #f0f7fd; }
@@ -490,6 +499,8 @@ body {
 .edge-legend .k-egress b      { border-top: 3px solid #0a8f6c; }
 .edge-legend .k-replication b { border-top: 2px dashed #7b3fe4; }
 .edge-legend .k-relation b    { border-top: 3px dotted #6b7785; }
+.edge-legend .k-vpn b         { border-top: 3px dashed #8a5a2b; }
+.edge-legend .k-dx b          { border-top: 5px solid #8a5a2b; }
 .edge-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
 .edge-temp { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 /* 동적 흐름 점 (검증 후 표시) */

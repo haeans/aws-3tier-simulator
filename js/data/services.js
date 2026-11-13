@@ -17,11 +17,12 @@ const CATEGORIES = [
   { key: 'data',      label: '데이터',          color: '#2e73b8', bg: '#eaf2fb', fg: '#1d4f82' },
   { key: 'cicd',      label: 'CI/CD',           color: '#2e9e47', bg: '#ebf7ee', fg: '#1d6b30' },
   { key: 'ops',       label: '접근/운영',       color: '#d13212', bg: '#fdecea', fg: '#9b2410' },
+  { key: 'onprem',    label: 'IDC (온프레미스)', color: '#6b5b4b', bg: '#f5f1ec', fg: '#4a3d30' },   // 48번
 ];
 const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
 // 서비스 목록 (여기에 항목을 추가하면 팔레트에 자동 반영)
-// allowedZone: 'outside' | 'vpcEdge' | 'endpoint' | 'private' | 'db' | 'any'
+// allowedZone: 'outside' | 'vpcEdge' | 'endpoint' | 'private' | 'db' | 'idc' | 'any'
 // validated: true = 검증 대상 / false = 배치·연결만 가능
 const SERVICES = [
   // 사용자
@@ -37,6 +38,7 @@ const SERVICES = [
   { type: 'lb',             name: 'Load Balancer',    category: 'network',   allowedZone: 'vpcInner', validated: true  },
   { type: 'vpce',           name: 'VPC Endpoints',    category: 'network',   allowedZone: 'endpoint', validated: false },
   { type: 'clientvpn',      name: 'Client VPN',       category: 'network',   allowedZone: 'vpcEdge', validated: true  },
+  { type: 'vgw',            name: 'VGW',              category: 'network',   allowedZone: 'vpcEdge', validated: true  },   // 가상 프라이빗 게이트웨이 (48번)
   // 컴퓨팅
   { type: 'ec2',            name: 'EC2',              category: 'compute',   allowedZone: 'any',     validated: true  },
   // 컨테이너/도커
@@ -63,6 +65,10 @@ const SERVICES = [
   { type: 'iam',            name: 'IAM',              category: 'ops',       allowedZone: 'outside', validated: false },
   { type: 'cloudwatch',     name: 'CloudWatch',       category: 'ops',       allowedZone: 'outside', validated: false },
   { type: 'cloudformation', name: 'CloudFormation',   category: 'ops',       allowedZone: 'outside', validated: false },
+  // IDC (온프레미스, 48번): IDC 영역 안에만. AWS가 아닌 회사 데이터센터의 장비
+  { type: 'onprem-server',  name: '온프레미스 서버',  category: 'onprem',    allowedZone: 'idc',     validated: true  },
+  { type: 'onprem-db',      name: '온프레미스 DB',    category: 'onprem',    allowedZone: 'idc',     validated: true  },
+  { type: 'cgw',            name: '고객 게이트웨이',  category: 'onprem',    allowedZone: 'idc',     validated: true  },
 ];
 // 서비스별 색상은 카테고리 색을 그대로 사용
 SERVICES.forEach(s => { s.color = CAT_MAP[s.category].color; });
@@ -75,6 +81,8 @@ SERVICES.forEach(s => { s.color = CAT_MAP[s.category].color; });
 const USER_TYPES = ['smartphone', 'tablet', 'pc'];
 const APP_TYPES  = ['ec2', 'ecs', 'eks', 'fargate'];
 const RDS_TYPES  = ['rds', 'rds-replica', 'rds-standby'];
+// IDC(온프레미스) 박스 (48번). 고객 게이트웨이는 IDC와 AWS를 잇는 출입구라 따로 본다
+const ONPREM_TYPES = ['onprem-server', 'onprem-db'];
 
 // 서비스 설명 (툴팁에 표시)
 const SERVICE_DESC = {
@@ -110,11 +118,16 @@ const SERVICE_DESC = {
   iam:            '누가 로그인할 수 있고(인증) 어떤 AWS 리소스를 쓸 수 있는지(권한) 관리해요.',
   cloudwatch:     'AWS 리소스와 앱의 지표·로그를 모아 지켜보고, 기준을 넘으면 경보로 알려줘요.',
   cloudformation: '템플릿에 필요한 AWS 리소스를 적으면, 그대로 만들고 설정해줘요. 스택 단위로 한 번에 관리해요.',
+  vgw:            '가상 프라이빗 게이트웨이예요. VPC에 붙여서 Site-to-Site VPN이나 Direct Connect로 회사 데이터센터(IDC)와 사설망으로 이어요. VPC 하나에 하나만 붙어요.',
+  'onprem-server': '회사 데이터센터(IDC)에서 직접 운영하는 서버예요. AWS로 옮기기 전의 앱 서버를 나타내요.',
+  'onprem-db':     '회사 데이터센터(IDC)에서 직접 운영하는 데이터베이스예요. AWS로 옮기기 전의 DB를 나타내요.',
+  cgw:            '회사 데이터센터(IDC)의 라우터(고객 게이트웨이 장치)예요. AWS의 VGW와 VPN이나 Direct Connect로 이어져요.',
 };
 SERVICES.forEach(s => { s.desc = SERVICE_DESC[s.type] || ''; });
 
 // 검증 규칙상 권장 위치 (놓는 곳 안내에 함께 표시)
 const RECOMMENDED_ZONE = {
+  vgw: 'VPC 경계선', cgw: 'IDC 영역 안 (VPC 쪽 가장자리)',
   igw: 'VPC 경계선', nat: '퍼블릭 서브넷', lb: '두 AZ의 퍼블릭 서브넷 사이', ec2: '프라이빗 서브넷', ecs: '프라이빗 서브넷', eks: '프라이빗 서브넷', fargate: '프라이빗 서브넷',
   rds: 'DB 서브넷', 'rds-replica': 'DB 서브넷', 'rds-standby': 'DB 서브넷', elasticache: 'DB 서브넷',
 };
@@ -128,7 +141,8 @@ const ZONE_TEXT = {
   appSubnet: '프라이빗 서브넷 (퍼블릭 서브넷은 경고)',
   db:      'DB 서브넷만',
   dataSubnet: 'DB 서브넷 또는 프라이빗 서브넷',
-  any:     '위치 제한 없음',
+  idc:     'IDC(온프레미스) 영역 안',
+  any:     '위치 제한 없음 (IDC 영역 안은 불가)',
 };
 const SVC_MAP = Object.fromEntries(SERVICES.map(s => [s.type, s]));
 
@@ -142,11 +156,15 @@ const EDGE_KINDS = {
   egress:      { name: '서버가 시작한 통신', desc: '서버가 먼저 밖으로 여는 연결이에요. 밖에서는 이 길로 들어올 수 없어요.' },
   replication: { name: '복제·전달',          desc: 'AWS가 뒤에서 데이터를 옮겨요 (복제·로그·배포). 사용자 요청과는 상관없어요.' },
   relation:    { name: '설정 관계',          desc: '데이터가 오가지 않는 연결이에요. 붙이거나 권한·생성·주소 등록을 맡아요.' },
+  // 48번: IDC(고객 게이트웨이) — VGW 사이의 사설 연결. 근거 criteria/hybrid.md HY-01·03·06·08
+  vpn:         { name: 'Site-to-Site VPN',   hybrid: true, desc: '인터넷을 거치는 암호화(IPsec) 연결이에요. 터널 2개가 서로 다른 AZ에서 끝나요. 빨리 만들 수 있고 싸지만, 인터넷 상태에 따라 느려질 수 있어요.' },
+  dx:          { name: 'Direct Connect',     hybrid: true, desc: '인터넷을 거치지 않는 전용선 연결이에요. 대역폭이 크고 일정하지만, 기본으로 암호화되지 않고 회선을 놓는 데 시간이 걸려요.' },
 };
 const EDGE_SERVERS = ['ec2', 'ecs', 'eks', 'fargate'];   // 서버(앱이 도는 곳)
 // 위에서부터 처음 맞는 규칙을 쓴다. [앞 종류들, 뒤 종류들, 연결선 종류] — 화살표는 앞 → 뒤 (null = 아무 종류)
 // 표에 없는 짝은 요청(request). 잘못 이은 선(IGW—EC2 등)도 요청이 지나가므로 요청으로 두고 판정이 알린다
 const EDGE_RULES = [
+  [['cgw'], ['vgw'], 'vpn'],                                     // IDC ↔ VPC 사설 연결 (기본 VPN, 선을 골라 Direct Connect로, 48번)
   [['waf'], null, 'relation'],                                   // CloudFront·LB에 붙는 검사 규칙
   [['iam'], null, 'relation'],                                   // 권한
   [['cloudformation'], null, 'relation'],                        // 리소스 생성
@@ -172,11 +190,17 @@ const EDGE_CHOICES = [
     request: '사용자 요청을 처리하면서 읽고 써요. (예: 상품 이미지·주문 정보 읽기)',
     egress:  '사용자 요청과 상관없이 서버가 스스로 보내요. (예: 백업·배치 작업으로 올리기)',
   } },
+  { servers: ['cgw'], others: ['vgw'], kinds: {   // 48번: 화살표 없음 (양쪽 모두 연결을 시작할 수 있는 사설망)
+    vpn: '인터넷을 거쳐 암호화된 터널(2개)로 이어요. 빨리 만들 수 있고 싸요.',
+    dx:  '전용선으로 이어요. 대역폭이 크고 속도가 일정해요. 기본으로 암호화되지 않아요.',
+  } },
   { servers: EDGE_SERVERS, others: ['cloudwatch'], kinds: {
     replication: '기본 지표(CPU 사용률 등)는 AWS가 알아서 모아 보내요.',
     egress:      '서버 안의 CloudWatch 에이전트가 로그·추가 지표를 보내요. (프라이빗 서브넷이면 NAT나 VPC Endpoints가 필요해요)',
   } },
 ];
+// 화살표 없는 종류: 요청(흐름이 방향을 정함)·설정 관계·사설 연결(VPN·Direct Connect, 양쪽에서 시작)
+const EDGE_NO_DIR = ['request', 'relation', 'vpn', 'dx'];
 // 두 박스 종류로 바꿀 수 있는 종류 목록. 없으면 null. serverIsA: A 쪽이 서버인지 (화살표 방향용)
 function edgeChoices(typeA, typeB) {
   for (const c of EDGE_CHOICES) {
@@ -190,12 +214,12 @@ function edgeChoices(typeA, typeB) {
 function edgeInfo(typeA, typeB, chosen = null) {
   const choice = chosen ? edgeChoices(typeA, typeB) : null;
   if (choice && choice.kinds[chosen]) {
-    const one = chosen === 'request' || chosen === 'relation' ? 0 : 1;
+    const one = EDGE_NO_DIR.includes(chosen) ? 0 : 1;
     return { kind: chosen, dir: choice.serverIsA ? one : -one };
   }
   const hit = (list, t) => !list || list.includes(t);
   for (const [from, to, kind] of EDGE_RULES) {
-    const one = kind === 'relation' || kind === 'request' ? 0 : 1;
+    const one = EDGE_NO_DIR.includes(/** @type {string} */ (kind)) ? 0 : 1;
     if (hit(from, typeA) && hit(to, typeB)) return { kind, dir: one };
     if (hit(from, typeB) && hit(to, typeA)) return { kind, dir: -one };
   }
@@ -212,6 +236,7 @@ const AREAS = [
   { type: 'private', name: '프라이빗 서브넷', w: 220, h: 120, minW: 120, minH: 80,  rank: 2 },
   { type: 'db',      name: 'DB 서브넷',       w: 220, h: 120, minW: 120, minH: 80,  rank: 2 },
   { type: 'asg',     name: 'Auto Scaling 그룹', w: 480, h: 160, minW: 160, minH: 100, rank: 3, overlay: true },
+  { type: 'idc',     name: 'IDC (온프레미스)', w: 400, h: 300, minW: 200, minH: 140, rank: 0 },   // 48번: VPC와 같은 단계(서로 겹칠 수 없음)
 ];
 const AREA_MAP = Object.fromEntries(AREAS.map(a => [a.type, a]));
 
@@ -224,6 +249,7 @@ const AREA_DESC = {
   db:      { desc: '데이터베이스를 두는 프라이빗 서브넷이에요. 앱 서버와 다른 서브넷으로 나눠 보호해요. RDS는 두 AZ 이상의 서브넷이 필요해요.', zone: 'AZ 안' },
   asg:     { desc: 'EC2를 한 그룹으로 묶어 정한 수를 유지하고, 사용량에 따라 자동으로 늘리고 줄여요. 문제가 생긴 EC2는 새 EC2로 바꿔요. 두 AZ의 프라이빗 서브넷에 걸쳐 놓고 그 안에 EC2를 두세요.',
              zone: 'VPC 안 (AZ 경계를 넘어 걸쳐 놓을 수 있어요)' },
+  idc:     { desc: '회사가 직접 운영하는 데이터센터(온프레미스)예요. AWS로 옮기기 전의 서버·DB와, AWS와 잇는 고객 게이트웨이를 둬요.', zone: '다른 영역 바깥 (VPC와 겹치지 않게)' },
 };
 const SUBNET_TYPES = ['public', 'private', 'db'];
 

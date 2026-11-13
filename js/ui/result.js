@@ -11,6 +11,7 @@ const stateSig = () => JSON.stringify({
   edges: state.edges.map(ed => [ed.from, ed.to]),
 });
 const LEVEL_TEXT = { error: '오류', warn: '경고' };
+// 48번: 옮기기 전(온프레미스만) 구성은 renderResult에서 정상 문구를 따로 쓴다
 const STATUS_TEXT = {
   ok:    { label: '정상', desc: '3-Tier 아키텍처의 기본 흐름이 모두 갖춰졌어요!' },
   warn:  { label: '경고', desc: '동작은 하지만 권장 구성은 아니에요.' },
@@ -470,7 +471,9 @@ function renderResult() {
     head.insertAdjacentHTML('beforeend', `<span class="msg">${resultNote}</span>`);
     return;
   }
-  const st = STATUS_TEXT[validation.status];
+  const st = validation.mode === 'onprem' && validation.status === 'ok'
+    ? { label: '정상', desc: 'AWS로 옮기기 전(온프레미스) 구성이에요. VPC를 놓으면 AWS 판정이 시작돼요.' }   // 48번
+    : STATUS_TEXT[validation.status];
   const errors = validation.issues.filter(i => i.rule.level === 'error').length;
   const warns = validation.issues.length - errors;
   const counts = [];
@@ -488,7 +491,7 @@ function renderResult() {
       `<span><i style="background:${FLOW_COLOR.ok}"></i>정상</span>` +
       `<span><i style="background:${FLOW_COLOR.warn}"></i>병목(느림)</span>` +
       `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span>` +
-      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span>' +
+      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).filter(([, v]) => !v.hybrid || state.containers.some(c => c.type === 'idc')).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span>' +
       '<div id="flow-now" class="flow-now"></div>' +
       // 40번: 단계 해설 (지금 점이 닿는 박스가 하는 일) + 멈춤·이전·다음
       '<div class="flow-step"><span class="flow-ctl">' +

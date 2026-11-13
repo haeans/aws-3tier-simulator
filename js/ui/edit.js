@@ -23,7 +23,7 @@ function addNode(type, cx, cy, linkTo) {
 }
 
 // ----- VPC 경계선 스냅 (IGW 등) -----
-const EDGE_SNAP_TYPES = ['igw', 'vpce', 'clientvpn'];
+const EDGE_SNAP_TYPES = ['igw', 'vpce', 'clientvpn', 'vgw'];
 const EDGE_SNAP_DIST = NODE_W / 2;   // 박스 중심이 경계선에서 이 거리(px) 안이면 붙임 (박스 모서리가 선에 닿을 정도)
 
 // 경계선 근처면 박스 중심이 VPC 테두리 위에 오도록 좌표 보정. 붙였으면 true.

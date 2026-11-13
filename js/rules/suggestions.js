@@ -536,4 +536,27 @@ const SUGGESTION_RULES = [
       }];
     },
   },
+  {
+    // 근거: HY-07·HY-09 (등급 C, 48번) — Well-Architected REL02-BP02: 클라우드와 온프레미스 사이 연결은 이중화한다
+    id: 21, kind: 'improve', title: 'IDC 연결 이중화',
+    pillars: ['reliability'],
+    basis: 'IDC와 AWS를 잇는 연결이 하나뿐이면 그 회선이 끊길 때 둘 사이 통신이 모두 멈춰요. Direct Connect를 하나 더 두거나, Site-to-Site VPN을 백업으로 둬요.',
+    ref: 'https://docs.aws.amazon.com/wellarchitected/latest/reliability-pillar/rel_planning_network_topology_ha_conn_private_networks.html',
+    check(ctx) {
+      const links = ctx.s.edges.filter(ed => {
+        const a = ctx.findNode(ed.from), b = ctx.findNode(ed.to);
+        return a && b && ((a.type === 'cgw' && b.type === 'vgw') || (a.type === 'vgw' && b.type === 'cgw'));
+      });
+      if (links.length !== 1) return [];
+      const ed = links[0];
+      const kind = edgeInfo(ctx.findNode(ed.from).type, ctx.findNode(ed.to).type, ed.kind || null).kind;
+      return [{
+        nodeIds: [ed.from, ed.to],
+        reason: `IDC와 AWS를 잇는 연결이 ${EDGE_KINDS[kind].name} 하나뿐이에요. 이 회선이 끊기면 IDC와 VPC 사이 통신이 모두 멈춰요.`,
+        action: kind === 'dx'
+          ? '고객 게이트웨이와 VGW를 한 번 더 이어 Site-to-Site VPN 백업을 두거나(선을 눌러 종류 고르기), Direct Connect를 하나 더 두세요.'
+          : '고객 게이트웨이와 VGW를 한 번 더 이어 두 번째 연결을 두세요. (예: 주 회선 Direct Connect + 백업 VPN)',
+      }];
+    },
+  },
 ];

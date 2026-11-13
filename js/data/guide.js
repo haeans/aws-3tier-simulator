@@ -100,6 +100,45 @@ const SERVICE_GUIDE = {
     ],
     avoid: [],
   },
+  // ----- IDC (48번) -----
+  vgw: {
+    links: [
+      { to: ['cgw'], text: 'IDC의 고객 게이트웨이와 Site-to-Site VPN이나 Direct Connect로 이어요. 선을 누르면 종류를 고를 수 있어요.' },
+      { to: [...APP_TYPES, ...RDS_TYPES], text: '이어 두면 그 서버·DB가 IDC와 사설망으로 통신해요. (실제로는 라우팅 테이블에 IDC로 가는 경로가 들어가요)' },
+    ],
+    avoid: [
+      { to: [...USER_TYPES, 'igw'], text: 'VGW는 인터넷 입구가 아니에요. 인터넷 요청은 IGW로 받아요.' },
+    ],
+    note: 'VPC 경계선에 놓으면 붙어요. VPC 하나에 하나만 붙여요.',
+  },
+  cgw: {
+    links: [
+      { to: ['vgw'], text: 'AWS의 VGW와 VPN이나 Direct Connect로 이어요. 두 줄을 이으면 이중화(주 회선 + 백업)예요.' },
+      { to: ONPREM_TYPES, text: 'IDC 안의 서버·DB가 이 라우터를 거쳐 AWS와 통신해요.' },
+    ],
+    avoid: [
+      { to: [...APP_TYPES, ...RDS_TYPES, 'igw', 'nat', 'lb'], text: 'AWS의 서버·DB와 바로 잇지 않아요. 반드시 VGW를 거쳐요.' },
+    ],
+  },
+  'onprem-server': {
+    links: [
+      { to: USER_TYPES, text: '옮기기 전에는 사용자가 IDC의 서버로 바로 들어와요. (IDC의 방화벽·장비는 생략)' },
+      { to: ['onprem-db'], text: '서버가 IDC의 DB에 데이터를 읽고 써요.' },
+      { to: ['cgw'], text: 'AWS와 통신해야 하면 고객 게이트웨이를 거쳐요.' },
+    ],
+    avoid: [
+      { to: [...APP_TYPES, ...RDS_TYPES, 'lb', 'igw'], text: 'AWS의 박스와 바로 잇지 않아요. 고객 게이트웨이 → VPN·Direct Connect → VGW를 거쳐요.' },
+    ],
+  },
+  'onprem-db': {
+    links: [
+      { to: ['onprem-server'], text: 'IDC의 서버가 이 DB에 접속해요.' },
+      { to: ['cgw'], text: 'AWS의 서버가 이 DB를 써야 하면(옮기는 중) 고객 게이트웨이를 거쳐요.' },
+    ],
+    avoid: [
+      { to: [...APP_TYPES, ...RDS_TYPES], text: 'AWS의 박스와 바로 잇지 않아요. 고객 게이트웨이 → VGW를 거쳐요.' },
+    ],
+  },
   clientvpn: {
     links: [
       { to: ['dbadmin'], text: '관리자 PC에서 VPN 클라이언트로 암호화된 연결을 만들어 VPC에 들어오게 해요.' },
