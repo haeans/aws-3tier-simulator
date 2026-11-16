@@ -100,8 +100,33 @@ const EXAMPLE_MIGRATING = {
   ],
 };
 
+// 완전 서버리스 (50번): VPC 없이 사용자 → CloudFront → API Gateway → Lambda(VPC 밖) → DynamoDB. 입구마다 WAF(CloudFront용·API Gateway용), Route 53
+// 근거: criteria/serverless.md SV-01(Lambda 기본은 VPC 밖)·SV-04(프록시 통합)·SV-08(DynamoDB)·SV-10(WAF)
+const EXAMPLE_SERVERLESS = {
+  noVpc: true,
+  nodes: [
+    ['pc', 'pc', 100, 200], ['r53', 'route53', 100, 380], ['cf', 'cloudfront', 300, 200], ['waf', 'waf', 300, 40],
+    ['gw', 'apigw', 500, 200], ['waf2', 'waf', 500, 40],
+    ['fn', 'lambda', 700, 200], ['ddb', 'dynamodb', 900, 200],
+  ],
+  edges: [['pc', 'r53'], ['r53', 'cf'], ['pc', 'cf'], ['waf', 'cf'], ['cf', 'gw'], ['waf2', 'gw'], ['gw', 'fn'], ['fn', 'ddb']],
+};
+// 앱만 서버리스 (50번): 서버(EC2) 자리에 Lambda를 두 AZ의 프라이빗 서브넷에 연결하고, RDS Proxy를 거쳐 RDS로
+// 근거: SV-01·02(VPC 연결은 프라이빗 서브넷), SV-03(여러 AZ), SV-07(RDS Proxy)
+const EXAMPLE_SERVERLESS_VPC = {
+  nodes: [
+    ['pc', 'pc', -180, 0], ['gw', 'apigw', -180, 350],
+    ['fna', 'lambda', 260, 350], ['fnb', 'lambda', 740, 350],
+    ['rds', 'rds', 180, 510], ['proxy', 'rdsproxy', 400, 510], ['sb', 'rds-standby', 740, 510],
+  ],
+  edges: [
+    ['pc', 'gw'], ['gw', 'fna'], ['gw', 'fnb'], ['fna', 'proxy'], ['fnb', 'proxy'], ['proxy', 'rds'], ['rds', 'sb'],
+  ],
+};
+
 // 예시 key → 구성 데이터 ("고쳐 보세요"는 기본 3-Tier에 실수를 더해 쓴다)
-const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC, onprem: EXAMPLE_ONPREM, hybrid: EXAMPLE_HYBRID, migrating: EXAMPLE_MIGRATING };
+const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC, onprem: EXAMPLE_ONPREM, hybrid: EXAMPLE_HYBRID, migrating: EXAMPLE_MIGRATING,
+  serverless: EXAMPLE_SERVERLESS, 'serverless-vpc': EXAMPLE_SERVERLESS_VPC };
 
 // "고쳐 보세요": 기본 3-Tier에 흔한 실수 2개를 랜덤으로 넣는다.
 // rule: 그 실수를 잡는 판정 근거(criteria ID). 테스트는 실수마다 판정 문제(오류·경고)가 새로 생기는지 확인한다
@@ -130,6 +155,10 @@ const EXAMPLES = [
     toast: '예시 "하이브리드"를 불러왔어요. 고객 게이트웨이—VGW 선 두 줄(Direct Connect + VPN 백업)을 눌러 보세요.' },
   { key: 'migrating', name: '예시: 옮기는 중 (MGN·DMS)', desc: 'IDC의 서버·DB를 MGN·DMS로 AWS에 복제하는 중이에요',
     toast: '예시 "옮기는 중"을 불러왔어요. 보라 점선이 복제 흐름이에요 (서버 → MGN → EC2, DB → DMS → RDS).' },
+  { key: 'serverless', name: '예시: 완전 서버리스 (Lambda + DynamoDB)', desc: '서버도 VPC도 없이 API Gateway·Lambda·DynamoDB로 만들었어요',
+    toast: '예시 "완전 서버리스"를 불러왔어요. [성능 시뮬레이션]에서 트래픽을 올려도 서버가 넘치지 않는지 확인해 보세요.' },
+  { key: 'serverless-vpc', name: '예시: 앱만 서버리스 (Lambda + RDS)', desc: '서버 자리에 Lambda를 두고, RDS Proxy를 거쳐 RDS를 써요',
+    toast: '예시 "앱만 서버리스"를 불러왔어요. [성능 시뮬레이션]에서 AZ에 장애를 넣어 Lambda가 어떻게 버티는지 보세요.' },
   { key: 'fix', name: '예시: 고쳐 보세요', desc: '흔한 실수 2개가 숨어 있어요 (매번 달라져요)',
     toast: '문제 2개가 숨어 있어요. [검증하기]로 찾아서 고쳐 보세요.' },
 ];

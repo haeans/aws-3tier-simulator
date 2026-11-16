@@ -61,7 +61,9 @@ function setAzFault(f, azId, on) {
   if (f.downAzs.has(azId) === on) return;
   if (on) f.downAzs.add(azId); else f.downAzs.delete(azId);
   const az = findContainer(azId);
-  f.log.push({ t: simT, text: `${az ? az.label : 'AZ'} 전체 ${on ? '장애 (안의 앱 서버·DB·캐시가 모두 멈춤)' : '복구'}` });
+  // 50번: 그 AZ 서브넷에 연결한 Lambda는 다른 AZ 서브넷에서 바로 실행된다 (상태 확인을 기다리지 않음)
+  const lambda = on && state.nodes.some(n => n.type === 'lambda' && azOf(n)?.id === azId) ? ' · Lambda는 다른 AZ 서브넷에서 바로 실행돼요' : '';
+  f.log.push({ t: simT, text: `${az ? az.label : 'AZ'} 전체 ${on ? '장애 (안의 앱 서버·DB·캐시가 모두 멈춤)' : '복구'}${lambda}` });
 }
 const clockText = t => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 
@@ -108,8 +110,11 @@ function renderSimPanel(head) {
     '<div class="sim-bottleneck" id="sim-bottleneck"></div>' +
     '<div class="sim-assume"><b>박스 안 사용률</b> = 들어온 요청 ÷ 처리할 수 있는 양. 100%를 넘으면 넘친 만큼 실패하고, 박스 안 위쪽 빨간 배지에 초당 실패 수가 떠요.</div>' +
     '<details class="sim-assume"><summary>가정값과 근거 문서</summary>가정: ' +
-    Object.entries(PERF).filter(([, p]) => p.capacity).map(([t, p]) => `${SVC_MAP[t].name} 1대 초당 ${p.capacity}요청`).join(' · ') +
+    Object.entries(PERF).filter(([, p]) => p.capacity && !p.shared).map(([t, p]) => `${SVC_MAP[t].name} 1대 초당 ${p.capacity}요청`).join(' · ') +
     ' (서버·DB는 보통 크기 기준. 작게 ½배, 크게 2배)' +
+    // 50번: 서버리스는 계정 전체 한도 (문서 숫자). 박스가 여러 개면 나눠 가짐
+    ` · API Gateway·Lambda는 계정 전체 초당 ${PERF.apigw.capacity.toLocaleString()}요청 (박스가 여러 개면 나눠 가짐, ` +
+    `<a href="${PERF_DOCS.apigw}" target="_blank" rel="noopener">API Gateway 한도 ↗</a>, <a href="${PERF_DOCS.lambda}" target="_blank" rel="noopener">Lambda 동시 실행 ↗</a>)` +
     ' · Load Balancer·IGW·CloudFront는 AWS가 알아서 늘려서 제한 없음 ' +
     `(<a href="${PERF_DOCS.lb}" target="_blank" rel="noopener">ELB 문서 ↗</a>) · 그래프의 붉은 배경은 트래픽이 평소보다 많은 구간, 세로선은 사건<br>` +
     `장애 복구는 AWS 기본값: LB 상태 확인 30초마다·2번 실패하면 제외·5번 성공하면 다시 넣음 ` +
@@ -284,7 +289,8 @@ function simDiagnose(r, busiest, stuck, blocked) {
     const type = findNode(stuck[0][0]).type, name = SVC_MAP[type].name;
     const lost = stuck.reduce((sum, [, s]) => sum + s.stuck, 0);
     // 48번: IDC 쪽 길(VGW·고객 게이트웨이·온프레미스)은 캔버스에 그 박스가 있을 때만 안내한다 (일반 3-Tier에서 헷갈리지 않게)
-    const idcTypes = ['vgw', 'cgw', ...ONPREM_TYPES];
+    // 50번: 서버리스 박스(API Gateway·Lambda·RDS Proxy·DynamoDB)도 같은 방식
+    const idcTypes = ['vgw', 'cgw', ...ONPREM_TYPES, 'apigw', 'lambda', 'rdsproxy', 'dynamodb'];
     const need = (PERF_ROUTES[USER_TYPES.includes(type) ? 'user' : type] || []).flat()
       .filter(t => !idcTypes.includes(t) || state.nodes.some(n => n.type === t)).map(t => SVC_MAP[t].name).join('/');
     return { level: 'over', msg: `연결 끊김: ${name} → ${need} 연결이 없는 박스가 ${stuck.length}개 있어서, ${fmt(lost)}요청/초가 처리 도중 실패해요.`,
@@ -307,6 +313,9 @@ function simDiagnose(r, busiest, stuck, blocked) {
       : g.launching.length ? `Auto Scaling이 EC2를 늘리는 중이에요 (+${g.launching.length}대 준비 중)`
         : asgRunning(g) >= g.max ? '그룹이 최대 대수에 닿았어요.' + cdn
           : 'Auto Scaling이 1분 동안 지켜본 뒤 늘려요.';
+  } else if (RDS_TYPES.includes(type) && !linkedNodesOf(state, findNode(id), ...APP_TYPES).length && linkedNodesOf(state, findNode(id), 'rdsproxy', 'lambda').length) {
+    // 50번: 서버리스(Lambda → RDS Proxy → RDS). Lambda는 알아서 늘어나도 DB는 그대로라 DB가 먼저 넘친다. 캐시·복제본 옆길은 앱 서버에서만 계산하므로 DB 크기를 안내
+    fix = 'Lambda는 알아서 늘어나지만 DB는 그대로예요. RDS 박스를 누르고 설명 패널 "설정" 칸에서 DB 크기를 키우세요';
   } else if (RDS_TYPES.includes(type)) {
     const tips = [];
     if (!has('elasticache')) tips.push('ElastiCache로 자주 읽는 데이터를 캐싱하세요 (제안 1 DB 캐싱)');

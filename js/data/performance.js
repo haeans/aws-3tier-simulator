@@ -35,6 +35,13 @@ const PERF = {
   'onprem-db':     { capacity: 300, latency: 10 },   // = RDS 보통 (가정)
   cgw: { capacity: null, latency: 1 },                // 사내 라우터
   vgw: { capacity: null, latency: 0 },                // 연결 지연은 고객 게이트웨이—VGW 선 종류로 (PERF_LINK_LATENCY)
+  // 50번: 서버리스. 처리량은 AWS 문서의 계정 기본 한도(리전마다), 지연은 가정
+  //   shared: 계정 전체 한도 → 같은 종류의 살아 있는 박스들이 나눠 가진다 (박스를 더 그려도 한도는 늘지 않음)
+  //   instantFailover: AZ 장애로 멈춘 박스는 상태 확인을 기다리지 않고 바로 빼고 다른 박스로 (Lambda가 다른 AZ 서브넷에서 실행)
+  apigw:    { capacity: 10000, latency: 10, shared: true },                          // SV-09: 초당 10,000요청
+  lambda:   { capacity: 10000, latency: 30, shared: true, instantFailover: true },   // SV-06: 동시 실행 1,000 × 10 = 초당 10,000요청. 콜드 스타트는 넣지 않음
+  rdsproxy: { capacity: null, latency: 2 },    // 연결을 모아 쓰는 관리형 (SV-07)
+  // DynamoDB는 넣지 않는다: 온디맨드로 알아서 늘어나는 끝 박스라 (SV-08) 지연 0으로 보고, 기존 3-Tier 계산 결과도 그대로 둔다
 };
 // IDC ↔ AWS 연결 지연(ms, 가정): VPN은 인터넷을 거쳐 더 느리고, Direct Connect는 전용선이라 빠르고 일정하다 (근거 HY-08은 "더 일정"까지, 숫자는 가정)
 const PERF_LINK_LATENCY = { vpn: 20, dx: 5 };
@@ -58,8 +65,8 @@ const ASG_LIMITS = { min: 20, max: 30, targetLow: 30, targetHigh: 90 };
 //   Load Balancer: 연결된 앱 서버(EC2·컨테이너)에 고르게 (기본 라운드 로빈, ELB 문서)
 //   앱 서버: 요청 하나마다 RDS에 한 번 조회
 const PERF_ROUTES = {
-  user:       ['cloudfront', 'igw', 'onprem-server'],   // 48번: 옮기기 전 구성은 사용자 → 온프레미스 서버
-  cloudfront: ['igw'],
+  user:       ['cloudfront', 'igw', 'apigw', 'onprem-server'],   // 48번: 옮기기 전 구성은 사용자 → 온프레미스 서버, 50번: 서버리스는 API Gateway로
+  cloudfront: ['igw', 'apigw'],
   igw:        ['lb'],
   lb:         [APP_TYPES],
   ec2:        ['rds', 'vgw'],   // 48번: RDS가 없으면 VGW를 거쳐 IDC의 DB로
@@ -70,6 +77,10 @@ const PERF_ROUTES = {
   'onprem-server': ['onprem-db', 'cgw'],
   cgw:        ['onprem-db', 'vgw'],
   vgw:        ['cgw', 'rds'],
+  // 50번: 서버리스. API Gateway → Lambda(프록시 통합, SV-04) → RDS Proxy → RDS, 또는 DynamoDB
+  apigw:      ['lambda'],
+  lambda:     ['rdsproxy', 'rds', 'dynamodb'],
+  rdsproxy:   ['rds'],
 };
 
 // 옆길 (R6): 본 대상(키 종류)으로 갈 요청 중 일부를, 함께 연결된 다른 종류가 대신 받는다 (적힌 순서대로)
@@ -84,7 +95,7 @@ const PERF_SIDE_ROUTES = {
 };
 
 // 공격을 막는 박스 (R6): 요청 경로의 이 종류 박스에 붙어 있으면 공격(봇) 요청을 그 앞에서 막는다
-const PERF_GUARDS = { waf: ['cloudfront', 'lb'] };
+const PERF_GUARDS = { waf: ['cloudfront', 'lb', 'apigw'] };   // 50번: API Gateway(REST API)에 붙인 WAF도 (SV-10)
 
 // 요청이 지나가는 길이 아닌 박스 (R6): 주소 알려 주기(Route 53)·검사 규칙(WAF)은 요청을 넘기지 않는다
 const PERF_OFF_PATH = ['route53', 'waf'];
@@ -100,6 +111,8 @@ const PERF_DOCS = {
   waf:      'https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based.html',
   lb:  'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
   igw: 'https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html',
+  lambda: 'https://docs.aws.amazon.com/lambda/latest/dg/lambda-concurrency.html',     // 50번 SV-06
+  apigw:  'https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html',  // 50번 SV-09
 };
 
 // 사용률 단계: 80% 이상 바쁨(노랑), 100% 이상 넘침(빨강, 넘친 요청은 실패)

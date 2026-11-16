@@ -13,6 +13,18 @@
 - 버전: 기능이 늘면 가운데 숫자(1.6 → 1.7), 버그만 고치면 끝 숫자(1.7 → 1.7.1)
 - package.json의 version도 같은 번호로 맞춘다.
 
+[1.69.0] 2026-11-16  마이그레이션 ③-2: 서버리스 성능·비용·예시 (50번, 50-2)
+  추가: 성능 시뮬레이션 — 사용자(또는 CloudFront) → API Gateway → Lambda → RDS Proxy → RDS, 또는 Lambda → DynamoDB
+        API Gateway·Lambda는 계정 전체 초당 10,000요청 (문서 숫자, SV-06·09). 같은 종류 박스가 여럿이면 살아 있는 박스 수로 나눠 가짐
+        지연(가정): API Gateway 10ms, Lambda 30ms(콜드 스타트 없음), RDS Proxy 2ms. DynamoDB는 끝 박스(지연 0)
+  추가: AZ 장애 — 그 AZ 서브넷에 연결한 Lambda만 멈추고, API Gateway는 상태 확인을 기다리지 않고 다른 AZ의 Lambda로 바로 보냄. VPC 밖 Lambda는 영향 없음, Lambda 박스만 따로 고장 내지는 않음
+  추가: 비용 — RDS Proxy (이어진 RDS의 vCPU 2개 × $0.018/시간, C17). API Gateway·Lambda는 "사용량 요금(별도)" 목록에
+  추가: 예시 "완전 서버리스 (Lambda + DynamoDB)"(VPC 없음, 정상·제안 0개), "앱만 서버리스 (Lambda + RDS)"(두 AZ 프라이빗 서브넷 → RDS Proxy → RDS, 정상)
+  수정: 제안 13 [잘못된 WAF 연결]이 API Gateway(REST API)에 붙인 WAF를 잘못으로 보던 것 (SV-10). CloudFront용 WAF를 API Gateway에 함께 붙이면 "따로 두세요"
+  변경: API Gateway에 붙인 WAF도 성능 시뮬레이션의 공격 요청을 막음
+  변경: 서버리스(Lambda → RDS Proxy → RDS)에서 RDS가 넘치면 병목 안내가 "DB 크기를 키우세요"로 (캐시·복제본 안내는 앱 서버 구성에만)
+  비고: 서버리스 박스가 없는 구성의 판정·제안·시뮬레이션 결과(기준선)는 그대로
+
 [1.68.0] 2026-11-13  마이그레이션 ③-1: 서버리스 박스·판정 (50번, 50-1)
   추가: 팔레트 [서버리스] 묶음 — API Gateway(VPC 밖), Lambda(VPC 밖 또는 프라이빗 서브넷, 퍼블릭은 막음), RDS Proxy(DB·프라이빗 서브넷)
   변경: 판정 1 [진입 경로]·3 [흐름 연결] — LB 없이 사용자(또는 CloudFront) → API Gateway → Lambda 입구가 있으면 IGW·LB를 요구하지 않음 (SV-04)
