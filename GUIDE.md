@@ -90,6 +90,9 @@
 - 팔레트 [서버리스]: API Gateway(VPC 밖), Lambda(VPC 밖 또는 프라이빗 서브넷), RDS Proxy(DB·프라이빗 서브넷)
 - 완전 서버리스(사용자 → API Gateway → Lambda → DynamoDB)와 앱만 서버리스(Lambda가 프라이빗 서브넷 → RDS Proxy → RDS)를 모두 정상으로 판정
 - 판정 24: API Gateway에 Lambda 없음 / VPC 밖 Lambda → RDS / VPC 안 Lambda → DynamoDB·S3에 길 없음. 제안 23(Lambda 여러 AZ)·24(RDS Proxy)
+- (v1.69) 성능: API Gateway·Lambda는 계정 전체 초당 10,000요청을 박스끼리 나눠 가짐. 앱만 서버리스는 트래픽을 올리면 Lambda보다 RDS가 먼저 넘친다
+- (v1.69) AZ 장애: 그 AZ 서브넷의 Lambda만 멈추고 API Gateway가 다른 AZ의 Lambda로 바로 보냄 (LB처럼 30초 상태 확인을 기다리지 않음)
+- (v1.69) 비용: RDS Proxy(DB vCPU당 시간 요금). API Gateway·Lambda는 사용량 요금(별도). 예시 "완전 서버리스"·"앱만 서버리스"
 
 ### 마이그레이션: MGN·DMS (v1.67, 49번)
 - 팔레트 [마이그레이션]: MGN 복제 서버(스테이징 서브넷 = 프라이빗·퍼블릭), DMS 복제 인스턴스(DB·프라이빗 서브넷)
@@ -182,7 +185,7 @@ aws-3tier-simulator/
 │   │   ├─ references.js      출처·근거 (PILLARS: Well-Architected 기준, SERVICE_DOCS: 서비스별 공식 문서)
 │   │   ├─ performance.js     성능 시뮬레이션 가정값 (PERF: 용량·지연·엣지 응답, PERF_ROUTES: 요청을 넘기는 방식, PERF_SIDE_ROUTES: 옆길(캐시·Replica), PERF_GUARDS·PERF_OFF_PATH, 근거 문서)
 │   │   ├─ cost.js            월 비용 가격표 (COST_PRICE: 서울 온디맨드 시간·월 요금, 사용량 요금·무료 목록. 근거 criteria/cost.md)
-│   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA·EXAMPLE_CONTAINER, 고쳐 보세요용 EXAMPLE_MISTAKES)
+│   │   ├─ examples.js        예시 구성 (EXAMPLES 메뉴 목록, EXAMPLE_BASIC·EXAMPLE_HA·EXAMPLE_CONTAINER, 하이브리드·마이그레이션·서버리스(EXAMPLE_SERVERLESS·EXAMPLE_SERVERLESS_VPC), 고쳐 보세요용 EXAMPLE_MISTAKES)
 │   │   ├─ flow-steps.js      흐름 단계 해설 문구 (FLOW_STEP_TEXT: 박스 종류·구간 성격별 한 줄 + 네트워크 한 줄 + 근거 문서)
 │   │   ├─ problems.js        면접식 설계 문제 (PROBLEMS: 상황·요구 사항(역할 목록)·모범 답안·설계 이유, PROBLEM_ROLES: 역할(이름·이유·조건))
 │   │   └─ missions.js        단계별 미션 (MISSIONS: 종류·제목·설명·시작 구성·목표(문구·힌트·조건)·완료 문구, MISSION_KINDS: 만들기·고치기·개선)
@@ -634,3 +637,6 @@ index.html 아래쪽의 `<script>` 순서대로 읽는다. (data → model → r
 - Lambda 박스 하나 = 한 AZ의 서브넷에 연결된 함수 (실제는 함수 하나에 여러 서브넷). 여러 AZ는 박스를 AZ마다 두어 표현 (제안 23)
 - RDS Proxy는 박스로 넣었다 (직접 정함): 제안 24(SV-07)를 따를 수 있게
 - 칭찬 바로잡기: 판정 1 칭찬은 LB가 있을 때만, 판정 7 칭찬은 앱 서버와 RDS가 있을 때만 (서버리스·하이브리드에서 없는 것을 칭찬하던 것)
+- 50-2 사용자 결정 (2026-11-16): 처리량은 계정 전체 한도를 나눠 가짐(PERF.shared), AZ 장애 때 VPC 안 Lambda는 즉시 이어받음(PERF.instantFailover, FAULT_AZ_ONLY), Lambda·API Gateway 비용은 사용량 요금(별도)
+- 직접 정한 것 (50-2): 지연 가정값(API Gateway 10ms·Lambda 30ms·RDS Proxy 2ms), 콜드 스타트 제외, DynamoDB는 PERF에 넣지 않음(끝 박스라 기존 3-Tier 기준선을 그대로 두려고), RDS Proxy는 처리량 제한 없음(DB 처리량을 늘려 주지는 않음)
+- 제안 13 [잘못된 WAF 연결]이 API Gateway를 입구로 받도록 고침 (50-1에서 제안 9만 넓히고 13을 빠뜨렸던 것, SV-10)

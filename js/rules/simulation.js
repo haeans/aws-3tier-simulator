@@ -78,7 +78,7 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     const amount = load.get(id) || 0;
     const perf = PERF[n.type];
     const count = countOf(id);
-    const capacity = perf && perf.capacity !== null ? perfCapacity(n) * count : null;   // 46번: 박스 크기 반영
+    const capacity = perf && perf.capacity !== null ? perfCapacity(n, s, F.down) * count : null;   // 46번: 박스 크기 반영, 50번: 계정 한도는 나눠 가짐
     // 멈췄거나 장애 조치 중이거나 서버가 0대: 들어온 요청이 모두 실패
     const blocked = F.down.has(id) || F.dbBlocked.has(id) || count === 0;
     const done = blocked ? 0 : capacity === null ? amount : Math.min(amount, capacity);
@@ -95,7 +95,8 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     const nextType = (route || []).find(t => farther.some(m => isType(m, t)));
     let next = nextType ? farther.filter(m => isType(m, nextType)) : [];
     // LB는 상태 확인으로 뺀 EC2에는 보내지 않음. 모두 빠졌으면 모두에게 보냄 (fail open, ALB 문서)
-    const healthy = next.filter(m => !F.excluded.has(m.id) && countOf(m.id) > 0);
+    // 50번: 바로 넘어가는 박스(Lambda, PERF.instantFailover)는 멈춘 박스를 기다리지 않고 바로 뺀다
+    const healthy = next.filter(m => !F.excluded.has(m.id) && countOf(m.id) > 0 && !(PERF[m.type]?.instantFailover && F.down.has(m.id)));
     if (healthy.length) next = healthy;
     if (blocked) return;
     if (!next.length) {
@@ -167,6 +168,8 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
    ========================================================= */
 const HEALTH_INTERVAL = 30, UNHEALTHY_COUNT = 2, HEALTHY_COUNT = 5, FAILOVER_TIME = 90;
 const FAULT_TYPES = [...APP_TYPES, ...RDS_TYPES, 'elasticache', ...ONPREM_TYPES];   // 장애를 넣을 수 있는 박스 (ElastiCache는 24번, 온프레미스는 48번: 예비가 없어 멈추면 그대로 실패)
+// AZ 장애 때만 멈추는 박스 (50번): VPC에 연결한 Lambda는 그 AZ 서브넷에서 실행되지 못한다. 박스만 따로 고장 내지는 않음 (관리형)
+const FAULT_AZ_ONLY = ['lambda'];
 
 // 사건 기록용 이름: "EC2(가용 영역 A)"
 function simNodeName(id, s = state) {
@@ -187,9 +190,10 @@ function createFaults(s = state) {
 function faultDownNodes(f) {
   const set = new Set();
   f.s.nodes.forEach(n => {
-    if (!FAULT_TYPES.includes(n.type)) return;
+    const azOnly = FAULT_AZ_ONLY.includes(n.type);
+    if (!FAULT_TYPES.includes(n.type) && !azOnly) return;
     const az = azOf(n, f.s);
-    if (f.down.has(n.id) || (az && f.downAzs.has(az.id))) set.add(n.id);
+    if ((f.down.has(n.id) && !azOnly) || (az && f.downAzs.has(az.id))) set.add(n.id);
   });
   return set;
 }
@@ -294,9 +298,14 @@ function perfLatency(n, s = state) {
   return kinds.length ? Math.min(...kinds.map(k => PERF_LINK_LATENCY[k] || 0)) : 0;
 }
 // 박스 1대가 1초에 처리하는 양 (크기 반영). 제한 없는 박스면 null
-function perfCapacity(n) {
+// 50번: 계정 전체 한도(PERF.shared)는 구성 s에서 멈추지 않은(down에 없는) 같은 종류 박스 수로 나눈다
+function perfCapacity(n, s = state, down = null) {
   const p = PERF[n.type];
   if (!p || p.capacity === null) return null;
+  if (p.shared) {
+    const alive = s.nodes.filter(m => m.type === n.type && !(down && down.has(m.id))).length;
+    return p.capacity / Math.max(alive, 1);
+  }
   return p.capacity * (sizeGroupOf(n.type) ? SIZE_FACTOR[nodeSize(n)] : 1);
 }
 // 그룹이 처음 띄우는 박스별 대수: 박스마다 1대, 최소가 박스 수보다 크면 남는 대수를 박스에 돌아가며 (47번 비용도 이 대수를 쓴다)

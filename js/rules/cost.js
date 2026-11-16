@@ -23,6 +23,12 @@ function nodeMonthlyCost(n, s = state) {
       if (!src) return null;
       return { name: `MGN 복제 (원본 서버 ${src}대)`, monthly: h(P.mgn.hour * src), doc: P.mgn.doc };
     }
+    case 'rdsproxy': {   // C17: 이어진 RDS 본체마다 vCPU 수 × vCPU 시간 요금. 이어진 RDS가 없으면 계산 안 함
+      const dbs = linkedNodesOf(s, n, 'rds').length;
+      if (!dbs) return null;
+      const vcpu = dbs * P.rdsproxy.vcpu;
+      return { name: `RDS Proxy (DB vCPU ${vcpu}개)`, monthly: h(P.rdsproxy.vcpuHour * vcpu), doc: P.rdsproxy.doc };
+    }
     case 'dms': return { name: `DMS 복제 인스턴스 ${P.dms.label}`, monthly: h(P.dms.hour), doc: P.dms.doc };
     case 'vpce': {   // 이어진 인터페이스형 서비스마다 AZ 수만큼 (C6). S3·DynamoDB(게이트웨이형)는 무료
       const iface = [...new Set(linkedNodesOf(s, n, ...COST_VPCE_IFACE).map(x => x.type))].length;

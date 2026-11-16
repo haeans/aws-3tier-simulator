@@ -32,6 +32,8 @@ const COST_PRICE = {
   dms: { hour: 0.112, label: 'dms.t3.medium', doc: 'https://aws.amazon.com/dms/pricing/' },                         // C15 (Single-AZ)
   mgn: { hour: 0.042, label: '원본 서버 1대 복제', doc: 'https://aws.amazon.com/application-migration-service/pricing/' },   // C16 (서버마다 무료 복제 시간이 있음)
   vpn: { hour: 0.05, label: 'Site-to-Site VPN 연결', doc: 'https://aws.amazon.com/vpn/pricing/' },                 // C13
+  // 50번: RDS Proxy는 이어진 DB 인스턴스의 vCPU마다 시간 요금 (db.t3 small·medium·large는 모두 2 vCPU)
+  rdsproxy: { vcpuHour: 0.018, vcpu: 2, doc: 'https://aws.amazon.com/rds/proxy/pricing/' },   // C17
   dx:  { hour: 0.30, label: 'Direct Connect 1Gbps 전용 포트', doc: 'https://aws.amazon.com/directconnect/pricing/' },   // C14 (포트 속도는 가정)
 };
 const COST_VPCE_AZS = 2;                                           // 인터페이스 엔드포인트는 AZ마다 요금 (가정: 기본 틀의 AZ 2곳)
@@ -39,6 +41,6 @@ const COST_VPCE_IFACE = ['ecr', 'cloudwatch', 'sessionmanager'];   // 인터페�
 // 금액을 넣지 않는 것 (C12)
 const COST_FREE = ['igw', 'ecs'];
 const COST_ONPREM = ['onprem-server', 'onprem-db', 'cgw'];   // 48번: 회사 비용 (AWS 요금이 아님, 계산 안 함)
-const COST_USAGE = ['cloudfront', 's3', 'dynamodb', 'cloudwatch', 'cloudtrail', 'ecr', 'sessionmanager',
+const COST_USAGE = ['apigw', 'lambda', 'cloudfront', 's3', 'dynamodb', 'cloudwatch', 'cloudtrail', 'ecr', 'sessionmanager',
   'codecommit', 'codebuild', 'codepipeline', 'codedeploy'];
 const COST_EXTRA = '저장 공간(EBS·RDS)·데이터 전송·NAT와 Load Balancer의 처리량 요금·요청 수 요금·Direct Connect 위치까지의 회선 비용은 넣지 않았어요.';

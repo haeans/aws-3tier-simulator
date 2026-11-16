@@ -311,27 +311,27 @@ const SUGGESTION_RULES = [
     // 근거: WAF-01 (등급 C), WAF-02 (등급 A이나 WAF는 검증 대상이 아니라 제안으로 반영 — 사용자 결정 2026-10-27)
     id: 13, kind: 'remove', title: '잘못된 WAF 연결',
     pillars: [],
-    basis: 'WAF는 CloudFront나 Application Load Balancer에 붙이는 검사 규칙이에요. 입구 하나에는 WAF를 하나만 붙일 수 있고, 한 WAF를 CloudFront와 Load Balancer에 함께 붙일 수도 없어요.',
+    basis: 'WAF는 CloudFront·Application Load Balancer·API Gateway(REST API)에 붙이는 검사 규칙이에요. 입구 하나에는 WAF를 하나만 붙일 수 있고, CloudFront에 쓴 WAF를 다른 입구에 함께 붙일 수도 없어요.',
     ref: 'https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-associating-aws-resource.html',
     check(ctx) {
       const issues = [];
-      const FRONTS = ['cloudfront', 'lb'];
+      const FRONTS = ['cloudfront', 'lb', 'apigw'];   // 50번: API Gateway(REST API)에도 붙인다 (SV-10)
       ctx.ofType('waf').forEach(w => {
         // 붙일 수 없는 곳(EC2·DB·NAT 등)과 연결
         ctx.neighborsOf(w, ...SERVICES.map(v => v.type).filter(t => !FRONTS.includes(t))).forEach(m => issues.push({
           nodeIds: [w.id, m.id],
-          reason: `WAF — ${ctx.nameOf(m)} 연결: WAF는 ${ctx.nameOf(m)}에 붙일 수 없어요. CloudFront나 Load Balancer(ALB)에만 붙여요.`,
-          action: '이 연결을 지우고 WAF를 CloudFront나 Load Balancer와 연결하세요.',
+          reason: `WAF — ${ctx.nameOf(m)} 연결: WAF는 ${ctx.nameOf(m)}에 붙일 수 없어요. CloudFront·Load Balancer(ALB)·API Gateway(REST API)에만 붙여요.`,
+          action: '이 연결을 지우고 WAF를 CloudFront·Load Balancer·API Gateway와 연결하세요.',
         }));
-        // 한 WAF가 CloudFront와 Load Balancer에 함께 연결
+        // 한 WAF가 CloudFront와 다른 입구(Load Balancer·API Gateway)에 함께 연결
         const fronts = ctx.neighborsOf(w, ...FRONTS);
         // (요청 경로에 안 놓인 입구가 있으면 '길이 아니다' 제안(10)이 이미 알리므로 겹쳐 알리지 않는다)
         const reached = requestReach(ctx);
         if (fronts.every(f => reached.has(f.id)) &&
-            fronts.some(f => f.type === 'cloudfront') && fronts.some(f => f.type === 'lb')) issues.push({
+            fronts.some(f => f.type === 'cloudfront') && fronts.some(f => f.type !== 'cloudfront')) issues.push({
           nodeIds: [w.id, ...fronts.map(f => f.id)],
-          reason: 'WAF 하나가 CloudFront와 Load Balancer에 함께 연결돼 있어요. CloudFront에 쓴 WAF는 다른 종류의 입구에 함께 쓸 수 없어요.',
-          action: 'CloudFront용 WAF와 Load Balancer용 WAF를 따로 두세요.',
+          reason: `WAF 하나가 CloudFront와 ${[...new Set(fronts.filter(f => f.type !== 'cloudfront').map(ctx.nameOf))].join('·')}에 함께 연결돼 있어요. CloudFront에 쓴 WAF는 다른 종류의 입구에 함께 쓸 수 없어요.`,
+          action: `CloudFront용 WAF와 ${[...new Set(fronts.filter(f => f.type !== 'cloudfront').map(ctx.nameOf))].join('·')}용 WAF를 따로 두세요.`,
         });
       });
       // 입구 하나에 WAF가 둘 이상

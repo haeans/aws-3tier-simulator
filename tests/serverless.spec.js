@@ -94,3 +94,95 @@ test('판정 24: API Gateway에 Lambda가 없음 / VPC 밖 Lambda가 RDS와 이�
   v = await verdictOf(page);
   expect(v.msgs.join(' ')).toContain('VPC에 연결한 Lambda는 VPC 안에만 닿아요');
 });
+
+// ----- 50-2: 성능·비용·예시 -----
+test('예시 "완전 서버리스"는 VPC 없이 정상에 제안 0개, "앱만 서버리스"는 정상 (CloudFront·WAF 제안만 남음)', async ({ page }) => {
+  await openApp(page);
+  await page.click('#btn-load');
+  await page.click('#load-menu .load-item[data-key="serverless"]');
+  await expect(page.locator('#toast')).toContainText('완전 서버리스');
+  let v = await verdictOf(page);
+  expect(v.status).toBe('ok');
+  expect(v.sugs).toEqual([]);
+  expect(await page.evaluate(() => state.containers.length)).toBe(0);                    // VPC 없음
+  await page.click('#btn-load');
+  await page.click('#load-menu .load-item[data-key="serverless-vpc"]');
+  await expect(page.locator('#toast')).toContainText('앱만 서버리스');
+  v = await verdictOf(page);
+  expect(v.status).toBe('ok');
+  expect(v.issues).toEqual([]);
+  expect(v.sugs).toEqual([2, 9]);
+  expect(await page.evaluate(() => state.nodes.filter(n => n.type === 'lambda').map(n => azOf(n).label))).toEqual(['가용 영역 A', '가용 영역 B']);
+});
+
+test('성능: API Gateway·Lambda는 계정 전체 초당 10,000요청을 박스 수만큼 나눠 갖고, 앱만 서버리스는 RDS가 먼저 넘친다', async ({ page }) => {
+  await openApp(page);
+  const r = await page.evaluate(() => {
+    loadExample('serverless-vpc');
+    const of = (res, t) => [...res.nodes].filter(([id]) => findNode(id).type === t).map(([, x]) => x);
+    const low = simulateTraffic(200), high = simulateTraffic(1000);
+    return { cap: of(low, 'lambda').map(x => x.capacity), gw: of(low, 'apigw')[0].capacity, ok: low.successRate,
+      rdsUtil: of(high, 'rds')[0].util, lambdaUtil: Math.max(...of(high, 'lambda').map(x => x.util)), highOk: high.successRate };
+  });
+  expect(r.cap).toEqual([5000, 5000]);
+  expect(r.gw).toBe(10000);
+  expect(r.ok).toBe(1);
+  expect(r.rdsUtil).toBeGreaterThan(1);              // RDS 1대(초당 300)가 넘침
+  expect(r.lambdaUtil).toBeLessThan(0.2);            // Lambda는 여유
+  expect(r.highOk).toBeLessThan(1);
+  const full = await page.evaluate(() => { loadExample('serverless'); return simulateTraffic(12000).successRate; });
+  expect(full).toBe(1);                              // CloudFront가 절반을 응답 → API Gateway에 6,000만 닿아 한도 안
+});
+
+test('AZ 장애: 그 AZ 서브넷의 Lambda만 멈추고, API Gateway는 상태 확인을 기다리지 않고 다른 AZ의 Lambda로 바로 보낸다', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('serverless-vpc'));
+  await page.locator('#result .tab[data-tab="sim"]').click();
+  await page.locator('#sim-play').click();
+  await page.locator('#sim-rps').fill('100');
+  await expect(page.locator('details.sim-assume')).toContainText('API Gateway·Lambda는 계정 전체 초당 10,000요청');
+  await page.locator('#sim-fault').click();
+  const az = await page.evaluate(() => { const a = state.containers.filter(c => c.type === 'az')[1]; return worldToClient(a.x + a.width / 2, a.y + 12); });   // AZ B 위쪽 빈 곳
+  await page.mouse.click(az.x, az.y);
+  await expect(page.locator('#sim-log')).toContainText('가용 영역 B 전체 장애');
+  await expect(page.locator('#sim-log')).toContainText('Lambda는 다른 AZ 서브넷에서 바로 실행돼요');
+  const r = await page.evaluate(() => {
+    const [a, b] = state.nodes.filter(n => n.type === 'lambda');
+    return { ok: simResult.successRate, a: simResult.nodes.get(a.id).load, b: simResult.nodes.get(b.id).load, bDown: document.querySelector(`.node[data-id="${b.id}"]`)?.classList.contains('sim-down') };
+  });
+  expect(r.ok).toBe(1);                              // 30초 상태 확인 없이 바로 성공
+  expect(r.a).toBe(100);
+  expect(r.b).toBe(0);
+  expect(r.bDown).toBe(true);                        // 멈춘 Lambda(AZ B)는 회색
+  // VPC 밖 Lambda는 AZ와 상관없고, 박스만 따로 고장 낼 수도 없다
+  const outside = await page.evaluate(() => { const f = createFaults(); const l = state.nodes.find(n => n.type === 'lambda'); f.down.add(l.id); return faultDownNodes(f).size; });
+  expect(outside).toBe(0);
+});
+
+test('WAF: API Gateway에 붙인 WAF는 공격 요청을 막고, CloudFront와 API Gateway에 WAF 하나를 함께 붙이면 제안 13', async ({ page }) => {
+  await openApp(page);
+  const blocked = await page.evaluate(() => { loadExample('serverless'); return simulateTraffic(100, null, 300).attackBlocked; });
+  expect(blocked).toBe(true);
+  expect((await verdictOf(page)).sugs).not.toContain(13);
+  await page.evaluate(() => {   // CloudFront용 WAF를 지우고, API Gateway용 WAF를 CloudFront에도 잇기
+    const [w1, w2] = state.nodes.filter(n => n.type === 'waf');
+    state.nodes = state.nodes.filter(n => n !== w1);
+    state.edges = state.edges.filter(e => e.from !== w1.id && e.to !== w1.id);
+    state.edges.push({ id: newId('e'), from: w2.id, to: state.nodes.find(n => n.type === 'cloudfront').id, fromSide: null, toSide: null, mid: null });
+    render();
+  });
+  const v = await verdictOf(page);
+  expect(v.sugs).toContain(13);
+  expect(v.actions.find(a => a.includes('따로'))).toContain('CloudFront용 WAF와 API Gateway용 WAF를 따로 두세요');
+});
+
+test('비용: RDS Proxy는 이어진 DB vCPU(2개) × $0.018/시간, Lambda·API Gateway는 사용량 요금(별도)', async ({ page }) => {
+  await openApp(page);
+  const c = await page.evaluate(() => { loadExample('serverless-vpc'); return costOf(); });
+  const proxy = c.rows.find(r => r.name.startsWith('RDS Proxy'));
+  expect(proxy.name).toBe('RDS Proxy (DB vCPU 2개)');
+  expect(proxy.monthly).toBeCloseTo(0.018 * 2 * 730, 5);
+  expect(c.usage).toEqual(['API Gateway', 'Lambda']);
+  await page.locator('#result .tab[data-tab="cost"]').click();
+  await expect(page.locator('#result')).toContainText('RDS Proxy (DB vCPU 2개)');
+});

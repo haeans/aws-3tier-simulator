@@ -112,10 +112,16 @@
 - 앱: MGN 박스와 이은 원본 서버 1대마다 복제 시간 요금. 무료 시간은 빼지 않고 "처음 일정 기간 무료"라고만 적는다 (무료 시간 길이는 이번에 확인하지 않음)
 - 별도: 스테이징의 복제 서버(EC2)·디스크(EBS) 요금
 
+## C17. RDS Proxy (50번)
+- 값: $0.018 per hour per vCPU of DB instance running RDS Proxy (MySQL·PostgreSQL·MariaDB·Aurora 프로비저닝 모두 같은 값). Aurora Serverless v2는 ACU당 $0.025
+- 데이터: Price List AmazonRDS ap-northeast-2, APN2-RDS:ProxyUsage (발행 2026-11-13, 2026-11-16 확인)
+- 페이지: https://aws.amazon.com/rds/proxy/pricing/
+- 앱: RDS Proxy 박스와 이은 RDS 본체마다 vCPU 2개(db.t3 small·medium·large는 모두 2 vCPU) × 시간 요금. 이은 RDS가 없으면 계산하지 않음
+
 ## C12. 금액을 넣지 않는 것
 - 무료: 인터넷 게이트웨이·VPC·서브넷·라우팅 테이블·보안 그룹, 게이트웨이 VPC 엔드포인트(S3·DynamoDB), ECS 자체(실행 방식. 요금은 작업을 돌리는 EC2·Fargate에)
   - 페이지: https://aws.amazon.com/vpc/pricing/ , https://aws.amazon.com/ecs/pricing/
 - 회사 비용(AWS 요금이 아님): 온프레미스 서버·DB·고객 게이트웨이 장치 (48번)
 - 연결 요금에 함께 계산: VGW (고객 게이트웨이—VGW 선의 VPN·Direct Connect 요금으로만 계산하고 VGW 자체 금액은 따로 넣지 않음)
-- 사용량에 따라 요금이 붙거나 이번에 금액을 조사하지 않은 것: CloudFront·S3·DynamoDB·CloudWatch·CloudTrail·ECR·Session Manager·CodeCommit·CodeBuild·CodePipeline·CodeDeploy
+- 사용량에 따라 요금이 붙거나 이번에 금액을 조사하지 않은 것: API Gateway·Lambda(50번: 요청 수·실행 시간 요금, 사용자 결정)·CloudFront·S3·DynamoDB·CloudWatch·CloudTrail·ECR·Session Manager·CodeCommit·CodeBuild·CodePipeline·CodeDeploy
   - 앱은 "사용량에 따라 요금"으로만 표시한다 (요청 수·데이터 양을 입력받지 않으므로)
