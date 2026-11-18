@@ -18,13 +18,17 @@ function perfDistances(s = state) {
   s.edges.forEach(e => {
     if (!adj.has(e.from) || !adj.has(e.to)) return;
     if (PERF_OFF_PATH.includes(findNode(e.from, s).type) || PERF_OFF_PATH.includes(findNode(e.to, s).type)) return;
+    // 51번: 점프 서버의 관리 접속, 서버가 시작한 통신(서버 → NAT → IGW 등)은 사용자 요청이 지나는 길이 아님
+    //   (서버가 NAT를 거쳐 IGW와 이어지면 사용자와 가까운 박스로 잘못 세어, 웹 서버 → 앱 서버로 요청을 넘기지 못했음)
+    if (['admin', 'egress'].includes(edgeInfoIn(e, s).kind)) return;
     adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
   });
   const queue = s.nodes.filter(n => USER_TYPES.includes(n.type)).map(n => n.id);
   const dist = new Map(queue.map(id => [id, 0]));
   for (let i = 0; i < queue.length; i++) {
+    const from = findNode(queue[i], s);
     adj.get(queue[i]).forEach(nb => {
-      if (!dist.has(nb)) { dist.set(nb, dist.get(queue[i]) + 1); queue.push(nb); }
+      if (!dist.has(nb) && requestCanGo(from, findNode(nb, s), s)) { dist.set(nb, dist.get(queue[i]) + 1); queue.push(nb); }   // 51번: 앱 → 웹으로 되돌아가지 않음
     });
   }
   return { adj, dist };
@@ -89,8 +93,9 @@ function simulateTraffic(rps, faults = null, attack = 0, s = state) {
     if (perf || USER_TYPES.includes(n.type)) nodes.set(id, info);
 
     // 다음 박스: PERF_ROUTES의 앞 종류부터, 더 먼 쪽에 연결된 박스에 고르게
-    const route = PERF_ROUTES[USER_TYPES.includes(n.type) ? 'user' : n.type];
-    const farther = adj.get(id).map(x => findNode(x, s)).filter(m => dist.get(m.id) > dist.get(id));
+    // 51번: 웹 서버는 뒤의 앱 서버로 넘김 (앱 서버가 없으면 DB로)
+    const route = PERF_ROUTES[USER_TYPES.includes(n.type) ? 'user' : serverRoleOf(n, s) === 'web' ? 'ec2:web' : n.type];
+    const farther = adj.get(id).map(x => findNode(x, s)).filter(m => dist.get(m.id) > dist.get(id) && requestCanGo(n, m, s));
     const isType = (m, t) => Array.isArray(t) ? t.includes(m.type) : m.type === t;   // 칸이 배열이면 종류 묶음
     const nextType = (route || []).find(t => farther.some(m => isType(m, t)));
     let next = nextType ? farther.filter(m => isType(m, nextType)) : [];

@@ -14,7 +14,9 @@ const NET_PORT = {                     // 예시 (가정): 엔진·앱에 따라
   app: 'HTTP (예: 80)',
   db: 'DB 포트 (예: MySQL 3306)',
   cache: 'Redis (예: 6379)',
+  ssh: 'SSH 22',   // 51번: 점프 서버 관리 접속
 };
+const NET_ADMIN_IP = '203.0.113.10/32';   // 51번: 관리자 사무실 IP 예시 (가정, 문서용 예시 주소 대역)
 const NET_GATEWAY_EP = ['s3', 'dynamodb'];                         // 게이트웨이 엔드포인트: 라우팅 테이블에 경로가 생김 (F18)
 const NET_SG_APPS = ['ec2', 'eks', 'fargate'];                      // 요청을 받는 앱 서버 (ECS 박스는 실행 방식을 나타내는 설정 관계)
 const NET_SG_NOTES = [
@@ -100,8 +102,18 @@ function networkSecurityGroup(node, s = state) {
   if (node.type === 'lb') {
     if (ctx.neighborsOf(node, ...outside, 'cloudfront').length) fromInternet(NET_PORT.https, '');
     else notes.push('Load Balancer로 들어오는 연결이 아직 없어요. IGW와 이으면 인터넷에서 오는 HTTPS 규칙이 생겨요.');
+  } else if (isBastion(node, s)) {
+    // 51번: 점프 서버는 관리자 IP에서 오는 SSH만 (RL-05: Security Hub EC2.13 — 22번을 0.0.0.0/0에 열지 않음)
+    rules.push({ port: NET_PORT.ssh, source: `관리자 IP만 (예: ${NET_ADMIN_IP})`, warn: '' });
+    notes.push('SSH(22)를 인터넷 전체(0.0.0.0/0)에 열면 안 돼요. 관리자 IP만 허용해요. (Session Manager를 쓰면 이 서버도 필요 없어요)');
   } else if (NET_SG_APPS.includes(node.type)) {
     fromSg(NET_PORT.app, ctx.neighborsOf(node, 'lb'));
+    // 51번: 앱 서버는 웹 서버의 보안 그룹에서 오는 요청만 (RL-05), 점프 서버에서 오는 SSH
+    if (serverRoleOf(node, s) !== 'web') {
+      const webs = ctx.neighborsOf(node, ...ROLE_TYPES).filter(m => serverRoleOf(m, s) === 'web');
+      if (webs.length) rules.push({ port: NET_PORT.app, source: '웹 서버(EC2)의 보안 그룹', warn: '' });
+    }
+    if (ctx.bastions().some(b => linkedNodesOf(s, b, node.type).includes(node))) rules.push({ port: NET_PORT.ssh, source: '점프 서버의 보안 그룹', warn: '' });
     fromIdc(NET_PORT.app);
     if (ctx.neighborsOf(node, ...outside).length) fromInternet(NET_PORT.app, '인터넷에서 서버로 바로 들어오는 규칙이 생겨요. Load Balancer를 거치게 하세요.');
     if (!rules.length) notes.push('이 서버로 들어오는 연결이 아직 없어요.');

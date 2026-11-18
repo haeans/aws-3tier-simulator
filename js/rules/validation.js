@@ -227,6 +227,12 @@ const VALIDATION_RULES = [
           message: 'Load Balancer와 연결된 앱 서버가 한 AZ에만 있어요. Load Balancer는 여러 AZ에 걸쳐 쓰는 것이니, 다른 AZ의 앱 서버도 같은 Load Balancer와 연결해주세요.',
         });
       });
+      // 51번: 웹 서버가 따로 있으면, 그 뒤의 앱 서버도 서로 다른 AZ 2곳 이상 (웹 계층만 나눠 두면 앱 계층 한 곳의 장애로 멈춤)
+      const backs = ctx.ofType(...APP_TYPES).filter(n => ctx.roleOf(n) !== 'web' && ctx.neighborsOf(n, ...ROLE_TYPES).some(m => ctx.roleOf(m) === 'web'));
+      if (backs.length && new Set(backs.map(ctx.azOf).filter(Boolean)).size < 2) issues.push({
+        nodeIds: backs.map(n => n.id),
+        message: '웹 서버 뒤의 앱 서버가 한 AZ에만 있어요. 웹 서버만 두 AZ에 있어도 앱 서버의 AZ에 장애가 나면 서비스가 멈춰요. 다른 AZ에도 앱 서버를 두고 웹 서버와 이어주세요.',
+      });
       // RDS: RDS와 RDS Standby가 서로 다른 AZ
       const rdss = ctx.ofType('rds'), standbys = ctx.ofType('rds-standby');
       // 근거: DB-04 — RDS(본체)마다 서로 다른 AZ의 Standby와 1대1로 짝이 맞아야 한다 (Standby 하나로 RDS 둘을 덮지 않음)
@@ -304,7 +310,8 @@ const VALIDATION_RULES = [
     basis: '서버(EC2)는 프라이빗 서브넷에 두는 것이 안전해요. 퍼블릭 서브넷에 두면 공개 IP를 받아 인터넷에 드러날 수 있어요.',
     ref: 'https://docs.aws.amazon.com/vpc/latest/userguide/configure-subnets.html',
     check(ctx) {
-      return ctx.ofType('ec2').filter(n => ctx.zoneOf(n) === 'public').map(n => ({ nodeIds: [n.id],
+      // 51번: 점프 서버는 퍼블릭이 제자리(ofType이 뺌), 웹 서버는 제안 25가 알림 (RL-01: 문서끼리 달라 경고로 두지 않음)
+      return ctx.ofType('ec2').filter(n => ctx.zoneOf(n) === 'public' && ctx.roleOf(n) !== 'web').map(n => ({ nodeIds: [n.id],
         message: 'EC2가 퍼블릭 서브넷에 있어요. 인터넷에 드러날 수 있으니 프라이빗 서브넷에 두는 것이 안전해요. (관리용 접속이 목적이라면 Session Manager를 쓰세요.)' }));
     },
   },
@@ -537,6 +544,43 @@ const VALIDATION_RULES = [
           if (bare.length) issues.push({ nodeIds: [l.id, ...bare.map(n => n.id)],
             message: `VPC에 연결한 Lambda는 VPC 안에만 닿아요. ${[...new Set(bare.map(n => SVC_MAP[n.type].name))].join('·')}에 가려면 VPC Endpoints를 그 서비스와 잇거나, Lambda를 NAT와 이어주세요.` });
         }
+      });
+      return issues;
+    },
+  },
+  {
+    // 근거: RL-04 (등급 A, 51번) — 점프 서버는 퍼블릭 서브넷에 둔다. 프라이빗이면 밖에서 닿지 않아 관리 접속을 이어 줄 수 없다
+    id: 25, level: 'error', message: '점프 서버 위치',
+    pillars: ['security', 'operations'],
+    basis: '점프 서버(Bastion)는 관리자가 밖에서 들어와 프라이빗 서브넷의 서버로 건너가는 디딤돌이에요. 그래서 인터넷에서 닿는 퍼블릭 서브넷에 둬요.',
+    ref: 'https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/vpc-bastion-host.html',
+    check(ctx) {
+      return ctx.bastions().filter(b => ['private', 'db'].includes(ctx.zoneOf(b))).map(b => ({ nodeIds: [b.id],
+        message: '점프 서버가 프라이빗 서브넷에 있어요. 밖에서 닿을 수 없어서 관리 접속을 이어 줄 수 없어요. 퍼블릭 서브넷으로 옮기거나, 점프 서버 대신 Session Manager를 쓰세요.' }));
+    },
+  },
+  {
+    // 근거: RL-06 (등급 X, 51번) — 문서 근거가 아닌 학습용 설계 규칙 (사용자 결정 2026-11-18: 경고).
+    // 요청은 앞단 → 웹 서버 → 앱 서버 → DB 순서로만 간다 (ELB 문서는 이 방향만 설명, RL-02). 거꾸로 가는 선은 흐름 점도 그리지 않는다
+    id: 26, level: 'warn', message: '요청 방향',
+    pillars: ['reliability'],
+    basis: '요청은 앞단(Load Balancer) → 웹 서버 → 앱 서버 → DB 순서로 흘러요. 앱 서버에서 웹 서버로 되돌아가거나, 사용자 요청이 관리용 점프 서버를 지나면 역할이 섞여 흐름을 알기 어려워요. (AWS 문서의 금지 규칙이 아니라 이 도구의 학습용 규칙이에요)',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
+    check(ctx) {
+      const issues = [];
+      // 앞단과 이어지지 않은 웹 서버: 앱 서버에서 거꾸로 요청을 받는 모양
+      ctx.ofType(...ROLE_TYPES).filter(n => ctx.roleOf(n) === 'web' && !ctx.linkedNodes(n, ...ROLE_ENTRY_TYPES).length).forEach(n => {
+        const apps = ctx.neighborsOf(n, ...APP_TYPES).filter(m => ctx.roleOf(m) !== 'web');
+        issues.push({ nodeIds: [n.id, ...apps.map(m => m.id)],
+          message: apps.length
+            ? '웹 서버가 Load Balancer와 이어지지 않아서, 요청이 앱 서버에서 웹 서버로 되돌아가는 모양이에요. 웹 서버를 Load Balancer와 잇거나, 이 서버의 역할을 앱 서버로 바꾸세요.'
+            : '웹 서버로 들어오는 요청이 없어요. Load Balancer와 이어주세요.' });
+      });
+      // 사용자 요청이 들어오는 점프 서버
+      ctx.bastions().forEach(b => {
+        const fronts = ctx.linkedNodes(b, 'lb', 'cloudfront', 'apigw');
+        if (fronts.length) issues.push({ nodeIds: [b.id, ...fronts.map(f => f.id)],
+          message: `점프 서버가 ${[...new Set(fronts.map(f => SVC_MAP[f.type].name))].join('·')}와 이어져 사용자 요청을 받아요. 점프 서버는 관리 접속만 받아요. 이 연결을 지우거나 역할을 웹·앱 서버로 바꾸세요.` });
       });
       return issues;
     },

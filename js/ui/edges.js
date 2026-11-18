@@ -424,7 +424,7 @@ const pathD = pts =>pts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ')
 
 // 연결선 하나의 종류와 방향 (25번 자동 + 26번 사용자가 고른 종류 ed.kind)
 function edgeInfoOf(ed) {
-  return edgeInfo(findNode(ed.from).type, findNode(ed.to).type, ed.kind || null);
+  return edgeInfoIn(ed);   // 51번: 점프 서버 선은 관리 접속 (js/rules/context.js)
 }
 
 // 꺾이는 곳을 둥글게 그린 경로 (23번). 반지름은 앞뒤 선분 길이의 절반을 넘지 않게 줄인다 (짧은 꺾임도 모양 유지)

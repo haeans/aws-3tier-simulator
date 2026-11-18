@@ -90,6 +90,18 @@ SERVICES.forEach(s => { s.color = CAT_MAP[s.category].color; });
 const USER_TYPES = ['smartphone', 'tablet', 'pc'];
 const APP_TYPES  = ['ec2', 'ecs', 'eks', 'fargate'];
 const RDS_TYPES  = ['rds', 'rds-replica', 'rds-standby'];
+// 51번: EC2의 역할 (웹 서버·앱 서버·점프 서버). 박스 n.role에 저장, 없으면 자리·연결로 짐작 (serverRoleOf, js/rules/context.js)
+//   근거: criteria/roles.md RL-01(계층 나누기)·RL-04(점프 서버는 퍼블릭 서브넷)
+//   app: 기본. 요청을 받아 DB까지 처리 (웹·앱을 한 서버가 함께 맡는 지금까지의 EC2)
+//   web: 요청을 받아 뒤의 앱 서버로 넘김 / bastion: 관리자가 SSH로 프라이빗 서버에 들어갈 때 거치는 서버 (사용자 요청은 받지 않음)
+const SERVER_ROLES = {
+  app:     { name: '앱 서버',   tag: '앱',   desc: '요청을 받아 처리하고 DB를 써요. 웹 서버가 따로 없으면 웹 화면도 함께 만들어요.' },
+  web:     { name: '웹 서버',   tag: '웹',   desc: 'Load Balancer에서 요청을 받아 화면을 만들고, 일 처리는 뒤의 앱 서버에 맡겨요.' },
+  bastion: { name: '점프 서버', tag: '점프', desc: '관리자가 프라이빗 서브넷의 서버에 SSH로 들어갈 때 거치는 서버(Bastion)예요. 사용자 요청은 받지 않아요.' },
+};
+const ROLE_TYPES = ['ec2'];                        // 역할을 고를 수 있는 박스 종류
+const ROLE_ENTRY_TYPES = ['lb', 'cloudfront', 'igw', 'apigw', ...USER_TYPES];   // 요청이 들어오는 앞단 (웹 서버 짐작·거꾸로 가는 요청 판정)
+
 // IDC(온프레미스) 박스 (48번). 고객 게이트웨이는 IDC와 AWS를 잇는 출입구라 따로 본다
 const ONPREM_TYPES = ['onprem-server', 'onprem-db'];
 
@@ -174,6 +186,8 @@ const EDGE_KINDS = {
   relation:    { name: '설정 관계',          desc: '데이터가 오가지 않는 연결이에요. 붙이거나 권한·생성·주소 등록을 맡아요.' },
   // 48번: IDC(고객 게이트웨이) — VGW 사이의 사설 연결. 근거 criteria/hybrid.md HY-01·03·06·08
   vpn:         { name: 'Site-to-Site VPN',   hybrid: true, desc: '인터넷을 거치는 암호화(IPsec) 연결이에요. 터널 2개가 서로 다른 AZ에서 끝나요. 빨리 만들 수 있고 싸지만, 인터넷 상태에 따라 느려질 수 있어요.' },
+  // 51번: 점프 서버를 거치는 관리 접속 (RL-04). 점프 서버가 있을 때만 범례에 보인다
+  admin:       { name: '관리 접속',          bastion: true, desc: '관리자가 점프 서버를 거쳐 서버에 SSH(22번)로 들어가는 길이에요. 사용자 요청은 이 길로 다니지 않아요.' },
   dx:          { name: 'Direct Connect',     hybrid: true, desc: '인터넷을 거치지 않는 전용선 연결이에요. 대역폭이 크고 일정하지만, 기본으로 암호화되지 않고 회선을 놓는 데 시간이 걸려요.' },
 };
 const EDGE_SERVERS = ['ec2', 'ecs', 'eks', 'fargate'];   // 서버(앱이 도는 곳)

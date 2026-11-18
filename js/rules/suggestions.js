@@ -174,10 +174,8 @@ const SUGGESTION_RULES = [
     basis: 'SSH 같은 직접 접속을 줄이고 Session Manager를 쓰면, 열린 접속 포트와 관리용 서버가 필요 없어 공격받을 곳과 관리 부담이 줄어요.',
     ref: 'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/sec_protect_compute_reduce_manual_management.html',
     check(ctx) {
-      // 관리 접속용으로 보이는 EC2: DB 관리자와 바로 연결됐거나, 퍼블릭 서브넷에서 Load Balancer 없이 쓰이는 EC2
-      const bastions = ctx.ofType('ec2').filter(e =>
-        ctx.neighborsOf(e, 'dbadmin').length ||
-        (ctx.zoneOf(e) === 'public' && !ctx.neighborsOf(e, 'lb').length));
+      // 51번: 점프 서버 역할의 EC2 (자동 짐작 또는 직접 고른 것, serverRoleOf). 근거 RL-04: Session Manager 권장
+      const bastions = ctx.bastions();
       if (!bastions.length) return [];
       return [{
         nodeIds: bastions.map(e => e.id),
@@ -608,6 +606,21 @@ const SUGGESTION_RULES = [
           action: '스테이징용 서브넷을 따로 만들어 MGN 복제 서버를 옮기세요. (예: 서브넷을 하나 더 두거나, 앱 서버가 없는 서브넷으로)' });
       });
       return issues;
+    },
+  },
+  {
+    // 근거: RL-01 (51번) — 인터넷에 직접 닿을 필요가 없으면 프라이빗 서브넷에 (SRA MUST). LB 뒤 대상은 공개 IP가 필요 없다 (ELB 문서)
+    // 웹 서버를 퍼블릭에 두는 AWS 예시도 있어 경고가 아닌 제안 (사용자 결정 2026-11-18)
+    id: 25, kind: 'improve', title: '웹 서버 위치',
+    pillars: ['security'],
+    basis: 'Load Balancer 뒤의 웹 서버는 공개 IP가 없어도 요청을 받아요. 인터넷에 직접 닿을 필요가 없는 서버는 프라이빗 서브넷에 두면 공격받을 곳이 줄어요.',
+    ref: 'https://docs.aws.amazon.com/prescriptive-guidance/latest/security-reference-architecture/application.html',
+    check(ctx) {
+      const webs = ctx.ofType(...ROLE_TYPES).filter(n => ctx.roleOf(n) === 'web' && ctx.zoneOf(n) === 'public');
+      if (!webs.length) return [];
+      return [{ nodeIds: webs.map(n => n.id),
+        reason: '웹 서버가 퍼블릭 서브넷에 있어요. Load Balancer가 요청을 넘겨주므로 공개 IP가 필요 없어요.',
+        action: '웹 서버를 프라이빗 서브넷으로 옮기세요. (요청은 그대로 Load Balancer가 받아 넘겨줘요)' }];
     },
   },
 ];

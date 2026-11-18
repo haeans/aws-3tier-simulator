@@ -38,6 +38,61 @@ function linkedNodesOf(s, n, ...types) {
     .filter(m => m && types.includes(m.type));
 }
 
+/* ----- 51번: EC2 역할 (근거 criteria/roles.md) -----
+   박스에 role이 있으면 그 값, 없으면 자리·연결로 짐작한다
+   - 점프 서버: Load Balancer·CloudFront·API Gateway와 이어지지 않았고 DB와도 이어지지 않았는데,
+     DB 관리자와 이어졌거나 퍼블릭 서브넷에 있는 EC2 (제안 6이 쓰던 짐작과 같음)
+   - 웹 서버: 요청이 들어오는 앞단(LB·IGW·사용자 등)과 이어졌고, 뒤에 다른 앱 서버(점프 서버 아님)가 이어진 EC2
+   - 앱 서버: 나머지 */
+const ROLE_DB_TYPES = [...RDS_TYPES, 'elasticache', 'rdsproxy', 'dynamodb', 'vgw'];
+function serverRoleOf(n, s = state) {
+  if (!n || !ROLE_TYPES.includes(n.type)) return null;
+  if (n.role && SERVER_ROLES[n.role]) return n.role;
+  return guessServerRole(n, s);
+}
+// 자동 짐작 (설명 패널에 "자동: …"으로 보여 줄 때도 씀)
+function guessServerRole(n, s = state) {
+  const linked = (...types) => linkedNodesOf(s, n, ...types);
+  if (!linked('lb', 'cloudfront', 'apigw').length && !linked(...ROLE_DB_TYPES).length &&
+      (linked('dbadmin').length || zoneOf(n, s) === 'public')) return 'bastion';
+  const others = linked(...APP_TYPES).filter(m => m.id !== n.id && !(ROLE_TYPES.includes(m.type) && isBastionGuess(m, s)));
+  if (others.length && linked(...ROLE_ENTRY_TYPES).length) return 'web';
+  return 'app';
+}
+// 다른 박스의 짐작을 볼 때 무한히 돌지 않게 점프 서버 여부만 본다
+function isBastionGuess(m, s) {
+  if (m.role) return m.role === 'bastion';
+  const linked = (...types) => linkedNodesOf(s, m, ...types);
+  return !linked('lb', 'cloudfront', 'apigw').length && !linked(...ROLE_DB_TYPES).length &&
+    (linked('dbadmin').length > 0 || zoneOf(m, s) === 'public');
+}
+const isBastion = (n, s = state) => serverRoleOf(n, s) === 'bastion';
+// 요청 계층 순서: 웹(1) → 앱(2). 역할이 없는 박스는 0 (순서를 따지지 않음). 요청은 높은 쪽에서 낮은 쪽으로 가지 않는다 (RL-06)
+function roleRank(n, s = state) {
+  const r = serverRoleOf(n, s);
+  return r === 'web' ? 1 : r === 'app' ? 2 : 0;
+}
+// 요청이 x에서 y로 갈 수 있는지: 앱 서버(2)에서 웹 서버(1)로는 가지 않는다 (RL-06, 학습용 설계 규칙)
+function requestCanGo(x, y, s = state) {
+  const rx = roleRank(x, s), ry = roleRank(y, s);
+  return !(rx && ry && rx > ry);
+}
+// 점프 서버와 이어진 선 중 관리 접속으로 보는 상대 (관리자·사용자·IGW 쪽, 접속해 들어가는 서버·DB 쪽)
+const ADMIN_LINK_TYPES = ['dbadmin', 'igw', ...USER_TYPES, ...APP_TYPES, ...RDS_TYPES, 'onprem-server'];
+// 연결선 종류·방향 (역할 반영). 점프 서버 선은 관리 접속: 관리자 쪽 → 점프 서버 → 서버 쪽
+function edgeInfoIn(ed, s = state) {
+  const a = findNode(ed.from, s), b = findNode(ed.to, s);
+  const base = edgeInfo(a.type, b.type, ed.kind || null);
+  if (base.kind !== 'request') return base;
+  const ba = isBastion(a, s), bb = isBastion(b, s);
+  if (!ba && !bb) return base;
+  const [other, sign] = ba ? [b, 1] : [a, -1];   // sign: 점프 서버가 A면 1
+  if (ba && bb) return { kind: 'admin', dir: 0 };
+  if (!ADMIN_LINK_TYPES.includes(other.type)) return base;
+  const inbound = ['dbadmin', 'igw', ...USER_TYPES].includes(other.type);   // 관리자 → 점프 서버
+  return { kind: 'admin', dir: inbound ? -sign : sign };
+}
+
 // 규칙에서 쓰는 조회 도구 모음
 // includeAll: true면 검증 대상이 아닌 서비스도 포함 (개선·제거 제안용)
 function buildContext(includeAll = false, s = state) {
@@ -49,11 +104,17 @@ function buildContext(includeAll = false, s = state) {
     adj.get(ed.from).add(ed.to);
     adj.get(ed.to).add(ed.from);
   });
+  // 51번: 점프 서버(EC2)는 앱 서버가 아니다 → 종류로 찾을 때 빼고, bastions()로 따로 찾는다
+  const bastionIds = new Set(nodes.filter(n => isBastion(n, s)).map(n => n.id));
+  const pick = types => n => types.includes(n.type) && !bastionIds.has(n.id);
   return {
-    // 해당 종류의 박스 목록
-    ofType: (...types) => nodes.filter(n => types.includes(n.type)),
-    // n과 직접 연결된 박스 중 해당 종류
-    neighborsOf: (n, ...types) => [...adj.get(n.id)].map(id => findNode(id, s)).filter(m => types.includes(m.type)),
+    // 해당 종류의 박스 목록 (점프 서버 빼고)
+    ofType: (...types) => nodes.filter(pick(types)),
+    // n과 직접 연결된 박스 중 해당 종류 (점프 서버 빼고)
+    neighborsOf: (n, ...types) => [...adj.get(n.id)].map(id => findNode(id, s)).filter(pick(types)),
+    // 51번: 역할
+    bastions: () => nodes.filter(n => bastionIds.has(n.id)),
+    roleOf: n => serverRoleOf(n, s),
     zoneOf: n => zoneOf(n, s),
     azOf: n => azOf(n, s),
     nameOf: n => SVC_MAP[n.type].name,

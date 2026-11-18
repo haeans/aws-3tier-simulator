@@ -471,6 +471,8 @@ body {
 /* 48번: IDC ↔ VPC 사설 연결. VPN = 갈색 긴 점선(인터넷 위 터널), Direct Connect = 굵은 갈색 실선(전용선) */
 .edge.k-vpn         { stroke: #8a5a2b; stroke-width: 2.6; stroke-dasharray: 12 5; }
 .edge.k-dx          { stroke: #8a5a2b; stroke-width: 4.5; }
+/* 51번: 관리 접속 (점프 서버). 주황 짧은 점선 */
+.edge.k-admin       { stroke: #c25400; stroke-width: 2.2; stroke-dasharray: 4 4; }
 .edge.selected      { stroke: var(--select); }
 /* 설명 패널의 연결선 종류 고르기 (26번) */
 .ek-swatch { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid var(--edge); margin-right: 6px; vertical-align: 3px; }
@@ -479,6 +481,7 @@ body {
 .ek-swatch.k-relation    { border-top: 3px dotted #6b7785; }
 .ek-swatch.k-vpn         { border-top: 3px dashed #8a5a2b; }
 .ek-swatch.k-dx          { border-top: 5px solid #8a5a2b; }
+.ek-swatch.k-admin       { border-top: 3px dashed #c25400; }
 .ek-list { display: grid; gap: 6px; margin-top: 4px; }
 .ek-opt { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 2px 4px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .ek-opt.on { border-color: var(--select); background: #f0f7fd; }
@@ -501,6 +504,7 @@ body {
 .edge-legend .k-relation b    { border-top: 3px dotted #6b7785; }
 .edge-legend .k-vpn b         { border-top: 3px dashed #8a5a2b; }
 .edge-legend .k-dx b          { border-top: 5px solid #8a5a2b; }
+.edge-legend .k-admin b       { border-top: 3px dashed #c25400; }
 .edge-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; cursor: pointer; }
 .edge-temp { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 /* 동적 흐름 점 (검증 후 표시) */
@@ -697,14 +701,19 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .compare-diff { display: grid; gap: 2px; }
 .compare-diff b { display: inline-block; min-width: 140px; color: var(--muted); font-weight: 700; }
 /* 설정값 (46번): 설명 패널 "설정" 칸, 박스 아래 크기 글씨 */
-.ip-set { margin: 6px 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9fb; display: grid; gap: 4px; }
+.ip-set, .ip-role-box { margin: 6px 0 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9fb; display: grid; gap: 4px; }
 .ip-set-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
 .ip-seg { display: inline-flex; gap: 2px; }
 .ip-seg .btn { padding: 1px 8px; font-size: 12px; }
 .ip-num { width: 56px; font: inherit; padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px; }
-.ip-set-hint { font-size: 11px; color: var(--muted); }
+.ip-set-hint, .ip-role-hint { font-size: 11px; color: var(--muted); }
 .node-size { position: absolute; left: 50%; transform: translateX(-50%); bottom: -16px; padding: 0 4px; border-radius: 4px; background: #fff; border: 1px solid #f3c58f;
   font-size: 10px; line-height: 13px; font-weight: 700; color: #c45500; white-space: nowrap; pointer-events: none; }
+/* 51번: EC2 역할 이름표 (왼쪽 위). 웹 = 파랑, 앱 = 초록, 점프 = 주황 (관리 접속 선과 같은 색) */
+.node-role { position: absolute; top: -9px; left: 20px; padding: 0 5px; border-radius: 8px; font-size: 10.5px; line-height: 16px; font-weight: 700; color: #fff; pointer-events: auto; }
+.node-role.r-web { background: #1a73e8; }
+.node-role.r-app { background: #2e7d32; }
+.node-role.r-bastion { background: #c25400; }
 /* 설명 패널의 라우팅 테이블·보안 그룹 표 (45번) */
 .ip-head .tt-cat { white-space: nowrap; }
 .ip-net { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }

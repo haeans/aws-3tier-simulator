@@ -81,8 +81,10 @@ function computeFlow(nodeLevels, keep = null) {
   const queue = state.nodes.filter(n => FLOW_SOURCES.includes(n.type)).map(n => n.id);
   const dist = new Map(queue.map(id => [id, 0]));
   for (let i = 0; i < queue.length; i++) {
+    const from = findNode(queue[i]);
     adj.get(queue[i]).forEach(nb => {
-      if (!dist.has(nb)) { dist.set(nb, dist.get(queue[i]) + 1); queue.push(nb); }
+      // 51번: 요청은 앱 서버에서 웹 서버로 되돌아가지 않는다 (그런 선은 점 없이 판정 26이 알림)
+      if (!dist.has(nb) && requestCanGo(from, findNode(nb))) { dist.set(nb, dist.get(queue[i]) + 1); queue.push(nb); }
     });
   }
   const levelOf = (x, y) => {
@@ -493,7 +495,7 @@ function renderResult() {
       `<span><i style="background:${FLOW_COLOR.ok}"></i>정상</span>` +
       `<span><i style="background:${FLOW_COLOR.warn}"></i>병목(느림)</span>` +
       `<span><i style="background:${FLOW_COLOR.error}"></i>오류(거의 멈춤)</span>` +
-      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).filter(([, v]) => !v.hybrid || state.containers.some(c => c.type === 'idc')).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span>' +
+      '<span class="edge-legend">' + Object.entries(EDGE_KINDS).filter(([, v]) => (!v.hybrid || state.containers.some(c => c.type === 'idc')) && (!v.bastion || state.nodes.some(n => isBastion(n)))).map(([k, v]) => `<span class="k-${k}"><b></b>${v.name}</span>`).join('') + '</span>' +
       '<div id="flow-now" class="flow-now"></div>' +
       // 40번: 단계 해설 (지금 점이 닿는 박스가 하는 일) + 멈춤·이전·다음
       '<div class="flow-step"><span class="flow-ctl">' +
