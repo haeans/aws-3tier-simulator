@@ -51,6 +51,7 @@ function renderInfo() {
     '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
     '<div class="ip-sim" id="ip-sim" hidden></div>' +
     roleSection(n) +
+    schemeSection(n) +
     sizeSection(n) +
     `<div class="ip-desc">${svc.desc}</div>` +
     (SERVICE_DOCS[n.type] ? `<a class="ip-doc" href="${SERVICE_DOCS[n.type]}" target="_blank" rel="noopener">AWS 공식 문서 열기 ↗</a>` : '') +
@@ -60,6 +61,7 @@ function renderInfo() {
     sgSection(networkSecurityGroup(n));
   bindSizeSection(n);
   bindRoleSection(n);
+  bindSchemeSection(n);
   $info.querySelector('.ip-close').addEventListener('click', () => select(null));
   // 접기: 제목 줄만 남겨 캔버스를 덜 가림. 다른 박스를 골라도 접힌 채로 유지
   $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
@@ -84,6 +86,25 @@ function bindRoleSection(n) {
     const k = b.getAttribute('data-role');
     if (k === (n.role || '')) return;
     if (k) n.role = k; else delete n.role;   // 자동이면 저장하지 않음 (예전 저장 형식과 같게)
+    render();   // 다시 그리기 + 되돌리기 기록
+  }));
+}
+
+// ----- 51-2: Load Balancer 종류 (인터넷용·내부용). 근거 criteria/roles.md RL-02·03 -----
+// 자동(연결로 짐작) 또는 직접 고르기. 직접 고른 값은 박스 scheme에 저장 (역할 칸과 같은 모양)
+function schemeSection(n) {
+  if (n.type !== 'lb') return '';
+  const guess = guessLbScheme(n), cur = n.scheme || '', now = lbSchemeOf(n);
+  const btn = (key, label) => `<button class="btn ip-scheme${key === cur ? ' active' : ''}" data-scheme="${key}">${label}</button>`;
+  return `<div class="ip-role-box"><div class="ip-set-row"><b>종류</b><span class="ip-seg">` +
+    btn('', `자동 (${LB_SCHEMES[guess].name})`) + Object.keys(LB_SCHEMES).map(k => btn(k, LB_SCHEMES[k].name)).join('') + '</span></div>' +
+    `<div class="ip-role-hint"><b>${LB_SCHEMES[now].name}</b>: ${LB_SCHEMES[now].desc}${cur ? '' : ' (연결로 짐작했어요)'}</div></div>`;
+}
+function bindSchemeSection(n) {
+  $info.querySelectorAll('.ip-scheme').forEach(b => b.addEventListener('click', () => {
+    const k = b.getAttribute('data-scheme');
+    if (k === (n.scheme || '')) return;
+    if (k) n.scheme = k; else delete n.scheme;   // 자동이면 저장하지 않음
     render();   // 다시 그리기 + 되돌리기 기록
   }));
 }

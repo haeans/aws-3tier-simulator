@@ -90,6 +90,14 @@ function buildNodeEl(node) {
     tag.title = `${SERVER_ROLES[role].name}${node.role ? '' : ' (자동으로 짐작했어요. 박스를 누르면 바꿀 수 있어요)'}`;
     el.appendChild(tag);
   }
+  // 51-2: 내부 Load Balancer는 늘 "내부" 이름표 (인터넷용은 지금까지의 LB라 표시하지 않음)
+  if (node.type === 'lb' && isInternalLb(node)) {
+    const tag = document.createElement('div');
+    tag.className = 'node-role r-internal';
+    tag.textContent = LB_SCHEMES.internal.tag;
+    tag.title = `내부 Load Balancer${node.scheme ? '' : ' (자동으로 짐작했어요. 박스를 누르면 바꿀 수 있어요)'}`;
+    el.appendChild(tag);
+  }
   attachTooltip(el, () => simTooltip(node.id) + serviceTooltip(svc));   // 시뮬레이션 중이면 사용률 설명을 맨 위에
 
   const del = document.createElement('div');

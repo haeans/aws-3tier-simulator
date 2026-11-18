@@ -46,7 +46,8 @@ const VALIDATION_RULES = [
     praise(ctx) {
       const lbs = ctx.ofType('lb');
       if (!lbs.length) return [];   // 50번: LB가 없는 구성(서버리스 등)에는 "IGW → LB 입구" 칭찬을 하지 않는다
-      if (lbs.some(lb => !ctx.neighborsOf(lb, 'igw').length)) return [];
+      if (lbs.some(lb => !ctx.isInternalLb(lb) && !ctx.neighborsOf(lb, 'igw').length)) return [];   // 51-2: 내부 LB는 IGW와 잇지 않음
+      if (lbs.some(lb => ctx.isInternalLb(lb) && ctx.linkedNodes(lb, ...LB_INTERNET_TYPES).length)) return [];   // 내부 LB가 인터넷과 이어지면(판정 27) 칭찬하지 않음
       if (ctx.ofType(...APP_TYPES).some(e => ctx.neighborsOf(e, 'igw', ...USER_TYPES).length)) return [];
       return [{ nodeIds: ctx.ofType('igw', 'lb').map(n => n.id),
         text: '인터넷 요청이 IGW를 지나 Load Balancer라는 한 입구로만 들어와요. 서버는 인터넷에 직접 드러나지 않아요.' }];
@@ -72,8 +73,8 @@ const VALIDATION_RULES = [
       // 근거: LB-01 — LB가 쓰는 AZ마다 그 AZ의 서브넷을 지정해야 한다 (LB가 쓰는 AZ = 연결된 앱 서버가 있는 AZ)
       ctx.ofType('lb').forEach(lb => {
         lbAzsOf(ctx, lb).filter(az => !ctx.subnetsIn(az).length).forEach(az => issues.push({
-          nodeIds: [lb.id, ...ctx.neighborsOf(lb, ...APP_TYPES).filter(e => ctx.azOf(e) === az).map(n => n.id)],
-          message: `${az.label}에 서브넷이 없어서 Load Balancer가 그 AZ에 노드를 둘 수 없어요. ${az.label}에 퍼블릭 서브넷을 만들어주세요.`,
+          nodeIds: [lb.id, ...lbTargetsOf(ctx, lb).filter(e => ctx.azOf(e) === az).map(n => n.id)],
+          message: `${az.label}에 서브넷이 없어서 Load Balancer가 그 AZ에 노드를 둘 수 없어요. ${az.label}에 ${ctx.isInternalLb(lb) ? '프라이빗' : '퍼블릭'} 서브넷을 만들어주세요.`,
         }));
       });
       // 근거: SRV-08 — 퍼블릭 서브넷의 EC2는 문서가 금지하지 않으므로 오류가 아니라 경고(규칙 11). 서브넷 밖·DB 서브넷은 오류 유지
@@ -220,7 +221,7 @@ const VALIDATION_RULES = [
       });
       // 근거: LB-02 — Load Balancer와 연결된 앱 서버가 서로 다른 AZ 2곳 이상 (연결이 있는 LB만 본다. 연결이 없으면 규칙 3이 알림)
       ctx.ofType('lb').forEach(lb => {
-        const targets = ctx.neighborsOf(lb, ...APP_TYPES);
+        const targets = lbTargetsOf(ctx, lb);   // 51-2: 내부 LB 앞의 웹 서버는 빼고
         if (!targets.length || new Set(targets.map(ctx.azOf).filter(Boolean)).size >= 2) return;
         issues.push({
           nodeIds: [lb.id, ...targets.map(n => n.id)],
@@ -569,7 +570,7 @@ const VALIDATION_RULES = [
     check(ctx) {
       const issues = [];
       // 앞단과 이어지지 않은 웹 서버: 앱 서버에서 거꾸로 요청을 받는 모양
-      ctx.ofType(...ROLE_TYPES).filter(n => ctx.roleOf(n) === 'web' && !ctx.linkedNodes(n, ...ROLE_ENTRY_TYPES).length).forEach(n => {
+      ctx.ofType(...ROLE_TYPES).filter(n => ctx.roleOf(n) === 'web' && !ctx.linkedNodes(n, ...ROLE_ENTRY_TYPES).filter(m => !ctx.isInternalLb(m)).length).forEach(n => {
         const apps = ctx.neighborsOf(n, ...APP_TYPES).filter(m => ctx.roleOf(m) !== 'web');
         issues.push({ nodeIds: [n.id, ...apps.map(m => m.id)],
           message: apps.length
@@ -583,6 +584,21 @@ const VALIDATION_RULES = [
           message: `점프 서버가 ${[...new Set(fronts.map(f => SVC_MAP[f.type].name))].join('·')}와 이어져 사용자 요청을 받아요. 점프 서버는 관리 접속만 받아요. 이 연결을 지우거나 역할을 웹·앱 서버로 바꾸세요.` });
       });
       return issues;
+    },
+  },
+  {
+    // 근거: RL-03 (등급 A, 51-2) — 내부 LB의 노드는 사설 IP만 가져서 VPC에 닿을 수 있는 곳에서 오는 요청만 받는다
+    id: 27, level: 'error', message: '내부 Load Balancer',
+    pillars: ['security', 'reliability'],
+    basis: '내부 Load Balancer는 사설 IP만 가져서 VPC 안에서만 닿아요. 인터넷(IGW·CloudFront·사용자)에서 오는 요청은 인터넷용 Load Balancer가 받아요.',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
+    check(ctx) {
+      return ctx.ofType('lb').filter(lb => ctx.isInternalLb(lb)).flatMap(lb => {
+        const outs = ctx.linkedNodes(lb, ...LB_INTERNET_TYPES);
+        if (!outs.length) return [];
+        return [{ nodeIds: [lb.id, ...outs.map(o => o.id)],
+          message: `내부 Load Balancer가 ${[...new Set(outs.map(o => SVC_MAP[o.type].name))].join('·')}와 이어져 있어요. 내부 Load Balancer는 사설 IP만 있어서 인터넷에서 닿지 않아요. 종류를 인터넷용으로 바꾸거나, 이 연결을 인터넷용 Load Balancer로 옮기세요.` }];
+      });
     },
   },
 ];

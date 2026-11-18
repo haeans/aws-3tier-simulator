@@ -184,12 +184,16 @@ function flowStepsOf(hops, view) {
 
 // 구간 하나의 해설: 점이 닿는 박스(dst)의 종류와 구간의 성격(요청·응답·주소 묻기·검사)으로 고른다
 function flowStepLine(f, view) {
-  const type = typeOfId(flowArrive(f)), name = SVC_MAP[type].name;
-  const entry = FLOW_STEP_TEXT[type] || {};
+  const type = typeOfId(flowArrive(f)), node = findNode(flowArrive(f));
+  // 51-2: 웹 서버·내부 LB는 따로 고른 문구 (없으면 박스 종류의 문구)
+  const variant = serverRoleOf(node) === 'web' ? 'ec2:web' : isInternalLb(node) ? 'lb:internal' : '';
+  const vEntry = variant ? FLOW_STEP_TEXT[variant] : null;
+  const entry = vEntry || FLOW_STEP_TEXT[type] || {};
+  const name = variant === 'ec2:web' ? '웹 서버' : variant === 'lb:internal' ? '내부 Load Balancer' : SVC_MAP[type].name;
   const kind = f.inspect ? 'inspect' : f.roundTrip ? 'lookup' : f.response ? 'response' : view === 'server' && entry.server ? 'server' : 'request';
   const fallback = kind === 'response' ? FLOW_STEP_TEXT_DEFAULT.response : FLOW_STEP_TEXT_DEFAULT.request;
   const picked = entry[kind] || fallback;
-  return { key: `${type}|${kind}`, name, text: picked.text, net: picked.net || '', ref: picked.ref || '' };
+  return { key: `${vEntry ? variant : type}|${kind}`, name, text: picked.text, net: picked.net || '', ref: picked.ref || '' };
 }
 
 // 지금 단계의 해설을 패널에 적고, 그 단계에서 점이 닿는 박스를 강조한다

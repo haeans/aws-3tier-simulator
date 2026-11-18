@@ -1,4 +1,4 @@
-// EC2 역할 테스트 (51번): 웹 서버·앱 서버·점프 서버 짐작과 직접 바꾸기, 요청 흐름 순서, 관리 접속 선, 판정 25·26·7·11, 제안 6·25, 성능, 보안 그룹
+// EC2 역할 테스트 (51번): 웹 서버·앱 서버·점프 서버 짐작과 직접 바꾸기, 요청 흐름 순서, 관리 접속 선, 판정 25·26·27·7·11, 제안 6·25·26, 성능, 보안 그룹, 내부 Load Balancer(51-2)
 const { test, expect } = require('@playwright/test');
 const { openApp, toScreen, verdict } = require('./helpers');
 
@@ -123,4 +123,113 @@ test('역할이 섞이지 않은 기본 3-Tier는 그대로: 이름표·관리 �
   [25, 26].forEach(id => expect(v.issues).not.toContain(id));
   expect(v.sug).not.toContain(25);
   await expect(page.locator('.edge-legend')).not.toContainText('관리 접속');
+});
+
+/* ----- 51-2: 내부 Load Balancer (근거 criteria/roles.md RL-02·03) ----- */
+const lbIds = page => page.evaluate(() => state.nodes.filter(n => n.type === 'lb').map(n => n.id));
+
+test('예시 "웹·앱 분리": 아래쪽 LB를 내부용으로 짐작, 요청은 인터넷용 LB → 웹 → 내부 LB → 앱 → DB, 성능·보안 그룹도 그 순서', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('tiers'));
+  const info = await page.evaluate(() => {
+    const T = k => state.nodes.filter(n => n.type === k);
+    const tag = n => `${n.type}:${serverRoleOf(n) || lbSchemeOf(n) || ''}`;
+    const r = simulateTraffic(100);
+    return {
+      roles: T('ec2').map(n => serverRoleOf(n)), schemes: T('lb').map(n => lbSchemeOf(n)),
+      flow: [...new Set(computeFlow(new Map()).filter(h => !h.roundTrip && !h.inspect).map(h => `${tag(findNode(h.src))}>${tag(findNode(h.dst))}`))],
+      sim: { ok: r.successRate, stuck: [...r.nodes.values()].filter(x => x.stuck).length },
+      sg: [...T('lb'), ...T('ec2')].map(n => networkSecurityGroup(n).rules.map(x => x.source).join('|')),
+    };
+  });
+  expect(info.roles).toEqual(['web', 'web', 'app', 'app']);
+  expect(info.schemes).toEqual(['internet', 'internal']);
+  expect(info.flow).toEqual(['pc:>igw:', 'igw:>lb:internet', 'lb:internet>ec2:web', 'ec2:web>lb:internal', 'lb:internal>ec2:app', 'ec2:app>rds:']);
+  expect(info.sim).toEqual({ ok: 1, stuck: 0 });
+  expect(info.sg).toEqual(['인터넷 전체 (0.0.0.0/0)', '웹 서버(EC2)의 보안 그룹', 'Load Balancer의 보안 그룹', 'Load Balancer의 보안 그룹',
+    '내부 Load Balancer의 보안 그룹', '내부 Load Balancer의 보안 그룹']);
+  await expect(page.locator('.node .node-role.r-internal')).toHaveCount(1);
+  const v = await verdict(page);
+  expect(v.status).toBe('ok');
+  const names = await page.evaluate(() => flowSteps.flatMap(st => st.lines.map(l => l.name)));   // 흐름 해설: 웹 서버·내부 LB 문구
+  expect(names).toEqual(expect.arrayContaining(['웹 서버', '내부 Load Balancer', 'EC2']));                                                          // 판정 1(IGW와 잇지 않은 LB)·7·27 없음
+  [17, 26].forEach(id => expect(v.sug).not.toContain(id));                             // 내부 LB에는 퍼블릭 서브넷 제안 없음, 내부 LB 제안도 없음
+  const [, ilb] = await lbIds(page);
+  const waf = await page.evaluate(() => validateArchitecture().suggestions.filter(s => s.rule.id === 9).flatMap(s => s.nodeIds));
+  expect(waf).not.toContain(ilb);                                                       // 내부 LB는 인터넷 입구가 아니라 WAF 제안 대상 아님
+});
+
+test('제안 26: 웹 서버가 앱 서버 2대와 바로 이어지면 내부 LB 제안, 사이에 LB를 두면 사라지고 그 LB는 내부용', async ({ page }) => {
+  await openApp(page);
+  await buildTiers(page);
+  let v = await verdict(page);
+  expect(v.sug).not.toContain(26);                                                      // 앱 서버 1대: 나눠 줄 곳이 없음
+  await page.evaluate(() => {                                                           // 프라이빗 서브넷 B에 앱 서버 하나 더
+    const privs = state.containers.filter(c => c.type === 'private');
+    addNode('ec2', privs[1].x + 100, privs[1].y + 70);
+    const [pa, pb, , pw] = state.nodes.filter(n => n.type === 'ec2');
+    const rds = state.nodes.find(n => n.type === 'rds');
+    [[pa, pw], [pb, pw], [pw, rds]].forEach(([x, y]) => state.edges.push({ id: newId('e'), from: x.id, to: y.id, fromSide: null, toSide: null, mid: null }));
+    render();
+  });
+  v = await verdict(page);
+  expect(v.sug).toContain(26);
+  expect(v.msgs.join()).toContain('웹 서버가 앱 서버 2대와 바로 이어져');
+  const scheme = await page.evaluate(() => {                                            // 웹 ↔ 앱 선을 지우고 내부 LB를 사이에
+    const [pa, pb, pv, pw] = state.nodes.filter(n => n.type === 'ec2');
+    const vpc = state.containers.find(c => c.type === 'vpc');
+    const priv = state.containers.find(c => c.type === 'private');
+    addNode('lb', vpc.x + 500, priv.y + priv.height / 2);
+    const ilb = state.nodes[state.nodes.length - 1];
+    state.edges = state.edges.filter(e => !([pa.id, pb.id].includes(e.from) && [pv.id, pw.id].includes(e.to)));
+    [[pa, ilb], [pb, ilb], [ilb, pv], [ilb, pw]].forEach(([x, y]) => state.edges.push({ id: newId('e'), from: x.id, to: y.id, fromSide: null, toSide: null, mid: null }));
+    render();
+    return { scheme: lbSchemeOf(ilb), roles: state.nodes.filter(n => n.type === 'ec2').map(n => serverRoleOf(n)) };
+  });
+  expect(scheme).toEqual({ scheme: 'internal', roles: ['web', 'web', 'app', 'app'] });
+  v = await verdict(page);
+  expect(v.sug).not.toContain(26);
+  expect(v.issues).not.toContain(7);                                                    // 내부 LB 뒤의 앱 서버가 두 AZ
+});
+
+test('설명 패널 "종류" 칸과 판정 27: 내부용으로 정한 LB가 IGW와 이어지면 오류, [인터넷용]·되돌리기', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('tiers'));
+  const c = await page.evaluate(() => centerOf(state.nodes.filter(n => n.type === 'lb')[1]));
+  const p = await toScreen(page, c.x, c.y);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#info-panel .ip-scheme.active')).toHaveText('자동 (내부용)');
+  await expect(page.locator('#info-panel .ip-role-box')).toContainText('사설 IP만');
+  const click = async sel => { const b = await page.locator(sel).boundingBox(); await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); };
+  await click('#info-panel .ip-scheme[data-scheme="internal"]');
+  expect(await page.evaluate(() => state.nodes.filter(n => n.type === 'lb')[1].scheme)).toBe('internal');
+  // 내부용으로 정한 LB에 IGW를 이으면 판정 27 (자동이면 인터넷용으로 짐작해 오류가 아님)
+  await page.evaluate(() => {
+    const igw = state.nodes.find(n => n.type === 'igw'), ilb = state.nodes.filter(n => n.type === 'lb')[1];
+    state.edges.push({ id: newId('e'), from: igw.id, to: ilb.id, fromSide: null, toSide: null, mid: null });
+    render();
+  });
+  let v = await verdict(page);
+  expect(v.issues).toContain(27);
+  expect(v.status).toBe('error');
+  expect(v.praises).not.toContain('V1');                                               // 입구 칭찬도 하지 않음
+  expect(v.msgs.join()).toContain('내부 Load Balancer가 IGW와 이어져 있어요');
+  await page.keyboard.press('Control+z');                                               // IGW 연결 되돌리기
+  await page.mouse.click(p.x, p.y);
+  await click('#info-panel .ip-scheme[data-scheme="internet"]');                        // 인터넷용으로 직접 → 이름표 없음, 알림 없음(사용자 결정)
+  await expect(page.locator('.node .node-role.r-internal')).toHaveCount(0);
+  v = await verdict(page);
+  expect(v.issues).not.toContain(27);
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(() => state.nodes.filter(n => n.type === 'lb')[1].scheme)).toBe('internal');
+});
+
+test('기본 3-Tier의 Load Balancer는 그대로 인터넷용: "내부" 이름표 없음, 판정 27·제안 26 없음', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => loadExample('basic'));
+  expect(await page.evaluate(() => state.nodes.filter(n => n.type === 'lb').map(n => lbSchemeOf(n)))).toEqual(['internet']);
+  await expect(page.locator('.node .node-role')).toHaveCount(0);
+  const v = await verdict(page);
+  expect(v.issues).not.toContain(27);
+  expect(v.sug).not.toContain(26);
 });
