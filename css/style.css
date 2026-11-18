@@ -714,6 +714,7 @@ body.result-resizing, body.result-resizing * { cursor: ns-resize !important; use
 .node-role.r-web { background: #1a73e8; }
 .node-role.r-app { background: #2e7d32; }
 .node-role.r-bastion { background: #c25400; }
+.node-role.r-internal { background: #6a1b9a; }
 /* 설명 패널의 라우팅 테이블·보안 그룹 표 (45번) */
 .ip-head .tt-cat { white-space: nowrap; }
 .ip-net { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }

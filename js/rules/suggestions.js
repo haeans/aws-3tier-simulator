@@ -262,7 +262,7 @@ const SUGGESTION_RULES = [
         text: 'WAF로 들어오는 요청을 검사해요. SQL 인젝션 같은 흔한 웹 공격을 앞단에서 막아요.' }];
     },
     check(ctx) {
-      const fronts = ctx.ofType('cloudfront', 'lb', 'apigw');   // 50번: API Gateway(REST API)도 WAF로 보호한다 (SV-10)
+      const fronts = ctx.ofType('cloudfront', 'lb', 'apigw').filter(f => !ctx.isInternalLb(f));   // 51-2: 내부 LB 빼고. 50번: API Gateway(REST API)도 WAF로 보호한다 (SV-10)
       if (!fronts.length || !ctx.ofType(...USER_TYPES).length) return [];
       // 근거: WAF-03 — 입구(CloudFront·Load Balancer)마다 WAF가 있어야 한다 (하나라도 있으면 통과시키지 않음)
       const bare = fronts.filter(f => !ctx.neighborsOf(f, 'waf').length);
@@ -351,15 +351,18 @@ const SUGGESTION_RULES = [
     basis: 'Load Balancer는 하나를 만들어 여러 AZ에 걸쳐 쓰는 것이 기본이에요. AZ마다 따로 두면 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지도 못해요.',
     ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
     praise(ctx) {
-      const lbs = ctx.ofType('lb').filter(lb => new Set(ctx.neighborsOf(lb, ...APP_TYPES).map(ctx.azOf).filter(Boolean)).size > 1);
+      const lbs = ctx.ofType('lb').filter(lb => new Set(lbTargetsOf(ctx, lb).map(ctx.azOf).filter(Boolean)).size > 1);
       if (!lbs.length) return [];
       return [{ nodeIds: lbs.map(n => n.id),
         text: 'Load Balancer 하나가 여러 AZ의 앱 서버에 요청을 나눠요. 한 AZ에 장애가 나도 나머지 AZ로 이어가요.' }];
     },
     check(ctx) {
       // 22번: LB의 AZ = 연결된 앱 서버의 AZ. 한 AZ만 맡는 LB가 여럿이고 서로 다른 AZ를 맡으면 "AZ마다 따로"
-      const lbs = ctx.ofType('lb').filter(lb => lbAzsOf(ctx, lb).length === 1);
-      if (new Set(lbs.map(lb => lbAzsOf(ctx, lb)[0])).size < 2) return [];
+      const one = ctx.ofType('lb').filter(lb => lbAzsOf(ctx, lb).length === 1);
+      // 51-2: 인터넷용끼리, 내부용끼리 따로 본다 (인터넷용 하나 + 내부용 하나는 "AZ마다 따로"가 아님)
+      const lbs = [false, true].map(inner => one.filter(lb => ctx.isInternalLb(lb) === inner))
+        .find(g => new Set(g.map(lb => lbAzsOf(ctx, lb)[0].id)).size >= 2);
+      if (!lbs) return [];
       return [{
         nodeIds: lbs.map(n => n.id),
         reason: 'Load Balancer가 AZ마다 따로 있어요. 관리할 곳과 비용이 늘고, 요청을 AZ 사이에 나눠주지 못해요.',
@@ -452,7 +455,7 @@ const SUGGESTION_RULES = [
     ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/application/application-load-balancers.html',
     check(ctx) {
       const issues = [];
-      ctx.ofType('lb').forEach(lb => {
+      ctx.ofType('lb').filter(lb => !ctx.isInternalLb(lb)).forEach(lb => {   // 51-2: 내부 LB는 사설 IP만이라 퍼블릭 서브넷이 필요 없음
         // 서브넷이 하나도 없는 AZ는 판정 2가 오류로 알린다
         const azs = lbAzsOf(ctx, lb).filter(az => ctx.subnetsIn(az).length && !ctx.subnetsIn(az, 'public').length);
         if (!azs.length) return;
@@ -621,6 +624,22 @@ const SUGGESTION_RULES = [
       return [{ nodeIds: webs.map(n => n.id),
         reason: '웹 서버가 퍼블릭 서브넷에 있어요. Load Balancer가 요청을 넘겨주므로 공개 IP가 필요 없어요.',
         action: '웹 서버를 프라이빗 서브넷으로 옮기세요. (요청은 그대로 Load Balancer가 받아 넘겨줘요)' }];
+    },
+  },
+  {
+    // 근거: RL-02 (등급 C, 51-2) — 계층이 여럿이면 웹 서버 → 내부 LB → 앱 서버로 만들 수 있다 ("you can design", 필수 아님)
+    // 앱 서버가 2대 이상일 때만 (1대면 나눠 줄 곳이 없음, 사용자 결정 2026-11-18)
+    id: 26, kind: 'improve', title: '내부 Load Balancer',
+    pillars: ['reliability', 'operations'],
+    basis: '웹 서버와 앱 서버 사이에 내부 Load Balancer를 두면, 웹 서버는 주소 하나로 요청을 보내고 내부 Load Balancer가 정상인 앱 서버에 나눠줘요. 앱 서버가 늘거나 줄어도 웹 서버 설정을 바꾸지 않아요.',
+    ref: 'https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
+    check(ctx) {
+      const webs = ctx.ofType(...ROLE_TYPES).filter(n => ctx.roleOf(n) === 'web');
+      const apps = [...new Set(webs.flatMap(w => ctx.neighborsOf(w, ...APP_TYPES).filter(m => ctx.roleOf(m) !== 'web')))];
+      if (apps.length < 2) return [];
+      return [{ nodeIds: [...webs, ...apps].map(n => n.id),
+        reason: `웹 서버가 앱 서버 ${apps.length}대와 바로 이어져 있어요. 웹 서버가 앱 서버를 하나하나 알아야 하고, 앱 서버가 멈추면 웹 서버가 직접 피해 가야 해요.`,
+        action: '웹 서버와 앱 서버 사이에 Load Balancer를 하나 더 두세요 (웹 서버 → 내부 Load Balancer → 앱 서버). 인터넷과 잇지 않으면 내부용으로 짐작해요.' }];
     },
   },
 ];

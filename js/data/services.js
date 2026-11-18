@@ -100,6 +100,12 @@ const SERVER_ROLES = {
   bastion: { name: '점프 서버', tag: '점프', desc: '관리자가 프라이빗 서브넷의 서버에 SSH로 들어갈 때 거치는 서버(Bastion)예요. 사용자 요청은 받지 않아요.' },
 };
 const ROLE_TYPES = ['ec2'];                        // 역할을 고를 수 있는 박스 종류
+// 51-2: Load Balancer 종류 (근거 criteria/roles.md RL-02·03). 인터넷용 = 인터넷에서 요청을 받음, 내부용 = 사설 IP만 (VPC 안에서만 닿음)
+const LB_SCHEMES = {
+  internet: { name: '인터넷용', tag: '인터넷', desc: '인터넷에서 오는 요청을 받아 뒤의 서버에 나눠줘요. IGW와 이어 두어요.' },
+  internal: { name: '내부용',   tag: '내부',   desc: '사설 IP만 가져서 VPC 안에서만 닿아요. 웹 서버가 보낸 요청을 앱 서버에 나눠줘요.' },
+};
+const LB_INTERNET_TYPES = ['igw', 'cloudfront', ...USER_TYPES];   // 인터넷 쪽 (내부 LB와 바로 이으면 판정 27 오류)
 const ROLE_ENTRY_TYPES = ['lb', 'cloudfront', 'igw', 'apigw', ...USER_TYPES];   // 요청이 들어오는 앞단 (웹 서버 짐작·거꾸로 가는 요청 판정)
 
 // IDC(온프레미스) 박스 (48번). 고객 게이트웨이는 IDC와 AWS를 잇는 출입구라 따로 본다

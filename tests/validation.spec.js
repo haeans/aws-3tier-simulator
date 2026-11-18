@@ -800,7 +800,7 @@ test('설명 패널: 접으면 제목 줄만 남고, 다른 박스를 골라도 
 test('[불러오기 ▾] 메뉴: 예시 "기본 3-Tier"는 정상, "고가용성"은 정상에 제안이 하나도 없다', async ({ page }) => {
   await openApp(page);
   await page.click('#btn-load');
-  await expect(page.locator('#load-menu .load-item')).toHaveCount(11);   // 기본 틀 + 예시 9개(48번: 옮기기 전·하이브리드, 49번: 옮기는 중, 50번: 서버리스 2개) + 파일에서 열기(39번)
+  await expect(page.locator('#load-menu .load-item')).toHaveCount(12);   // 기본 틀 + 예시 10개(48번: 옮기기 전·하이브리드, 49번: 옮기는 중, 50번: 서버리스 2개, 51-2: 웹·앱 분리) + 파일에서 열기(39번)
   await page.click('#load-menu .load-item[data-key="basic"]');
   await expect(page.locator('#load-menu')).toBeHidden();
   await expect(page.locator('#toast')).toContainText('기본 3-Tier');
@@ -1067,7 +1067,7 @@ test('40번: 해설 문구의 근거 주소는 모두 AWS 공식 문서이고, �
     const refs = [];
     Object.values(FLOW_STEP_TEXT).forEach(e => Object.values(e).forEach(v => { if (v.ref) refs.push(v.ref); }));
     refs.push(FLOW_STEP_NET.stateful.ref);
-    const unknownTypes = Object.keys(FLOW_STEP_TEXT).filter(t => !SVC_MAP[t]);
+    const unknownTypes = Object.keys(FLOW_STEP_TEXT).filter(t => !SVC_MAP[t.split(':')[0]]);   // 51-2: 'ec2:web'·'lb:internal' 같은 역할·종류별 문구
     return { refs, unknownTypes };
   });
   expect(r.refs.length).toBeGreaterThan(10);

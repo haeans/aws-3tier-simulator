@@ -29,6 +29,7 @@
 - 인용: "The nodes of an internal load balancer have only private IP addresses."
 - 인용 2: "Therefore, internal load balancers can only route requests from clients with access to the VPC for the load balancer."
 - 표현 방식: (내부 LB를 넣는다면) IGW·CloudFront·사용자가 내부 LB로 바로 들어오면 오류
+- 반영 (51-2, v1.71): 판정 27. 내부 LB는 연결로 짐작(인터넷 쪽과 잇지 않고 웹 서버 뒤)하고 설명 패널 "종류" 칸에서 바꾼다. 제안 26(RL-02)은 웹 서버가 앱 서버 2대 이상과 바로 이어졌을 때만
 
 ### RL-04 · 등급 A/C (점프 서버, Bastion)
 - 요약: 프라이빗 서브넷의 인스턴스에 원격 접속하려고 퍼블릭 서브넷에 점프 서버를 둔다. 지금은 Session Manager를 권장한다

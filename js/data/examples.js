@@ -124,9 +124,25 @@ const EXAMPLE_SERVERLESS_VPC = {
   ],
 };
 
+// 웹·앱 분리 3-Tier (51-2): 사용자 → IGW → 인터넷용 LB → 웹 서버(퍼블릭) → 내부 LB → 앱 서버(프라이빗) → RDS
+// 근거: criteria/roles.md RL-02(인터넷용 LB + 내부 LB), RL-03(내부 LB는 인터넷과 잇지 않음). 내부 LB는 두 AZ의 프라이빗 서브넷 사이
+// 웹 서버를 퍼블릭에 둔 AWS 예시(RL-01)를 따라서 제안 25(웹 서버 위치)가 남는다
+const EXAMPLE_TIERS = {
+  nodes: [
+    ['pc', 'pc', 500, -150], ['igw', 'igw', 500, 0], ['lb', 'lb', 500, 190], ['nat', 'nat', 120, 190],
+    ['weba', 'ec2', 300, 190], ['webb', 'ec2', 700, 190], ['ilb', 'lb', 500, 350],
+    ['appa', 'ec2', 260, 350], ['appb', 'ec2', 740, 350], ['rds', 'rds', 260, 510], ['sb', 'rds-standby', 740, 510],
+  ],
+  edges: [
+    ['pc', 'igw'], ['igw', 'lb'], ['lb', 'weba'], ['lb', 'webb'], ['weba', 'ilb'], ['webb', 'ilb'],
+    ['ilb', 'appa'], ['ilb', 'appb'], ['appa', 'rds'], ['appb', 'rds'], ['rds', 'sb'],
+    ['appa', 'nat'], ['appb', 'nat'], ['nat', 'igw'],
+  ],
+};
+
 // 예시 key → 구성 데이터 ("고쳐 보세요"는 기본 3-Tier에 실수를 더해 쓴다)
 const EXAMPLE_SPECS = { basic: EXAMPLE_BASIC, ha: EXAMPLE_HA, container: EXAMPLE_CONTAINER, fix: EXAMPLE_BASIC, onprem: EXAMPLE_ONPREM, hybrid: EXAMPLE_HYBRID, migrating: EXAMPLE_MIGRATING,
-  serverless: EXAMPLE_SERVERLESS, 'serverless-vpc': EXAMPLE_SERVERLESS_VPC };
+  serverless: EXAMPLE_SERVERLESS, 'serverless-vpc': EXAMPLE_SERVERLESS_VPC, tiers: EXAMPLE_TIERS };
 
 // "고쳐 보세요": 기본 3-Tier에 흔한 실수 2개를 랜덤으로 넣는다.
 // rule: 그 실수를 잡는 판정 근거(criteria ID). 테스트는 실수마다 판정 문제(오류·경고)가 새로 생기는지 확인한다
@@ -149,6 +165,8 @@ const EXAMPLES = [
     toast: '예시 "고가용성"을 불러왔어요. [성능 시뮬레이션]에서 장애를 넣어 버티는지 확인해 보세요.' },
   { key: 'container', name: '예시: 컨테이너 (ECS + Fargate)', desc: 'EC2 대신 컨테이너로 만든 3-Tier예요',
     toast: '예시 "컨테이너"를 불러왔어요. [검증하기] 뒤 [서버 통신] 보기에서 이미지를 받는 길을 확인해 보세요.' },
+  { key: 'tiers', name: '예시: 웹·앱 분리 (내부 Load Balancer)', desc: '웹 서버와 앱 서버 사이에 내부 Load Balancer를 두었어요',
+    toast: '예시 "웹·앱 분리"를 불러왔어요. 위쪽 Load Balancer는 인터넷용, 아래쪽은 내부용이에요. 박스를 눌러 "종류" 칸을 확인해 보세요.' },
   { key: 'onprem', name: '예시: 옮기기 전 (온프레미스)', desc: 'AWS로 옮기기 전, 회사 데이터센터(IDC)의 3-Tier예요',
     toast: '예시 "옮기기 전 (온프레미스)"를 불러왔어요. [비교] 탭에 담아 두고 AWS 구성과 비교해 보세요.' },
   { key: 'hybrid', name: '예시: 하이브리드 (AWS 서버 + IDC DB)', desc: '서버는 AWS로 옮기고 DB는 아직 IDC에 있어요',

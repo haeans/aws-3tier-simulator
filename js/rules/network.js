@@ -99,7 +99,13 @@ function networkSecurityGroup(node, s = state) {
   const fromIdc = port => {
     if (ctx.neighborsOf(node, 'vgw').some(v => ctx.neighborsOf(v, 'cgw').length)) rules.push({ port, source: `온프레미스 (${NET_ONPREM_CIDR}, VGW 거쳐)`, warn: '' });
   };
-  if (node.type === 'lb') {
+  if (node.type === 'lb' && isInternalLb(node, s)) {
+    // 51-2: 내부 LB는 웹 서버의 보안 그룹에서 오는 요청만 (RL-03: 사설 IP만, RL-05)
+    const webs = ctx.neighborsOf(node, ...ROLE_TYPES).filter(m => serverRoleOf(m, s) === 'web');
+    if (webs.length) rules.push({ port: NET_PORT.app, source: '웹 서버(EC2)의 보안 그룹', warn: '' });
+    notes.push(webs.length ? '내부 Load Balancer는 사설 IP만 있어서 인터넷에서 오는 규칙이 없어요.'
+      : '내부 Load Balancer로 들어오는 연결이 아직 없어요. 웹 서버와 이으면 웹 서버의 보안 그룹에서 오는 규칙이 생겨요.');
+  } else if (node.type === 'lb') {
     if (ctx.neighborsOf(node, ...outside, 'cloudfront').length) fromInternet(NET_PORT.https, '');
     else notes.push('Load Balancer로 들어오는 연결이 아직 없어요. IGW와 이으면 인터넷에서 오는 HTTPS 규칙이 생겨요.');
   } else if (isBastion(node, s)) {
@@ -107,7 +113,10 @@ function networkSecurityGroup(node, s = state) {
     rules.push({ port: NET_PORT.ssh, source: `관리자 IP만 (예: ${NET_ADMIN_IP})`, warn: '' });
     notes.push('SSH(22)를 인터넷 전체(0.0.0.0/0)에 열면 안 돼요. 관리자 IP만 허용해요. (Session Manager를 쓰면 이 서버도 필요 없어요)');
   } else if (NET_SG_APPS.includes(node.type)) {
-    fromSg(NET_PORT.app, ctx.neighborsOf(node, 'lb'));
+    // 51-2: 인터넷용 LB와 내부 LB를 나눠 적는다. 웹 서버는 내부 LB에서 요청을 받지 않는다 (웹 → 내부 LB 방향)
+    const lbs = ctx.neighborsOf(node, 'lb'), role = serverRoleOf(node, s);
+    fromSg(NET_PORT.app, lbs.filter(lb => !isInternalLb(lb, s)));
+    if (role !== 'web' && lbs.some(lb => isInternalLb(lb, s))) rules.push({ port: NET_PORT.app, source: '내부 Load Balancer의 보안 그룹', warn: '' });
     // 51번: 앱 서버는 웹 서버의 보안 그룹에서 오는 요청만 (RL-05), 점프 서버에서 오는 SSH
     if (serverRoleOf(node, s) !== 'web') {
       const webs = ctx.neighborsOf(node, ...ROLE_TYPES).filter(m => serverRoleOf(m, s) === 'web');

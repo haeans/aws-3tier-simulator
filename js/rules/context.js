@@ -20,7 +20,12 @@ function subnetsInOf(s, az, ...types) {
 
 // Load Balancer가 쓰는 AZ 목록 = 연결된 앱 서버(EC2 등)가 있는 AZ (22번: LB는 서브넷 밖에 두므로 박스 위치로 정하지 않는다)
 function lbAzsOf(ctx, lb) {   // (ctx의 구성을 씀)
-  return [...new Set(ctx.neighborsOf(lb, ...APP_TYPES).map(ctx.azOf).filter(Boolean))];
+  return [...new Set(lbTargetsOf(ctx, lb).map(ctx.azOf).filter(Boolean))];
+}
+// Load Balancer가 요청을 나눠 주는 대상 (51-2: 내부 LB 앞의 웹 서버는 대상이 아니라 요청을 보내는 쪽)
+function lbTargetsOf(ctx, lb) {
+  const all = ctx.neighborsOf(lb, ...APP_TYPES);
+  return ctx.isInternalLb(lb) ? all.filter(m => ctx.roleOf(m) !== 'web') : all;
 }
 
 // Auto Scaling 그룹 영역 안의 EC2 (EC2 박스 중심이 영역 안에 있으면 그룹에 속함)
@@ -56,7 +61,10 @@ function guessServerRole(n, s = state) {
   if (!linked('lb', 'cloudfront', 'apigw').length && !linked(...ROLE_DB_TYPES).length &&
       (linked('dbadmin').length || zoneOf(n, s) === 'public')) return 'bastion';
   const others = linked(...APP_TYPES).filter(m => m.id !== n.id && !(ROLE_TYPES.includes(m.type) && isBastionGuess(m, s)));
-  if (others.length && linked(...ROLE_ENTRY_TYPES).length) return 'web';
+  // 51-2: 내부 LB는 앞단이 아니라 뒤쪽 (웹 서버 → 내부 LB → 앱 서버). 내부 LB 뒤의 앱 서버는 웹 서버가 아니다
+  const inner = linked('lb').filter(lb => lbSchemeOf(lb, s) === 'internal');
+  const entries = linked(...ROLE_ENTRY_TYPES).filter(m => !inner.includes(m));
+  if ((others.length || inner.length) && entries.length) return 'web';
   return 'app';
 }
 // 다른 박스의 짐작을 볼 때 무한히 돌지 않게 점프 서버 여부만 본다
@@ -66,9 +74,27 @@ function isBastionGuess(m, s) {
   return !linked('lb', 'cloudfront', 'apigw').length && !linked(...ROLE_DB_TYPES).length &&
     (linked('dbadmin').length > 0 || zoneOf(m, s) === 'public');
 }
+/* 51-2: Load Balancer 종류 (근거 criteria/roles.md RL-02·03). 박스에 scheme이 있으면 그 값, 없으면 연결로 짐작
+   - 내부용: 인터넷 쪽(IGW·CloudFront·사용자)과 이어지지 않았고, 이어진 서버 중 다른 앞단(LB·IGW 등)에서도 요청을 받는 서버가 있음
+     (= 웹 서버 뒤에 놓인 LB. 역할 짐작을 부르지 않아 서로 무한히 돌지 않는다)
+   - 인터넷용: 나머지 (지금까지의 LB) */
+function lbSchemeOf(n, s = state) {
+  if (!n || n.type !== 'lb') return null;
+  if (n.scheme && LB_SCHEMES[n.scheme]) return n.scheme;
+  return guessLbScheme(n, s);
+}
+function guessLbScheme(n, s = state) {
+  if (linkedNodesOf(s, n, ...LB_INTERNET_TYPES).length) return 'internet';
+  const fronts = linkedNodesOf(s, n, ...APP_TYPES).filter(m => !(ROLE_TYPES.includes(m.type) && isBastionGuess(m, s)) &&
+    linkedNodesOf(s, m, ...ROLE_ENTRY_TYPES).some(e => e.id !== n.id && !(e.type === 'lb' && e.scheme === 'internal')));
+  return fronts.length ? 'internal' : 'internet';
+}
+const isInternalLb = (n, s = state) => lbSchemeOf(n, s) === 'internal';
 const isBastion = (n, s = state) => serverRoleOf(n, s) === 'bastion';
 // 요청 계층 순서: 웹(1) → 앱(2). 역할이 없는 박스는 0 (순서를 따지지 않음). 요청은 높은 쪽에서 낮은 쪽으로 가지 않는다 (RL-06)
+//   51-2: 내부 LB는 웹과 앱 사이(1.5) — 앱 서버 → 내부 LB, 내부 LB → 웹 서버로는 가지 않음
 function roleRank(n, s = state) {
+  if (n.type === 'lb') return isInternalLb(n, s) ? 1.5 : 0;
   const r = serverRoleOf(n, s);
   return r === 'web' ? 1 : r === 'app' ? 2 : 0;
 }
@@ -115,6 +141,9 @@ function buildContext(includeAll = false, s = state) {
     // 51번: 역할
     bastions: () => nodes.filter(n => bastionIds.has(n.id)),
     roleOf: n => serverRoleOf(n, s),
+    // 51-2: Load Balancer 종류
+    isInternalLb: n => isInternalLb(n, s),
+    internetLbs: () => nodes.filter(n => n.type === 'lb' && !isInternalLb(n, s)),
     zoneOf: n => zoneOf(n, s),
     azOf: n => azOf(n, s),
     nameOf: n => SVC_MAP[n.type].name,

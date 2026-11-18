@@ -71,6 +71,20 @@ const FLOW_STEP_TEXT = {
       ref: FLOW_DOCS + 'elasticloadbalancing/latest/application/introduction.html',
     },
   },
+  // 51-2: 역할·종류별 문구 (키 'ec2:web' = 웹 서버, 'lb:internal' = 내부 LB). 근거 criteria/roles.md RL-02·03·05
+  'ec2:web': {
+    request: {
+      text: '웹 서버가 요청을 받아 화면을 만들고, 일 처리는 뒤의 앱 서버(또는 내부 Load Balancer)로 넘겨요.',
+      net: '웹 서버의 보안 그룹은 인터넷용 Load Balancer에서 온 요청만 받도록 해 두는 것이 좋아요.',
+      ref: FLOW_DOCS + 'vpc/latest/userguide/security-group-rules.html',
+    },
+  },
+  'lb:internal': {
+    request: {
+      text: '내부 Load Balancer가 웹 서버가 보낸 요청을 정상인 앱 서버에 나눠 줘요. 사설 IP만 있어서 VPC 안에서만 닿아요.',
+      ref: FLOW_DOCS + 'elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html',
+    },
+  },
   ec2: FLOW_STEP_APP,
   ecs: FLOW_STEP_APP,
   eks: FLOW_STEP_APP,
