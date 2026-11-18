@@ -50,6 +50,7 @@ function renderInfo() {
     `<button class="ip-fold" title="${uiPrefs.infoFolded ? '펼치기' : '접기'}">${uiPrefs.infoFolded ? '▸' : '▾'}</button>` +
     '<button class="ip-close" title="닫기 (Esc)">×</button></div>' +
     '<div class="ip-sim" id="ip-sim" hidden></div>' +
+    roleSection(n) +
     sizeSection(n) +
     `<div class="ip-desc">${svc.desc}</div>` +
     (SERVICE_DOCS[n.type] ? `<a class="ip-doc" href="${SERVICE_DOCS[n.type]}" target="_blank" rel="noopener">AWS 공식 문서 열기 ↗</a>` : '') +
@@ -58,12 +59,33 @@ function renderInfo() {
     (avoidRows ? `<div class="ip-sec avoid">이렇게 연결하지 마세요</div><ul class="ip-list">${avoidRows}</ul>` : '') +
     sgSection(networkSecurityGroup(n));
   bindSizeSection(n);
+  bindRoleSection(n);
   $info.querySelector('.ip-close').addEventListener('click', () => select(null));
   // 접기: 제목 줄만 남겨 캔버스를 덜 가림. 다른 박스를 골라도 접힌 채로 유지
   $info.querySelector('.ip-fold').addEventListener('click', () => { uiPrefs.infoFolded = !uiPrefs.infoFolded; saveUiPrefs(); renderInfo(); });
   $info.classList.toggle('folded', uiPrefs.infoFolded);
   $info.hidden = false;
   updateInfoSim();
+}
+
+// ----- 51번: EC2 역할 (웹 서버·앱 서버·점프 서버). 근거 criteria/roles.md -----
+// 자동(놓은 자리·연결로 짐작) 또는 직접 고르기. 직접 고른 값은 박스 role에 저장
+function roleSection(n) {
+  if (!ROLE_TYPES.includes(n.type)) return '';
+  const guess = guessServerRole(n), cur = n.role || '';
+  const btn = (key, label) => `<button class="btn ip-role${key === cur ? ' active' : ''}" data-role="${key}">${label}</button>`;
+  const now = serverRoleOf(n);
+  return `<div class="ip-role-box"><div class="ip-set-row"><b>역할</b><span class="ip-seg">` +
+    btn('', `자동 (${SERVER_ROLES[guess].tag})`) + Object.keys(SERVER_ROLES).map(k => btn(k, SERVER_ROLES[k].tag)).join('') + '</span></div>' +
+    `<div class="ip-role-hint"><b>${SERVER_ROLES[now].name}</b>: ${SERVER_ROLES[now].desc}${cur ? '' : ' (놓은 자리와 연결로 짐작했어요)'}</div></div>`;
+}
+function bindRoleSection(n) {
+  $info.querySelectorAll('.ip-role').forEach(b => b.addEventListener('click', () => {
+    const k = b.getAttribute('data-role');
+    if (k === (n.role || '')) return;
+    if (k) n.role = k; else delete n.role;   // 자동이면 저장하지 않음 (예전 저장 형식과 같게)
+    render();   // 다시 그리기 + 되돌리기 기록
+  }));
 }
 
 // ----- 설정값 (46번): 서버·DB 크기, Auto Scaling 그룹 최소·최대·목표 (값과 계산은 js/data/performance.js·js/rules/simulation.js) -----

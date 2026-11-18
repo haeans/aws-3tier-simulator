@@ -81,6 +81,15 @@ function buildNodeEl(node) {
     tag.textContent = SIZE_NAMES[nodeSize(node)];
     el.appendChild(tag);
   }
+  // 51번: 역할이 섞인 구성(웹·점프 서버가 있음)이면 EC2마다 역할 이름표 (웹·앱·점프)
+  const role = serverRoleOf(node);
+  if (role && state.nodes.some(m => ['web', 'bastion'].includes(serverRoleOf(m)))) {
+    const tag = document.createElement('div');
+    tag.className = `node-role r-${role}`;
+    tag.textContent = SERVER_ROLES[role].tag;
+    tag.title = `${SERVER_ROLES[role].name}${node.role ? '' : ' (자동으로 짐작했어요. 박스를 누르면 바꿀 수 있어요)'}`;
+    el.appendChild(tag);
+  }
   attachTooltip(el, () => simTooltip(node.id) + serviceTooltip(svc));   // 시뮬레이션 중이면 사용률 설명을 맨 위에
 
   const del = document.createElement('div');

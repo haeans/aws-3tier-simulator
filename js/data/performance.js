@@ -77,6 +77,8 @@ const PERF_ROUTES = {
   'onprem-server': ['onprem-db', 'cgw'],
   cgw:        ['onprem-db', 'vgw'],
   vgw:        ['cgw', 'rds'],
+  // 51번: 웹 서버 → 앱 서버(EC2·컨테이너) (RL-02: 웹 서버가 앱 서버로 요청을 보냄). 앱 서버가 없으면 웹 서버가 DB를 바로 씀
+  'ec2:web':  [APP_TYPES, 'rds', 'vgw'],
   // 50번: 서버리스. API Gateway → Lambda(프록시 통합, SV-04) → RDS Proxy → RDS, 또는 DynamoDB
   apigw:      ['lambda'],
   lambda:     ['rdsproxy', 'rds', 'dynamodb'],
